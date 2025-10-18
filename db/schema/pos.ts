@@ -40,6 +40,7 @@ export const categories = pgTable("categories", {
   id: text("id").primaryKey().notNull(),
   name: text("name").notNull(),
   description: text("description"),
+  code: text("code").notNull().unique(), // E.g., FB for Freebase, SL for SaltNic, etc.
   parentId: text("parent_id").references(() => categories.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -51,9 +52,12 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku").notNull().unique(),
-  barcode: text("barcode").unique(),
+  barcode: text("barcode").notNull().unique(),
+  image: text("image"), // URL or path to product image
+  imageUrl: text("image_url"), // Path to stored image
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
   unit: text("unit").default("pcs").notNull(), // pcs, kg, ltr, etc.
+  profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }).default("0.00"), // Profit margin percentage
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

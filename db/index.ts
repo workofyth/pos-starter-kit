@@ -1,6 +1,24 @@
 import 'dotenv/config';
 
-// Create the database connection separately to avoid schema issues during module evaluation
+// Import schemas (this may cause evaluation issues, so we handle them appropriately)
+import { user, session, account, verification } from './schema/auth';
+import { 
+  branches, 
+  userBranches, 
+  categories, 
+  products, 
+  productPrices, 
+  members, 
+  suppliers, 
+  inventory, 
+  inventoryTransactions, 
+  discounts, 
+  transactions, 
+  transactionDetails, 
+  purchaseOrders, 
+  purchaseOrderDetails 
+} from './schema/pos';
+
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
@@ -15,11 +33,33 @@ const pool = new Pool({
   connectionString,
 });
 
-// Export the connection
-export const db = drizzle(pool, {
+// Export the database instance with schema
+export const db = drizzle(pool, { 
+  schema: {
+    // Auth schema
+    user,
+    session,
+    account,
+    verification,
+    // POS schema
+    branches,
+    userBranches,
+    categories,
+    products,
+    productPrices,
+    members,
+    suppliers,
+    inventory,
+    inventoryTransactions,
+    discounts,
+    transactions,
+    transactionDetails,
+    purchaseOrders,
+    purchaseOrderDetails,
+  },
   logger: process.env.NODE_ENV !== "production",
 });
 
-// Export schemas separately to avoid module evaluation issues
+// Also export schemas separately
 export * from './schema/auth';
 export * from './schema/pos';

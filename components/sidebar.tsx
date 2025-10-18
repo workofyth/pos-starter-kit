@@ -33,6 +33,11 @@ const sidebarItems = [
     icon: Package,
   },
   {
+    title: "Categories",
+    href: "/categories",
+    icon: Package,
+  },
+  {
     title: "Inventory",
     href: "/inventory",
     icon: Package,
