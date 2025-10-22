@@ -93,6 +93,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [userRole, setUserRole] = useState<UserRole>('guest');
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
   const [filteredItems, setFilteredItems] = useState<typeof allSidebarItems>(allSidebarItems);
 
   // Get user role from userBranches table
@@ -106,18 +107,26 @@ export function Sidebar() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
               setUserRole(result.data[0].role || 'staff');
+              
+              // Determine if user is a main admin based on the isMainAdmin flag
+              const userBranch = result.data[0];
+              setIsMainAdmin(userBranch.isMainAdmin || false);
             } else {
               setUserRole('guest');
+              setIsMainAdmin(false);
             }
           } else {
             setUserRole('guest');
+            setIsMainAdmin(false);
           }
         } catch (error) {
           console.error('Error fetching user role:', error);
           setUserRole('guest');
+          setIsMainAdmin(false);
         }
       } else {
         setUserRole('guest');
+        setIsMainAdmin(false);
       }
     };
     
@@ -126,11 +135,11 @@ export function Sidebar() {
 
   // Filter sidebar items based on user role according to menu_role_access.md
   useEffect(() => {
-    const accessRules = getMenuAccessRules(userRole);
+    const accessRules = getMenuAccessRules(userRole, isMainAdmin);
     
     // Filter items based on role access rules
     if (accessRules.hasFullAccess) {
-      // Admin/Manager has access to all items
+      // Admin/Manager has access to all items (with main admin having more)
       setFilteredItems(allSidebarItems);
     } else {
       // Filter items based on allowed main items (in this case, sidebar items)
@@ -140,7 +149,7 @@ export function Sidebar() {
       );
       setFilteredItems(filtered);
     }
-  }, [userRole]);
+  }, [userRole, isMainAdmin]);
 
   return (
     <aside className="hidden md:block w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-full">

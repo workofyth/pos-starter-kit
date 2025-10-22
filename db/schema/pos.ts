@@ -7,7 +7,7 @@ export const branchTypeEnum = pgEnum("branch_type", ["main", "sub"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "transfer", "credit"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "cancelled", "refunded"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percentage", "fixed_amount"]);
-export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery"]);
+export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split"]);
 
 // Branches table (for multi-cabang support)
 export const branches = pgTable("branches", {
@@ -31,6 +31,7 @@ export const userBranches = pgTable("user_branches", {
     .notNull()
     .references(() => branches.id, { onDelete: "cascade" }),
   role: userRoleEnum("role").notNull(),
+  isMainAdmin: boolean("is_main_admin").default(false).notNull(), // Flag to identify main/super admin
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -129,9 +130,12 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
   type: inventoryTransactionTypeEnum("type").notNull(), // in, out, adjustment
   quantity: integer("quantity").notNull(),
   referenceId: text("reference_id"), // ID of the related transaction (e.g., sales, purchase order)
+  status: text("status").default('pending'),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
   createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+  approvedBy: text("approved_by").references(() => user.id, { onDelete: "set null" }),
 });
 
 // Discounts table

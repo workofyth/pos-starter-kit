@@ -29,22 +29,37 @@ export interface NavCloudItem {
 }
 
 // Define role access rules based on menu_filter_by_userrole.md and menu_role_access.md
-export const getMenuAccessRules = (role: UserRole) => {
+export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false) => {
   switch (role) {
     case 'admin':
     case 'manager':
-      // Admin and Manager have access to all menu items
-      return {
-        hasFullAccess: true,
-        allowedMainItems: [
-          'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Inventory', 
-          'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
-          'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals' // Added Approvals
-        ],
-        allowedDocumentItems: ['Data Library', 'Reports', 'Word Assistant'],
-        allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
-        allowedCloudItems: ['Capture', 'Proposal', 'Prompts'],
-      };
+      // Check if this is a main/super admin or a branch admin
+      if (isMainAdmin) {
+        // Main admin has access to all menu items including system-level features
+        return {
+          hasFullAccess: true,
+          allowedMainItems: [
+            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Inventory', 
+            'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
+            'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals' // Added Approvals
+          ],
+          allowedDocumentItems: ['Data Library', 'Reports', 'Word Assistant'],
+          allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
+          allowedCloudItems: ['Capture', 'Proposal', 'Prompts'],
+        };
+      } else {
+        // Branch admin has access to all items for their branch but not system-wide features
+        return {
+          hasFullAccess: true,
+          allowedMainItems: [
+            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Inventory', 
+            'Members', 'Reporting', 'Transactions', 'Approvals' // Branches and Staff removed for branch admins
+          ],
+          allowedDocumentItems: ['Reports'],
+          allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
+          allowedCloudItems: [],
+        };
+      }
     
     case 'cashier':
       // Cashier: POS, Draft Orders, Transactions, and related functionality
@@ -90,8 +105,8 @@ export const getMenuAccessRules = (role: UserRole) => {
 };
 
 // Check if user has access to a specific menu item
-export const hasAccessToMenuItem = (role: UserRole, menuItemTitle: string, section: 'main' | 'document' | 'secondary' | 'cloud') => {
-  const rules = getMenuAccessRules(role);
+export const hasAccessToMenuItem = (role: UserRole, menuItemTitle: string, section: 'main' | 'document' | 'secondary' | 'cloud', isMainAdmin: boolean = false) => {
+  const rules = getMenuAccessRules(role, isMainAdmin);
   
   switch (section) {
     case 'main':

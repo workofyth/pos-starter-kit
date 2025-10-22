@@ -8,7 +8,7 @@ import {
   products,
   user
 } from '@/db/schema/pos';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
 // GET - Fetch pending approval requests for a user's branch
@@ -62,12 +62,13 @@ export async function GET(request: NextRequest) {
     const userRole = userBranchResponse[0].role;
     const userBranchId = userBranchResponse[0].branchId;
     
-    // Only admins and managers can approve requests
-    if (userRole !== 'admin' && userRole !== 'manager') {
+    // Only admins and managers can approve requests, but all users with branch assignments can view requests
+    // Staff and cashier users can only view requests for their branch
+    if (userRole !== 'admin' && userRole !== 'manager' && userRole !== 'staff' && userRole !== 'cashier') {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Only admin and manager users can approve requests' 
+          message: 'User does not have permission to view approval requests' 
         }),
         { 
           status: 403, 
@@ -77,7 +78,7 @@ export async function GET(request: NextRequest) {
     }
     
     // Build query for approval requests
-    let query = db
+    let query: any = db
       .select({
         id: inventoryTransactions.id,
         productId: inventoryTransactions.productId,
@@ -106,10 +107,10 @@ export async function GET(request: NextRequest) {
       ))
       .orderBy(desc(inventoryTransactions.createdAt))
       .limit(limit)
-      .offset(offset);
+      .offset(offset) as typeof query;
     
-    // Filter by branch if user is not admin (managers can only see requests for their branch)
-    if (userRole === 'manager' && userBranchId) {
+    // Filter by branch if user is not admin (managers, staff, and cashiers can only see requests for their branch)
+    if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
       query = query.where(
         and(
           eq(inventoryTransactions.type, 'split'),
@@ -122,7 +123,7 @@ export async function GET(request: NextRequest) {
     const approvalRequests = await query;
     
     // Get total count for pagination
-    let countQuery = db
+    let countQuery:any = db
       .select({ count: sql<number>`count(*)`.as('count') })
       .from(inventoryTransactions)
       .where(and(
@@ -131,7 +132,7 @@ export async function GET(request: NextRequest) {
       ));
     
     // Filter by branch if user is not admin
-    if (userRole === 'manager' && userBranchId) {
+    if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
       countQuery = countQuery.where(
         and(
           eq(inventoryTransactions.type, 'split'),
@@ -341,20 +342,24 @@ export async function PUT(request: NextRequest) {
       }
       
       // Get current inventory in target branch
+      const conditions = [
+        eq(inventory.productId, approvalRequest.productId),
+        approvalRequest.referenceId
+          ? eq(inventory.branchId, approvalRequest.referenceId)
+          : undefined,
+      ].filter(Boolean); // remove undefined entries
+
       const [targetInventory] = await db
         .select()
         .from(inventory)
-        .where(and(
-          eq(inventory.productId, approvalRequest.productId),
-          eq(inventory.branchId, approvalRequest.referenceId) // Target branch (stored in referenceId)
-        ));
+        .where(and(...conditions));
       
       if (!targetInventory) {
         // Create inventory record if it doesn't exist
         await db.insert(inventory).values({
           id: `inv_${uuidv4()}`,
           productId: approvalRequest.productId,
-          branchId: approvalRequest.referenceId, // Target branch
+          branchId: approvalRequest.referenceId!, // assert non-null
           quantity: approvalRequest.quantity,
           minStock: 5,
           lastUpdated: new Date(),
@@ -371,7 +376,9 @@ export async function PUT(request: NextRequest) {
           })
           .where(and(
             eq(inventory.productId, approvalRequest.productId),
-            eq(inventory.branchId, approvalRequest.referenceId)
+            approvalRequest.referenceId
+              ? eq(inventory.branchId, approvalRequest.referenceId)
+              : isNull(inventory.branchId)
           ));
       }
     }

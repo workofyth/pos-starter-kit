@@ -79,8 +79,10 @@ export default function InventoryPage() {
   // State for data lists
   const [branchList, setBranchList] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
+  const [userRole, setUserRole] = useState<string | null>(null); // Added state for user role
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false); // Added state for main admin status
   
-  // Get user's branch ID
+  // Get user's branch ID, role, and main admin status
   useEffect(() => {
     const fetchUserBranch = async () => {
       if (session?.user?.id) {
@@ -90,6 +92,8 @@ export default function InventoryPage() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
               setUserBranchId(result.data[0].branchId);
+              setUserRole(result.data[0].role); // Store user's role
+              setIsMainAdmin(result.data[0].isMainAdmin || false); // Store main admin status
             }
           }
         } catch (error) {
@@ -121,11 +125,13 @@ export default function InventoryPage() {
     const loadData = async () => {
       setLoading(true);
       try {
-        // Determine branch filter - if user is staff, only show their assigned branch
-        const branchFilter = userBranchId || selectedBranch || '';
+        // Determine branch filter - main admins can access all branches, other users only their assigned branch
+        const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
         
         // Load inventory items with branch filtering for staff users
-        const inventoryResponse = await fetch(`/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}&branchId=${branchFilter}&lowStock=${showLowStock}&outOfStock=${showOutOfStock}`);
+        // Main admins can access all branches, other users only their assigned branch
+        const effectiveBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+        const inventoryResponse = await fetch(`/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}&branchId=${effectiveBranchId}&lowStock=${showLowStock}&outOfStock=${showOutOfStock}`);
         if (inventoryResponse.ok) {
           const inventoryResult = await inventoryResponse.json();
           if (inventoryResult.success) {
@@ -152,28 +158,35 @@ export default function InventoryPage() {
               branchPhone: item.branchPhone,
               branchEmail: item.branchEmail
             }));
-            setInventory(formattedInventory);
+            // Deduplicate inventory items by ID to prevent duplicate keys
+            const uniqueInventory = formattedInventory.filter((item, index, self) =>
+              index === self.findIndex(i => i.id === item.id)
+            );
+            setInventory(uniqueInventory);
             setTotalPages(inventoryResult.pagination.totalPages || 1);
           }
         }
         
-        // Load branches for filter dropdown - staff users can only see their assigned branch
+        // Load branches for filter dropdown  
+        // For admin/manager: show all branches
+        // For staff: show all branches (needed for inventory splitting between different branches)
         const branchesResponse = await fetch('/api/branches');
         if (branchesResponse.ok) {
           const branchesResult = await branchesResponse.json();
           if (branchesResult.success) {
-            // If user is staff, only show their assigned branch in the dropdown
-            if (userBranchId) {
-              const userBranch = branchesResult.data.find((b: any) => b.id === userBranchId);
-              setBranchList(userBranch ? [userBranch] : []);
-            } else {
-              setBranchList(branchesResult.data);
-            }
+            // Deduplicate branches by ID to prevent duplicate keys
+            const uniqueBranches = branchesResult.data.filter((branch, index, self) =>
+              index === self.findIndex(b => b.id === branch.id)
+            );
+            
+            setBranchList(uniqueBranches);
           }
         }
         
         // Load inventory summary with branch filtering
-        const summaryResponse = await fetch(`/api/inventory/summary?branchId=${branchFilter}&sku=${searchSKU}&category=${searchCategory}`);
+        // Main admins can access all branches, other users only their assigned branch
+        const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+        const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
         if (summaryResponse.ok) {
           const summaryResult = await summaryResponse.json();
           if (summaryResult.success) {
@@ -186,7 +199,11 @@ export default function InventoryPage() {
         if (productsResponse.ok) {
           const productsResult = await productsResponse.json();
           if (productsResult.success) {
-            setProducts(productsResult.data);
+            // Deduplicate products by ID to prevent duplicate keys
+            const uniqueProducts = productsResult.data.filter((product, index, self) =>
+              index === self.findIndex(p => p.id === product.id)
+            );
+            setProducts(uniqueProducts);
           }
         }
       } catch (error) {
@@ -280,7 +297,7 @@ export default function InventoryPage() {
         },
         body: JSON.stringify({
           productId: selectedProduct.id,
-          branchId: userBranchId || selectedBranch || 'brn_XNUWRgFLof', // Use user's branch ID, then selected branch, then fallback
+          branchId: (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || 'brn_XNUWRgFLof', // Use user's branch ID if they're not main admin, then selected branch, then fallback
           quantity: newStock,
           minStock: 5, // Default minimum stock
           maxStock: 100, // Default maximum stock

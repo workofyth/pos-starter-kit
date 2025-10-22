@@ -8,6 +8,27 @@
       "when": 1760754974181,
       "tag": "0000_skinny_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761148890823,
+      "tag": "0001_magenta_shriek",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1761151086743,
+      "tag": "0002_small_wolfsbane",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1761152643585,
+      "tag": "0003_special_mulholland_black",
+      "breakpoints": true
     }
   ]
 }

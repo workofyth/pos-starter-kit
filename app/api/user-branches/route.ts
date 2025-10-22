@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
         userId: userBranches.userId,
         branchId: userBranches.branchId,
         role: userBranches.role,
+        isMainAdmin: userBranches.isMainAdmin,
         isActive: userBranches.isActive,
         createdAt: userBranches.createdAt,
         updatedAt: userBranches.updatedAt
@@ -56,17 +57,17 @@ export async function GET(request: NextRequest) {
       // Filter out any undefined conditions
       const validConditions = whereConditions.filter(condition => condition !== undefined);
       if (validConditions.length > 0) {
-        query = query.where(and(...validConditions));
+        query = query.where(and(...validConditions)) as typeof query;
       }
     }
     
     // Apply sorting
-    query = query.orderBy(desc(userBranches.createdAt));
+    query = query.orderBy(desc(userBranches.createdAt)) as typeof query;
     
     const userBranchesList = await query;
     
     // Get total count for pagination
-    let countQuery = db
+    let countQuery: any = db
       .select({ count: count() })
       .from(userBranches);
 
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (role) {
-      countWhereConditions.push(eq(userBranches.role, role));
+      countWhereConditions.push(eq(userBranches.role, role)) ;
     }
     
     if (isActive !== null && isActive !== undefined) {
@@ -197,6 +198,7 @@ export async function POST(request: NextRequest) {
         userId,
         branchId,
         role,
+        isMainAdmin: false, // By default, new assignments are not main admin
         isActive,
         createdAt: new Date(),
         updatedAt: new Date()

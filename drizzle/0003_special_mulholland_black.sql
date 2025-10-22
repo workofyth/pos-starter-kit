@@ -1,0 +1,1 @@
+ALTER TABLE "user_branches" ADD COLUMN "is_main_admin" boolean DEFAULT false NOT NULL;
