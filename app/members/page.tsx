@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,45 +22,177 @@ interface Member {
   phone: string;
   email: string;
   points: number;
-  joinDate: string;
+  address: string;
+  createdAt: string; // Changed from joinDate to match API response
+  updatedAt: string;
 }
 
 export default function MembersPage() {
-  const [members, setMembers] = useState<Member[]>([
-    {
-      id: "1",
-      name: "John Doe",
-      phone: "081234567890",
-      email: "john@example.com",
-      points: 150,
-      joinDate: "2023-01-15"
-    },
-    {
-      id: "2",
-      name: "Jane Smith",
-      phone: "082345678901",
-      email: "jane@example.com",
-      points: 300,
-      joinDate: "2023-02-20"
-    },
-    {
-      id: "3",
-      name: "Bob Johnson",
-      phone: "083456789012",
-      email: "bob@example.com",
-      points: 75,
-      joinDate: "2023-03-10"
-    }
-  ]);
-  
+  const [members, setMembers] = useState<Member[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingMember, setEditingMember] = useState<Member | null>(null);
+  const [newMember, setNewMember] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    points: 0,
+    address: ""
+  });
+
+  // Load members from API on component mount
+  useEffect(() => {
+    const fetchMembers = async () => {
+      try {
+        const response = await fetch('/api/members');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setMembers(result.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching members:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMembers();
+  }, []);
 
   const filteredMembers = members.filter(member => 
     member.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     member.phone.includes(searchTerm) ||
     member.email.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const createMember = async () => {
+    try {
+      const response = await fetch('/api/members', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newMember.name,
+          phone: newMember.phone,
+          email: newMember.email,
+          points: newMember.points,
+          address: newMember.address
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setMembers([...members, result.data]);
+        setNewMember({
+          name: "",
+          phone: "",
+          email: "",
+          points: 0,
+          address: ""
+        });
+        setIsAddDialogOpen(false);
+        alert('Member created successfully!');
+      } else {
+        alert('Error creating member: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error creating member:', error);
+      alert('Error creating member: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const updateMember = async () => {
+    if (!editingMember) return;
+
+    try {
+      const response = await fetch(`/api/members/${editingMember.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newMember.name,
+          phone: newMember.phone,
+          email: newMember.email,
+          points: newMember.points,
+          address: newMember.address
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setMembers(members.map(member => 
+          member.id === editingMember.id ? result.data : member
+        ));
+        setEditingMember(null);
+        setNewMember({
+          name: "",
+          phone: "",
+          email: "",
+          points: 0,
+          address: ""
+        });
+        setIsEditDialogOpen(false);
+        alert('Member updated successfully!');
+      } else {
+        alert('Error updating member: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error updating member:', error);
+      alert('Error updating member: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const deleteMember = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this member?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/members/${id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setMembers(members.filter(member => member.id !== id));
+        alert('Member deleted successfully!');
+      } else {
+        alert('Error deleting member: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting member:', error);
+      alert('Error deleting member: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const startEditMember = (member: Member) => {
+    setEditingMember(member);
+    setNewMember({
+      name: member.name,
+      phone: member.phone,
+      email: member.email || "",
+      points: member.points,
+      address: member.address || ""
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p>Loading members...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -70,48 +202,127 @@ export default function MembersPage() {
           <p className="text-gray-500">Manage customer loyalty and points</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Member
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Member</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Full Name</label>
-                  <Input placeholder="Enter member name" />
+        <div className="flex gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Member
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Member</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Full Name</label>
+                    <Input 
+                      placeholder="Enter member name" 
+                      value={newMember.name}
+                      onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Phone Number</label>
+                    <Input 
+                      placeholder="Enter phone number" 
+                      value={newMember.phone}
+                      onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Phone Number</label>
-                  <Input placeholder="Enter phone number" />
+                  <label className="text-sm font-medium">Email</label>
+                  <Input 
+                    type="email" 
+                    placeholder="Enter email address" 
+                    value={newMember.email}
+                    onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Initial Points</label>
+                  <Input 
+                    type="number" 
+                    placeholder="Enter initial points" 
+                    value={newMember.points}
+                    onChange={(e) => setNewMember({...newMember, points: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Address</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter member address"
+                    value={newMember.address}
+                    onChange={(e) => setNewMember({...newMember, address: e.target.value})}
+                    rows={2}
+                  />
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Email</label>
-                <Input type="email" placeholder="Enter email address" />
+              <Button onClick={createMember}>Add Member</Button>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Member</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Full Name</label>
+                    <Input 
+                      placeholder="Enter member name" 
+                      value={newMember.name}
+                      onChange={(e) => setNewMember({...newMember, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Phone Number</label>
+                    <Input 
+                      placeholder="Enter phone number" 
+                      value={newMember.phone}
+                      onChange={(e) => setNewMember({...newMember, phone: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Email</label>
+                  <Input 
+                    type="email" 
+                    placeholder="Enter email address" 
+                    value={newMember.email}
+                    onChange={(e) => setNewMember({...newMember, email: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Points</label>
+                  <Input 
+                    type="number" 
+                    placeholder="Enter points" 
+                    value={newMember.points}
+                    onChange={(e) => setNewMember({...newMember, points: parseInt(e.target.value) || 0})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Address</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter member address"
+                    value={newMember.address}
+                    onChange={(e) => setNewMember({...newMember, address: e.target.value})}
+                    rows={2}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Initial Points</label>
-                <Input type="number" placeholder="Enter initial points" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Notes</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter member notes"
-                  rows={2}
-                />
-              </div>
-            </div>
-            <Button>Add Member</Button>
-          </DialogContent>
-        </Dialog>
+              <Button onClick={updateMember}>Update Member</Button>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -216,7 +427,7 @@ export default function MembersPage() {
                         {member.points} pts
                       </Badge>
                     </td>
-                    <td className="py-3 px-4">{member.joinDate}</td>
+                    <td className="py-3 px-4">{new Date(member.createdAt).toLocaleDateString()}</td>
                     <td className="py-3 px-4">
                       <Badge variant={member.points > 100 ? "default" : "outline"}>
                         {member.points > 100 ? "VIP" : "Regular"}
@@ -224,10 +435,18 @@ export default function MembersPage() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex gap-2">
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => startEditMember(member)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => deleteMember(member.id)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,44 +28,165 @@ interface Branch {
 }
 
 export default function BranchesPage() {
-  const [branches, setBranches] = useState<Branch[]>([
-    {
-      id: "1",
-      name: "Main Branch",
-      address: "Jl. Jend. Sudirman No.1, Jakarta",
-      phone: "021-1234-5678",
-      email: "main@example.com",
-      type: "main",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "2",
-      name: "Branch A",
-      address: "Jl. Thamrin No.10, Jakarta",
-      phone: "021-8765-4321",
-      email: "brancha@example.com",
-      type: "sub",
-      createdAt: "2023-02-20"
-    },
-    {
-      id: "3",
-      name: "Branch B",
-      address: "Jl. Gatot Subroto No.5, Jakarta",
-      phone: "021-1122-3344",
-      email: "branchb@example.com",
-      type: "sub",
-      createdAt: "2023-03-10"
-    }
-  ]);
-  
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [newBranch, setNewBranch] = useState({
+    name: "",
+    address: "",
+    phone: "",
+    email: "",
+    type: "sub" as "main" | "sub"
+  });
+
+  // Load branches from API on component mount
+  useEffect(() => {
+    const fetchBranches = async () => {
+      try {
+        const response = await fetch('/api/branches');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setBranches(result.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching branches:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchBranches();
+  }, []);
 
   const filteredBranches = branches.filter(branch => 
     branch.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     branch.address.toLowerCase().includes(searchTerm.toLowerCase()) ||
     branch.phone.includes(searchTerm)
   );
+
+  const createBranch = async () => {
+    try {
+      const response = await fetch('/api/branches', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newBranch),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setBranches([...branches, result.data]);
+        setNewBranch({
+          name: "",
+          address: "",
+          phone: "",
+          email: "",
+          type: "sub"
+        });
+        setIsAddDialogOpen(false);
+        alert('Branch created successfully!');
+      } else {
+        alert('Error creating branch: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error creating branch:', error);
+      alert('Error creating branch: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const updateBranch = async () => {
+    if (!editingBranch) return;
+
+    try {
+      const response = await fetch(`/api/branches/${editingBranch.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newBranch.name,
+          address: newBranch.address,
+          phone: newBranch.phone,
+          email: newBranch.email,
+          type: newBranch.type
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setBranches(branches.map(branch => 
+          branch.id === editingBranch.id ? result.data : branch
+        ));
+        setEditingBranch(null);
+        setNewBranch({
+          name: "",
+          address: "",
+          phone: "",
+          email: "",
+          type: "sub"
+        });
+        setIsEditDialogOpen(false);
+        alert('Branch updated successfully!');
+      } else {
+        alert('Error updating branch: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error updating branch:', error);
+      alert('Error updating branch: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const deleteBranch = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this branch?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/branches/${id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setBranches(branches.filter(branch => branch.id !== id));
+        alert('Branch deleted successfully!');
+      } else {
+        alert('Error deleting branch: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting branch:', error);
+      alert('Error deleting branch: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const startEditBranch = (branch: Branch) => {
+    setEditingBranch(branch);
+    setNewBranch({
+      name: branch.name,
+      address: branch.address,
+      phone: branch.phone,
+      email: branch.email,
+      type: branch.type
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p>Loading branches...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -75,53 +196,135 @@ export default function BranchesPage() {
           <p className="text-gray-500">Manage multi-branch locations</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Branch
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Branch</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Branch Name</label>
-                  <Input placeholder="Enter branch name" />
+        <div className="flex gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Branch
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Branch</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Branch Name</label>
+                    <Input 
+                      placeholder="Enter branch name" 
+                      value={newBranch.name}
+                      onChange={(e) => setNewBranch({...newBranch, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Branch Type</label>
+                    <select 
+                      className="w-full p-2 border rounded-md"
+                      value={newBranch.type}
+                      onChange={(e) => setNewBranch({...newBranch, type: e.target.value as "main" | "sub"})}
+                    >
+                      <option value="main">Main Branch</option>
+                      <option value="sub">Sub Branch</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Branch Type</label>
-                  <select className="w-full p-2 border rounded-md">
-                    <option value="main">Main Branch</option>
-                    <option value="sub">Sub Branch</option>
-                  </select>
+                  <label className="text-sm font-medium">Address</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter branch address"
+                    value={newBranch.address}
+                    onChange={(e) => setNewBranch({...newBranch, address: e.target.value})}
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Phone Number</label>
+                    <Input 
+                      placeholder="Enter phone number" 
+                      value={newBranch.phone}
+                      onChange={(e) => setNewBranch({...newBranch, phone: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Email</label>
+                    <Input 
+                      type="email" 
+                      placeholder="Enter email" 
+                      value={newBranch.email}
+                      onChange={(e) => setNewBranch({...newBranch, email: e.target.value})}
+                    />
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Address</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter branch address"
-                  rows={2}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Phone Number</label>
-                  <Input placeholder="Enter phone number" />
+              <Button onClick={createBranch}>Add Branch</Button>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Branch</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Branch Name</label>
+                    <Input 
+                      placeholder="Enter branch name" 
+                      value={newBranch.name}
+                      onChange={(e) => setNewBranch({...newBranch, name: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Branch Type</label>
+                    <select 
+                      className="w-full p-2 border rounded-md"
+                      value={newBranch.type}
+                      onChange={(e) => setNewBranch({...newBranch, type: e.target.value as "main" | "sub"})}
+                    >
+                      <option value="main">Main Branch</option>
+                      <option value="sub">Sub Branch</option>
+                    </select>
+                  </div>
                 </div>
                 <div>
-                  <label className="text-sm font-medium">Email</label>
-                  <Input type="email" placeholder="Enter email" />
+                  <label className="text-sm font-medium">Address</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter branch address"
+                    value={newBranch.address}
+                    onChange={(e) => setNewBranch({...newBranch, address: e.target.value})}
+                    rows={2}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Phone Number</label>
+                    <Input 
+                      placeholder="Enter phone number" 
+                      value={newBranch.phone}
+                      onChange={(e) => setNewBranch({...newBranch, phone: e.target.value})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Email</label>
+                    <Input 
+                      type="email" 
+                      placeholder="Enter email" 
+                      value={newBranch.email}
+                      onChange={(e) => setNewBranch({...newBranch, email: e.target.value})}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-            <Button>Add Branch</Button>
-          </DialogContent>
-        </Dialog>
+              <Button onClick={updateBranch}>Update Branch</Button>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -161,10 +364,18 @@ export default function BranchesPage() {
                   </Badge>
                 </div>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => startEditBranch(branch)}
+                  >
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button variant="outline" size="sm">
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => deleteBranch(branch.id)}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

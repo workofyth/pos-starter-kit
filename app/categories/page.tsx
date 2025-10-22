@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,58 +32,38 @@ interface Category {
 }
 
 export default function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([
-    {
-      id: "1",
-      name: "Freebase",
-      code: "FB",
-      description: "Freebase nicotine products",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "2",
-      name: "SaltNic",
-      code: "SL",
-      description: "Salt nicotine products",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "3",
-      name: "Accessories",
-      code: "AC",
-      description: "Vape accessories",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "4",
-      name: "Battery",
-      code: "BT",
-      description: "Vape batteries",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "5",
-      name: "Coil",
-      code: "CL",
-      description: "Vape coils and atomizers",
-      createdAt: "2023-01-15"
-    },
-    {
-      id: "6",
-      name: "Pod System",
-      code: "PS",
-      description: "Pod system devices",
-      createdAt: "2023-01-15"
-    }
-  ]);
-  
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
   const [newCategory, setNewCategory] = useState({
     name: "",
     code: "",
     description: ""
   });
+
+  // Load categories from API on component mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/categories');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setCategories(result.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   const filteredCategories = categories.filter(category => 
     category.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -91,29 +71,116 @@ export default function CategoriesPage() {
     (category.description && category.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
-  const deleteCategory = (id: string) => {
-    // Check if category has associated products before deletion
-    // For now, just delete the category
-    setCategories(categories.filter(category => category.id !== id));
+  const createCategory = async () => {
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newCategory),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setCategories([...categories, result.data]);
+        setNewCategory({
+          name: "",
+          code: "",
+          description: ""
+        });
+        setIsAddDialogOpen(false);
+        alert('Category created successfully!');
+      } else {
+        alert('Error creating category: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error creating category:', error);
+      alert('Error creating category: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
   };
 
-  const handleAddCategory = () => {
-    const newCat: Category = {
-      id: Date.now().toString(),
-      name: newCategory.name,
-      code: newCategory.code.toUpperCase(), // Ensure code is uppercase
-      description: newCategory.description,
-      createdAt: new Date().toISOString().split('T')[0]
-    };
-    
-    setCategories([...categories, newCat]);
-    setNewCategory({
-      name: "",
-      code: "",
-      description: ""
-    });
-    setIsAddDialogOpen(false);
+  const updateCategory = async () => {
+    if (!editingCategory) return;
+
+    try {
+      const response = await fetch(`/api/categories/${editingCategory.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: newCategory.name,
+          code: newCategory.code,
+          description: newCategory.description
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setCategories(categories.map(category => 
+          category.id === editingCategory.id ? result.data : category
+        ));
+        setEditingCategory(null);
+        setNewCategory({
+          name: "",
+          code: "",
+          description: ""
+        });
+        setIsEditDialogOpen(false);
+        alert('Category updated successfully!');
+      } else {
+        alert('Error updating category: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error updating category:', error);
+      alert('Error updating category: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
   };
+
+  const deleteCategory = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this category?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/categories/${id}`, {
+        method: 'DELETE',
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        setCategories(categories.filter(category => category.id !== id));
+        alert('Category deleted successfully!');
+      } else {
+        alert('Error deleting category: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting category:', error);
+      alert('Error deleting category: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const startEditCategory = (category: Category) => {
+    setEditingCategory(category);
+    setNewCategory({
+      name: category.name,
+      code: category.code,
+      description: category.description || ""
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p>Loading categories...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -123,50 +190,91 @@ export default function CategoriesPage() {
           <p className="text-gray-500">Manage product categories and codes</p>
         </div>
         
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Category
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add New Category</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div>
-                <label className="text-sm font-medium">Category Name</label>
-                <Input 
-                  placeholder="Enter category name" 
-                  value={newCategory.name}
-                  onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
-                />
+        <div className="flex gap-2">
+          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <Plus className="h-4 w-4 mr-2" />
+                Add Category
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Category</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div>
+                  <label className="text-sm font-medium">Category Name</label>
+                  <Input 
+                    placeholder="Enter category name" 
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Category Code</label>
+                  <Input 
+                    placeholder="Enter 2-3 letter code (e.g., FB, SL)" 
+                    value={newCategory.code}
+                    onChange={(e) => setNewCategory({...newCategory, code: e.target.value.toUpperCase()})}
+                    maxLength={3}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter category description"
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
+                    rows={2}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Category Code</label>
-                <Input 
-                  placeholder="Enter 2-3 letter code (e.g., FB, SL)" 
-                  value={newCategory.code}
-                  onChange={(e) => setNewCategory({...newCategory, code: e.target.value.toUpperCase()})}
-                  maxLength={3}
-                />
-                <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+              <Button onClick={createCategory}>Add Category</Button>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Category</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div>
+                  <label className="text-sm font-medium">Category Name</label>
+                  <Input 
+                    placeholder="Enter category name" 
+                    value={newCategory.name}
+                    onChange={(e) => setNewCategory({...newCategory, name: e.target.value})}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Category Code</label>
+                  <Input 
+                    placeholder="Enter 2-3 letter code (e.g., FB, SL)" 
+                    value={newCategory.code}
+                    onChange={(e) => setNewCategory({...newCategory, code: e.target.value.toUpperCase()})}
+                    maxLength={3}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter category description"
+                    value={newCategory.description}
+                    onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
+                    rows={2}
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Description</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter category description"
-                  value={newCategory.description}
-                  onChange={(e) => setNewCategory({...newCategory, description: e.target.value})}
-                  rows={2}
-                />
-              </div>
-            </div>
-            <Button onClick={handleAddCategory}>Add Category</Button>
-          </DialogContent>
-        </Dialog>
+              <Button onClick={updateCategory}>Update Category</Button>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -225,7 +333,11 @@ export default function CategoriesPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => startEditCategory(category)}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,9 +22,11 @@ import {
   Package,
   Download
 } from "lucide-react";
+import { useSession } from "@/lib/auth-client"; // Import useSession hook
 
 interface Product {
-  id: string;
+  branchId?: string;
+  id?: string;
   name: string;
   sku: string;
   barcode: string;
@@ -32,11 +34,28 @@ interface Product {
   categoryId: string;
   purchasePrice: number;
   sellingPrice: number;
+  unit?: string;
   stock: number;
   minStock: number;
   profitMargin: number; // Profit margin percentage
   image?: string; // Optional image URL
   imageUrl?: string; // Path to stored image
+}
+
+interface ProductFormData {
+  name: string;
+  sku: string;
+  barcode: string;
+  category: string;
+  categoryId: string;
+  unit: string;
+  purchasePrice: number;
+  sellingPrice: number;
+  profitMargin: number;
+  description: string;
+  image: string;
+  imageUrl?: string;
+  id?: string;
 }
 
 interface Category {
@@ -45,64 +64,185 @@ interface Category {
   code: string;
 }
 
+interface InventoryItem {
+  id: string;
+  productId: string;
+  branchId: string;
+  quantity: number;
+  minStock: number;
+  maxStock: number;
+  lastUpdated: string;
+  createdAt: string;
+  updatedAt: string;
+  productName: string;
+  productSku: string;
+  productBarcode: string;
+  productDescription: string;
+  productImage: string | null;
+  productImageUrl: string | null;
+  productCategoryId: string | null;
+  productCategoryName: string | null;
+  productCategoryCode: string | null;
+  branchName: string;
+  branchAddress: string;
+  branchPhone: string | null;
+  branchEmail: string | null;
+}
+
 export default function ProductsPage() {
-  const [categories, setCategories] = useState<Category[]>([
-    { id: "1", name: "Freebase", code: "FB" },
-    { id: "2", name: "SaltNic", code: "SL" },
-    { id: "3", name: "Accessories", code: "AC" },
-    { id: "4", name: "Battery", code: "BT" },
-    { id: "5", name: "Coil", code: "CL" },
-    { id: "6", name: "Pod System", code: "PS" },
-  ]);
+  const { data: session } = useSession(); // Add session hook
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null); // Store user's branch ID
   
-  const [products, setProducts] = useState<Product[]>([
-    {
-      id: "1",
-      name: "Product A",
-      sku: "FB00001",
-      barcode: "1234567890123",
-      category: "Freebase",
-      categoryId: "1",
-      purchasePrice: 45000,
-      sellingPrice: 50000,
-      stock: 10,
-      minStock: 5,
-      profitMargin: 11.11, // (50000-45000)/45000 * 100
-      image: "../../assets/images/placeholder-product.png"
-    },
-    {
-      id: "2",
-      name: "Product B",
-      sku: "SL00001",
-      barcode: "1234567890124",
-      category: "SaltNic",
-      categoryId: "2",
-      purchasePrice: 70000,
-      sellingPrice: 75000,
-      stock: 5,
-      minStock: 3,
-      profitMargin: 7.14, // (75000-70000)/70000 * 100
-      image: "../../assets/images/placeholder-product.png"
-    },
-    {
-      id: "3",
-      name: "Product C",
-      sku: "AC00001",
-      barcode: "1234567890125",
-      category: "Accessories",
-      categoryId: "3",
-      purchasePrice: 20000,
-      sellingPrice: 25000,
-      stock: 20,
-      minStock: 10,
-      profitMargin: 25.00, // (25000-20000)/20000 * 100
-      image: "../../assets/images/placeholder-product.png"
-    }
-  ]);
+  // Combined loading state
+  const loading = categoriesLoading || productsLoading;
+  
+  // Get user's branch ID
+  useEffect(() => {
+    const fetchUserBranch = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              setUserBranchId(result.data[0].branchId);
+            } else {
+              // Fallback to default branch if not found
+              setUserBranchId('brn_XNUWRgFLof');
+            }
+          } else {
+            // Fallback to default branch on error
+            setUserBranchId('brn_XNUWRgFLof');
+          }
+        } catch (error) {
+          console.error('Error fetching user branch:', error);
+          // Fallback to default branch on error
+          setUserBranchId('brn_XNUWRgFLof');
+        }
+      }
+    };
+    
+    fetchUserBranch();
+  }, [session]);
+  
+  // Load products from API on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch('/api/products?page=1&limit=100'); // Adjust limit as needed
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            // Transform API response to match the Product interface
+            const formattedProducts = result.data.map((apiProduct: any) => ({
+              id: apiProduct.id,
+              name: apiProduct.name,
+              sku: apiProduct.sku,
+              barcode: apiProduct.barcode,
+              category: apiProduct.categoryName || '',
+              categoryId: apiProduct.categoryId,
+              purchasePrice: parseFloat(apiProduct.purchasePrice) || 0,
+              sellingPrice: parseFloat(apiProduct.sellingPrice) || 0,
+              stock: apiProduct.stock || 0,
+              minStock: apiProduct.minStock || 5,
+              profitMargin: parseFloat(apiProduct.profitMargin) || 0,
+              image: apiProduct.image,
+              imageUrl: apiProduct.imageUrl
+            }));
+            setProducts(formattedProducts);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    
+    fetchProducts();
+  }, []);
+  
+  // Load categories from API on component mount
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await fetch('/api/categories');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setCategories(result.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+        // Set default categories in case of error
+        setCategories([
+          { id: "1", name: "Freebase", code: "FB" },
+          { id: "2", name: "SaltNic", code: "SL" },
+          { id: "3", name: "Accessories", code: "AC" },
+          { id: "4", name: "Battery", code: "BT" },
+          { id: "5", name: "Coil", code: "CL" },
+          { id: "6", name: "Pod System", code: "PS" },
+        ]);
+      } finally {
+        setCategoriesLoading(false);
+      }
+    };
+
+    fetchCategories();
+  }, []);
+  
+  // Load products from API on component mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch('/api/products?page=1&limit=100'); // Adjust limit as needed
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            // Transform API response to match the Product interface
+            const formattedProducts = result.data.map((apiProduct: any) => ({
+              id: apiProduct.id,
+              name: apiProduct.name,
+              sku: apiProduct.sku,
+              barcode: apiProduct.barcode,
+              category: apiProduct.categoryName || '',
+              categoryId: apiProduct.categoryId,
+              purchasePrice: parseFloat(apiProduct.purchasePrice) || 0,
+              sellingPrice: parseFloat(apiProduct.sellingPrice) || 0,
+              stock: apiProduct.stock || 0,
+              minStock: apiProduct.minStock || 5,
+              profitMargin: parseFloat(apiProduct.profitMargin) || 0,
+              image: apiProduct.image,
+              imageUrl: apiProduct.imageUrl
+            }));
+            setProducts(formattedProducts);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+    
+    fetchProducts();
+  }, []);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [newProduct, setNewProduct] = useState({
+  const [isAdjustStockDialogOpen, setIsAdjustStockDialogOpen] = useState(false);
+  const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
+  const [adjustmentData, setAdjustmentData] = useState({
+    quantity: 0,
+    type: 'adjustment' as 'in' | 'out' | 'adjustment',
+    notes: ''
+  });
+  const [newProduct, setNewProduct] = useState<ProductFormData>({
     name: "",
     sku: "",
     barcode: "",
@@ -118,18 +258,136 @@ export default function ProductsPage() {
     id: Date.now().toString() // Temporary ID for image upload
   });
 
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
   const filteredProducts = products.filter(product => 
     product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
     product.barcode.includes(searchTerm)
   );
 
-  const deleteProduct = (id: string) => {
-    setProducts(products.filter(product => product.id !== id));
+  const startEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setNewProduct({
+      name: product.name,
+      sku: product.sku,
+      barcode: product.barcode,
+      category: product.category,
+      categoryId: product.categoryId || "",
+      unit: product.unit || "pcs",
+      purchasePrice: product.purchasePrice,
+      sellingPrice: product.sellingPrice,
+      profitMargin: product.profitMargin,
+      description: "", // description might not be in the Product interface
+      image: product.image || "",
+      imageUrl: product.imageUrl || "",
+      id: product.id
+    });
+    setIsEditDialogOpen(true);
+  };
+
+  const handleEditProduct = async () => {
+    if (!editingProduct) return;
+
+    try {
+      const productData = {
+        name: newProduct.name,
+        description: newProduct.description || "",
+        sku: newProduct.sku,
+        barcode: newProduct.barcode,
+        categoryId: newProduct.categoryId || null,  // Send null if no category selected
+        unit: newProduct.unit,
+        profitMargin: newProduct.profitMargin.toString(),
+        image: newProduct.image || null,  // Send null if no image
+        imageUrl: newProduct.imageUrl || null,  // Send null if no image
+        purchasePrice: newProduct.purchasePrice.toString(),
+        sellingPrice: newProduct.sellingPrice.toString()
+      };
+
+      const response = await fetch(`/api/products/${editingProduct.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Update the product in the local state
+        setProducts(products.map(p => 
+          p.id === editingProduct.id ? {
+            ...p,
+            name: newProduct.name,
+            sku: newProduct.sku,
+            barcode: newProduct.barcode,
+            category: categories.find(cat => cat.id === newProduct.categoryId)?.name || newProduct.category,
+            categoryId: newProduct.categoryId,
+            purchasePrice: newProduct.purchasePrice || 0,
+            sellingPrice: newProduct.sellingPrice || 0,
+            profitMargin: newProduct.profitMargin || 0,
+            image: newProduct.image,
+            imageUrl: newProduct.imageUrl
+          } : p
+        ));
+        
+        // Reset form and close dialog
+        setEditingProduct(null);
+        setNewProduct({
+          name: "",
+          sku: "",
+          barcode: "",
+          category: "",
+          categoryId: "",
+          unit: "pcs",
+          purchasePrice: 0,
+          sellingPrice: 0,
+          profitMargin: 0,
+          description: "",
+          image: "",
+          imageUrl: "",
+          id: Date.now().toString()
+        });
+        setIsEditDialogOpen(false);
+        alert('Product updated successfully!');
+      } else {
+        console.error('Error updating product:', result.message);
+        alert('Error updating product: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error updating product:', error);
+      alert('Error updating product: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
+  };
+
+  const deleteProduct = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this product?')) {
+      return;
+    }
+    
+    try {
+      const response = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        // Remove from local state
+        setProducts(products.filter(product => product.id !== id));
+        alert('Product deleted successfully!');
+      } else {
+        const result = await response.json();
+        alert('Error deleting product: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error deleting product:', error);
+      alert('Error deleting product: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
   };
   
   const generateUniqueBarcode = (): string => {
-    let newBarcode: string;
+    let newBarcode = "";
     let isUnique = false;
     while (!isUnique) {
       newBarcode = "1" + Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0');
@@ -199,40 +457,100 @@ export default function ProductsPage() {
     });
   };
   
-  const handleAddProduct = () => {
-    const productToAdd: Product = {
-      id: Date.now().toString(), // In a real app, this would be a proper ID
-      name: newProduct.name,
-      sku: newProduct.sku,
-      barcode: newProduct.barcode || generateUniqueBarcode(),
-      category: newProduct.category,
-      categoryId: newProduct.categoryId,
-      purchasePrice: newProduct.purchasePrice,
-      sellingPrice: newProduct.sellingPrice,
-      stock: 0, // New products start with 0 stock
-      minStock: 5, // Default minimum stock
-      profitMargin: newProduct.profitMargin,
-      image: newProduct.image,
-      imageUrl: newProduct.imageUrl
-    };
+  const handleAddProduct = async () => {
+    // Validate required fields
+    if (!newProduct.name.trim()) {
+      alert('Product name is required');
+      return;
+    }
     
-    setProducts([...products, productToAdd]);
-    setNewProduct({
-      name: "",
-      sku: "",
-      barcode: "",
-      category: "",
-      categoryId: "",
-      unit: "pcs",
-      purchasePrice: 0,
-      sellingPrice: 0,
-      profitMargin: 0,
-      description: "",
-      image: "",
-      imageUrl: "",
-      id: Date.now().toString()
-    });
-    setIsAddDialogOpen(false);
+    if (!newProduct.sku.trim()) {
+      alert('SKU is required');
+      return;
+    }
+    
+    if (!newProduct.categoryId) {
+      alert('Category is required');
+      return;
+    }
+
+    try {
+      // Prepare the product data for API request
+      const productData = {
+        name: newProduct.name,
+        description: newProduct.description || "",
+        sku: newProduct.sku,
+        barcode: newProduct.barcode || generateUniqueBarcode(),
+        categoryId: newProduct.categoryId || null,  // Send null if no category selected
+        unit: newProduct.unit,
+        profitMargin: newProduct.profitMargin.toString(),
+        image: newProduct.image || null,  // Send null if no image
+        imageUrl: newProduct.imageUrl || null,  // Send null if no image
+        purchasePrice: newProduct.purchasePrice.toString(),
+        sellingPrice: newProduct.sellingPrice.toString(),
+        stock: 0, // New products start with 0 stock
+        minStock: 5 // Default minimum stock
+      };
+      
+      console.log('Creating product with data:', productData);
+      console.log(productData)
+      // Send the product data to the API
+      const response = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        // Add the newly created product to the local state
+        const newProductFromAPI = result.data;
+        setProducts([...products, {
+          id: newProductFromAPI.id,
+          name: newProductFromAPI.name,
+          sku: newProductFromAPI.sku,
+          barcode: newProductFromAPI.barcode,
+          category: categories.find(cat => cat.id === newProductFromAPI.categoryId)?.name || '',
+          categoryId: newProductFromAPI.categoryId,
+          purchasePrice: parseFloat(newProductFromAPI.purchasePrice) || 0,
+          sellingPrice: parseFloat(newProductFromAPI.sellingPrice) || 0,
+          stock: newProductFromAPI.stock || 0,
+          minStock: newProductFromAPI.minStock || 5,
+          profitMargin: parseFloat(newProductFromAPI.profitMargin) || 0,
+          image: newProductFromAPI.image,
+          imageUrl: newProductFromAPI.imageUrl
+        }]);
+        
+        // Reset the form
+        setNewProduct({
+          name: "",
+          sku: "",
+          barcode: "",
+          category: "",
+          categoryId: "",
+          unit: "pcs",
+          purchasePrice: 0,
+          sellingPrice: 0,
+          profitMargin: 0,
+          description: "",
+          image: "",
+          imageUrl: "",
+          id: Date.now().toString()
+        });
+        
+        setIsAddDialogOpen(false);
+        alert('Product added successfully!');
+      } else {
+        console.error('Error creating product:', result.message);
+        alert('Error creating product: ' + result.message);
+      }
+    } catch (error) {
+      console.error('Error adding product:', error);
+      alert('Error adding product: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    }
   };
 
   return (
@@ -258,7 +576,8 @@ export default function ProductsPage() {
                 sellingPrice: 0,
                 profitMargin: 0,
                 description: "",
-                image: ""
+                image: "",
+                imageUrl: "",
               });
             }
           }}>
@@ -392,10 +711,58 @@ export default function ProductsPage() {
                               if (e.target.files && e.target.files[0]) {
                                 const file = e.target.files[0];
                                 
+                                // Check if the product has been created in the database
+                                // Check if this is for a new product (temporary ID) or existing product
+                                const isNewProduct = !newProduct.id || 
+                                  (typeof newProduct.id === 'string' && 
+                                   (newProduct.id.length < 15 || newProduct.id.startsWith(Date.now().toString().substring(0,5)) || !newProduct.id.startsWith('prod_')));
+                                
+                                if (isNewProduct) {
+                                  // For new products, we need to upload the image first and then create the product
+                                  // Create a FormData object to send the file
+                                  const formData = new FormData();
+                                  formData.append('image', file);
+                                  
+                                  try {
+                                    const response = await fetch('/api/products/upload-image', {
+                                      method: 'POST',
+                                      body: formData
+                                    });
+                                    
+                                    if (response.ok) {
+                                      const result = await response.json();
+                                      
+                                      // Update the newProduct state with the temporary image URL
+                                      setNewProduct({
+                                        ...newProduct, 
+                                        image: result.data.imageUrl,
+                                        imageUrl: result.data.imageUrl
+                                      });
+                                      
+                                      alert('Image uploaded successfully! You can now save your product with this image.');
+                                    } else {
+                                      try {
+                                        const result = await response.json();
+                                        alert('Error uploading image: ' + result.message);
+                                      } catch (jsonError) {
+                                        console.error('Error parsing JSON response:', jsonError);
+                                        alert('Error uploading image: Server responded with an error');
+                                      }
+                                    }
+                                  } catch (error) {
+                                    console.error('Error uploading image:', error);
+                                    alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+                                  }
+                                  return;
+                                }
+                                
+                                // For existing products, upload image and associate with product ID
                                 // Create a FormData object to send the file
                                 const formData = new FormData();
                                 formData.append('image', file);
-                                formData.append('productId', newProduct.id || '');
+                                if (newProduct.id) {
+                                  formData.append('productId', newProduct.id);
+                                }
                                 
                                 try {
                                   const response = await fetch('/api/products/upload-image', {
@@ -403,22 +770,36 @@ export default function ProductsPage() {
                                     body: formData
                                   });
                                   
-                                  const result = await response.json();
-                                  
+                                  // Check if response is ok before parsing JSON
                                   if (response.ok) {
+                                    const result = await response.json();
+                                    
                                     // Update the product with the image URL
                                     setNewProduct({
                                       ...newProduct, 
                                       image: result.imageUrl,
                                       imageUrl: result.imageUrl
                                     });
+                                    
+                                    // Update the product in the main products list if it exists
+                                    setProducts(products.map(p => 
+                                      p.id === newProduct.id ? { ...p, image: result.imageUrl, imageUrl: result.imageUrl } : p
+                                    ));
+                                    
                                     alert('Image uploaded successfully!');
                                   } else {
-                                    alert('Error uploading image: ' + result.message);
+                                    // Try to parse error response, or use generic message
+                                    try {
+                                      const result = await response.json();
+                                      alert('Error uploading image: ' + result.message);
+                                    } catch (jsonError) {
+                                      console.error('Error parsing JSON response:', jsonError);
+                                      alert('Error uploading image: Server responded with an error');
+                                    }
                                   }
                                 } catch (error) {
                                   console.error('Error uploading image:', error);
-                                  alert('Error uploading image: ' + error.message);
+                                  alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
                                 }
                               }
                             }}
@@ -434,6 +815,196 @@ export default function ProductsPage() {
                 </div>
               </div>
               <Button onClick={handleAddProduct}>Add Product</Button>
+            </DialogContent>
+          </Dialog>
+          
+          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Product</DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div>
+                  <label className="text-sm font-medium">Product Name</label>
+                  <Input 
+                    placeholder="Enter product name" 
+                    value={newProduct.name}
+                    onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">SKU</label>
+                    <Input 
+                      placeholder="Enter SKU" 
+                      value={newProduct.sku}
+                      onChange={(e) => setNewProduct({...newProduct, sku: e.target.value})}
+                      readOnly // SKU is typically not editable after creation
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Barcode</label>
+                    <div className="flex gap-2">
+                      <Input 
+                        placeholder="Enter barcode" 
+                        value={newProduct.barcode}
+                        onChange={(e) => setNewProduct({...newProduct, barcode: e.target.value})}
+                      />
+                      <Button 
+                        type="button" 
+                        variant="outline"
+                        onClick={() => {
+                          const uniqueBarcode = generateUniqueBarcode();
+                          setNewProduct({...newProduct, barcode: uniqueBarcode});
+                        }}
+                      >
+                        Generate
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Category</label>
+                    <select
+                      className="w-full p-2 border rounded-md"
+                      value={newProduct.categoryId}
+                      onChange={(e) => handleCategoryChange(e.target.value)}
+                    >
+                      <option value="">Select a category</option>
+                      {categories.map(category => (
+                        <option key={category.id} value={category.id}>
+                          {category.name} ({category.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Unit</label>
+                    <Input 
+                      placeholder="Enter unit (e.g., pcs, kg)" 
+                      value={newProduct.unit}
+                      onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Purchase Price</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter purchase price" 
+                      value={newProduct.purchasePrice || ""}
+                      onChange={(e) => handlePurchasePriceChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Profit Margin (%)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter profit margin %" 
+                      step="0.01"
+                      value={newProduct.profitMargin || ""}
+                      onChange={(e) => handleProfitMarginChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Selling Price</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter selling price" 
+                      value={newProduct.sellingPrice || ""}
+                      onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea 
+                    className="w-full p-2 border rounded-md" 
+                    placeholder="Enter product description"
+                    value={newProduct.description}
+                    onChange={(e) => setNewProduct({...newProduct, description: e.target.value})}
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Product Image</label>
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                    <div className="space-y-1 text-center">
+                      <div className="flex text-sm text-gray-600">
+                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
+                          <span>Upload a file</span>
+                          <input 
+                            type="file" 
+                            className="sr-only" 
+                            accept="image/*"
+                            onChange={async (e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                
+                                // Check if the product has a valid ID (should always be true for edit dialog)
+                                if (!newProduct.id) {
+                                  alert('Product ID is missing. Cannot upload image.');
+                                  return;
+                                }
+                                
+                                // Create a FormData object to send the file
+                                const formData = new FormData();
+                                formData.append('image', file);
+                                formData.append('productId', newProduct.id);
+                                
+                                try {
+                                  const response = await fetch('/api/products/upload-image', {
+                                    method: 'POST',
+                                    body: formData
+                                  });
+                                  
+                                  // Check if response is ok before parsing JSON
+                                  if (response.ok) {
+                                    const result = await response.json();
+                                    
+                                    // Update the product with the image URL
+                                    setNewProduct({
+                                      ...newProduct, 
+                                      image: result.imageUrl,
+                                      imageUrl: result.imageUrl
+                                    });
+                                    
+                                    // Update the product in the main products list
+                                    setProducts(products.map(p => 
+                                      p.id === newProduct.id ? { ...p, image: result.imageUrl, imageUrl: result.imageUrl } : p
+                                    ));
+                                    
+                                    alert('Image uploaded successfully!');
+                                  } else {
+                                    // Try to parse error response, or use generic message
+                                    try {
+                                      const result = await response.json();
+                                      alert('Error uploading image: ' + result.message);
+                                    } catch (jsonError) {
+                                      console.error('Error parsing JSON response:', jsonError);
+                                      alert('Error uploading image: Server responded with an error');
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Error uploading image:', error);
+                                  alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        PNG, JPG, GIF up to 10MB
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <Button onClick={handleEditProduct}>Update Product</Button>
             </DialogContent>
           </Dialog>
           
@@ -481,19 +1052,34 @@ export default function ProductsPage() {
                           // Submit the file to the API
                           const formData = new FormData();
                           formData.append('excel', file);
+                          // Add user's branchId to the form data
+                          formData.append('branchId', userBranchId || 'brn_XNUWRgFLof');
                           
                           fetch('/api/products/bulk-upload', {
                             method: 'POST',
                             body: formData
                           })
-                          .then(response => response.json())
+                          .then(async response => {
+                            // Check if response is ok before parsing JSON
+                            if (response.ok) {
+                              return response.json();
+                            } else {
+                              // Try to parse error response, or use generic message
+                              try {
+                                return await response.json();
+                              } catch (jsonError) {
+                                console.error('Error parsing JSON response:', jsonError);
+                                return { message: 'Error processing file: Server responded with an error' };
+                              }
+                            }
+                          })
                           .then(data => {
                             if (data.message) {
                               alert(data.message);
                               // Optionally, refresh the product list
                               // window.location.reload(); // Or implement a state update
                             } else {
-                              alert('Error: ' + data.message);
+                              alert('Error: Invalid response from server');
                             }
                           })
                           .catch(error => {
@@ -554,8 +1140,8 @@ export default function ProductsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((product) => (
-                <TableRow key={product.id}>
+              {filteredProducts.map((product, index) => (
+                <TableRow key={`${product.id}-${product.branchId || 'no-branch'}-${index}`}>
                   <TableCell>
                     {product.image ? (
                       <img 
@@ -564,7 +1150,7 @@ export default function ProductsPage() {
                         className="w-10 h-10 object-cover rounded-md"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
-                          target.src = '../../assets/images/placeholder-product.png';
+                          target.src = '/assets/images/placeholder-product.png';
                         }}
                       />
                     ) : (
@@ -594,13 +1180,32 @@ export default function ProductsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button variant="outline" size="sm">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => startEditProduct(product)}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button 
                         variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setAdjustingProduct(product);
+                          setAdjustmentData({
+                            quantity: 0,
+                            type: 'adjustment',
+                            notes: ''
+                          });
+                          setIsAdjustStockDialogOpen(true);
+                        }}
+                      >
+                        <Package className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         size="sm" 
-                        onClick={() => deleteProduct(product.id)}
+                        onClick={() => deleteProduct(product.id!)}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -612,6 +1217,124 @@ export default function ProductsPage() {
           </Table>
         </CardContent>
       </Card>
+      
+      {/* Adjust Stock Dialog */}
+      <Dialog open={isAdjustStockDialogOpen} onOpenChange={setIsAdjustStockDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Adjust Stock</DialogTitle>
+          </DialogHeader>
+          {adjustingProduct && (
+            <div className="grid gap-4 py-4">
+              <div>
+                <label className="text-sm font-medium">Product</label>
+                <Input 
+                  value={`${adjustingProduct.name} (${adjustingProduct.sku})`} 
+                  readOnly 
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Current Stock</label>
+                  <Input 
+                    value={adjustingProduct.stock || 0} 
+                    readOnly 
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Adjustment Type</label>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={adjustmentData.type}
+                    onChange={(e) => setAdjustmentData({...adjustmentData, type: e.target.value as 'in' | 'out' | 'adjustment'})}
+                  >
+                    <option value="in">Stock In</option>
+                    <option value="out">Stock Out</option>
+                    <option value="adjustment">Adjustment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Quantity</label>
+                  <Input 
+                    type="number" 
+                    placeholder="Enter quantity" 
+                    value={adjustmentData.quantity}
+                    onChange={(e) => setAdjustmentData({...adjustmentData, quantity: parseInt(e.target.value) || 0})}
+                    min="0"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea 
+                  className="w-full p-2 border rounded-md" 
+                  placeholder="Enter adjustment notes"
+                  value={adjustmentData.notes}
+                  onChange={(e) => setAdjustmentData({...adjustmentData, notes: e.target.value})}
+                  rows={3}
+                />
+              </div>
+            </div>
+          )}
+          <Button 
+            onClick={async () => {
+              if (!adjustingProduct) return;
+              
+              try {
+                // Prepare the stock adjustment data
+                // Use the user's branch ID from session
+                const stockData = {
+                  productId: adjustingProduct.id,
+                  branchId: userBranchId || 'brn_XNUWRgFLof', // Dynamic branch ID from user's assignment or fallback
+                  quantity: adjustmentData.quantity,
+                  type: adjustmentData.type,
+                  notes: adjustmentData.notes || 'Stock adjustment from products page'
+                };
+                
+                // Call the inventory API to adjust stock
+                const response = await fetch('/api/inventory', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(stockData),
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok && result.success) {
+                  // Update the product in the local state with new stock level
+                  setProducts(products.map(p => 
+                    p.id === adjustingProduct.id ? { 
+                      ...p, 
+                      stock: result.data.quantity,
+                      lastUpdated: result.data.lastUpdated
+                    } : p
+                  ));
+                  
+                  // Close the dialog and reset state
+                  setIsAdjustStockDialogOpen(false);
+                  setAdjustingProduct(null);
+                  setAdjustmentData({
+                    quantity: 0,
+                    type: 'adjustment',
+                    notes: ''
+                  });
+                  
+                  alert('Stock adjusted successfully!');
+                } else {
+                  alert('Error adjusting stock: ' + result.message);
+                }
+              } catch (error) {
+                console.error('Error adjusting stock:', error);
+                alert('Error adjusting stock: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+              }
+            }}
+          >
+            Adjust Stock
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

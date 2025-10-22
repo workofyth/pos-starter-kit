@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useSession } from "@/lib/auth-client";
+import { useSafeSession } from "@/lib/auth-client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,7 +20,7 @@ import Image from "next/image";
 
 export default function Home() {
   const router = useRouter();
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending } = useSafeSession();
   
   useEffect(() => {
     if (!isPending && session) {

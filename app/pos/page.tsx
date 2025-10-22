@@ -24,9 +24,7 @@ import {
   User,
   ShoppingCart
 } from "lucide-react";
-import { db } from "@/db";
-import { products, members } from "@/db/schema/pos";
-import { eq, or, ilike } from "drizzle-orm";
+import { useSession } from "@/lib/auth-client"; // Import useSession hook
 
 interface Product {
   id: string;
@@ -40,6 +38,8 @@ interface Product {
   minStock: number;
   image?: string;
   imageUrl?: string;
+  branchId?: string; // Add branch ID for multi-branch support
+  branchName?: string; // Add branch name for display
 }
 
 interface Member {
@@ -61,6 +61,7 @@ interface CartItem {
 }
 
 export default function POSPage() {
+  const { data: session } = useSession(); // Get session data
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -71,25 +72,84 @@ export default function POSPage() {
   const [discountRate, setDiscountRate] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [cashierId, setCashierId] = useState("1"); // In a real app, this would be dynamic
+  const [cashierBranchId, setCashierBranchId] = useState<string | null>(null); // Store cashier's branch ID
 
   // Load products and members
   useEffect(() => {
     const fetchData = async () => {
+      setIsLoading(true);
       try {
-        // Fetch products with stock > 0
-        const fetchedProducts = await db.select().from(products);
-        setProductsList(fetchedProducts);
+        // Check for draft order data in localStorage (when continuing from draft orders page)
+        const draftOrderDataStr = localStorage.getItem('draftOrderData');
+        if (draftOrderDataStr) {
+          const draftOrder = JSON.parse(draftOrderDataStr);
+          setCart(draftOrder.cartData);
+          setPaymentMethod(draftOrder.paymentMethod || 'cash');
+          setDiscountRate(parseFloat(draftOrder.discountRate) || 0);
+          setPaidAmount(0); // Reset paid amount
+          
+          // Remove the draft data from localStorage after loading
+          localStorage.removeItem('draftOrderData');
+        }
+
+        // Get cashier's branch ID from session
+        if (session?.user) {
+          // Fetch user branch assignment
+          const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (userBranchResponse.ok) {
+            const userBranchResult = await userBranchResponse.json();
+            if (userBranchResult.success && userBranchResult.data.length > 0) {
+              const userBranchId = userBranchResult.data[0].branchId;
+              setCashierBranchId(userBranchId);
+              setCashierId(session.user.id);
+              
+              // Fetch products with stock > 0 for the cashier's branch
+              const productsResponse = await fetch(`/api/products?branchId=${userBranchId}`);
+              if (productsResponse.ok) {
+                const productsResult = await productsResponse.json();
+                if (productsResult.success) {
+                  setProductsList(productsResult.data);
+                }
+              }
+            } else {
+              // If no branch assignment found, load all products (or handle appropriately)
+              const productsResponse = await fetch('/api/products');
+              if (productsResponse.ok) {
+                const productsResult = await productsResponse.json();
+                if (productsResult.success) {
+                  setProductsList(productsResult.data);
+                }
+              }
+            }
+          }
+        } else {
+          // If no session, load all products (or redirect to login)
+          const productsResponse = await fetch('/api/products');
+          if (productsResponse.ok) {
+            const productsResult = await productsResponse.json();
+            if (productsResult.success) {
+              setProductsList(productsResult.data);
+            }
+          }
+        }
         
         // Fetch members
-        const fetchedMembers = await db.select().from(members);
-        setMembersList(fetchedMembers);
+        const membersResponse = await fetch('/api/members');
+        if (membersResponse.ok) {
+          const membersResult = await membersResponse.json();
+          if (membersResult.success) {
+            setMembersList(membersResult.data);
+          }
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
+      } finally {
+        setIsLoading(false);
       }
     };
     
     fetchData();
-  }, []);
+  }, [session]);
 
   const addToCart = (product: Product) => {
     if (product.stock <= 0) {
@@ -245,25 +305,75 @@ export default function POSPage() {
     }
   };
 
+  // Save current order as draft
+  const handleSaveDraft = async () => {
+    if (cart.length === 0) {
+      alert("Cart is empty, nothing to save as draft!");
+      return;
+    }
+
+    if (!cashierId || !cashierBranchId || !session?.user.id) {
+      alert("User information not loaded yet. Please wait and try again.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/draft-orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: session.user.id,  // Current logged in user
+          branchId: cashierBranchId,
+          cashierId: session.user.id,  // Cashier is the same as the user
+          cart: cart,
+          memberId: selectedMember?.id || null,
+          notes: "Draft order",
+          paymentMethod: paymentMethod,
+          discountRate: discountRate,
+          total: calculateTotal()
+        })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        alert('Order saved as draft successfully!');
+        // Reset cart after saving
+        setCart([]);
+        setPaidAmount(0);
+        setDiscountRate(0);
+        setSelectedMember(null);
+      } else {
+        alert(`Error saving draft: ${result.message}`);
+      }
+    } catch (error) {
+      console.error("Error saving draft order:", error);
+      alert("Error saving draft order");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Search for products
   const searchProducts = async () => {
     if (!searchTerm.trim()) return;
     
     try {
-      // Search by barcode first
-      const foundProducts = await db.select()
-        .from(products)
-        .where(or(
-          ilike(products.barcode, `%${searchTerm}%`),
-          ilike(products.name, `%${searchTerm}%`),
-          ilike(products.sku, `%${searchTerm}%`)
-        ));
-      
-      if (foundProducts.length > 0) {
-        addToCart(foundProducts[0]);
-        setSearchTerm("");
+      // Search by barcode first, including the branchId for proper filtering
+      const searchResponse = await fetch(`/api/products/search?q=${encodeURIComponent(searchTerm)}&branchId=${cashierBranchId || ''}`);
+      if (searchResponse.ok) {
+        const searchResult = await searchResponse.json();
+        if (searchResult.success && searchResult.data.length > 0) {
+          addToCart(searchResult.data[0]);
+          setSearchTerm("");
+        } else {
+          alert("Product not found");
+        }
       } else {
-        alert("Product not found");
+        alert("Error searching products");
       }
     } catch (error) {
       console.error("Error searching products:", error);
@@ -355,25 +465,38 @@ export default function POSPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                {productsList.filter(p => p.stock > 0).map(product => (
+                {productsList.filter(p => p.stock > 0).map((product, index) => (
                   <div 
-                    key={product.id} 
+                    key={`${product.id}-${product.branchId || 'main'}-${index}`}
                     className="cursor-pointer hover:shadow-md transition-shadow border rounded-lg p-3"
                     onClick={() => addToCart(product)}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-sm text-gray-500">Rp {product.sellingPrice.toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm">Stock: {product.stock}</p>
+                    <div className="flex flex-col items-center text-center">
+                      {product.image || product.imageUrl ? (
+                        <img 
+                          src={product.image || product.imageUrl} 
+                          alt={product.name} 
+                          className="w-16 h-16 object-contain rounded-md mb-2"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = '/assets/images/placeholder-product.png';
+                          }}
+                        />
+                      ) : (
+                        <div className="bg-gray-200 border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
+                          <Package className="h-6 w-6 text-gray-400" />
+                        </div>
+                      )}
+                      <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
+                      <p className="text-sm text-gray-500">Rp {product.sellingPrice.toLocaleString()}</p>
+                      <div className="mt-1 text-center w-full">
+                        <p className="text-xs">Stock: {product.stock}</p>
                         <p className="text-xs text-gray-500">{product.sku}</p>
+                        {product.stock <= 5 && (
+                          <Badge variant="destructive" className="mt-1 text-xs">Low Stock</Badge>
+                        )}
                       </div>
                     </div>
-                    {product.stock <= 5 && (
-                      <Badge variant="destructive" className="mt-1">Low Stock</Badge>
-                    )}
                   </div>
                 ))}
               </div>
@@ -515,6 +638,14 @@ export default function POSPage() {
                             Process Payment (Rp {calculateTotal().toLocaleString()})
                           </>
                         )}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={handleSaveDraft}
+                        disabled={isLoading || cart.length === 0}
+                      >
+                        Save as Draft
                       </Button>
                       <Button 
                         variant="outline" 

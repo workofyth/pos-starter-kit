@@ -1,10 +1,7 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import { NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'GET') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
+export async function GET(request: NextRequest) {
 
   // Create sample data for the template
   const templateData = [
@@ -84,10 +81,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   // Convert to buffer
   const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
   
-  // Set headers for file download
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', 'attachment; filename="product_template.xlsx"');
+  // Create response with proper headers for file download
+  const response = new Response(buffer, {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': 'attachment; filename="product_template.xlsx"',
+    },
+  });
   
-  // Send the buffer
-  res.status(200).send(buffer);
+  return response;
 }

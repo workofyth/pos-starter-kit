@@ -1,5 +1,4 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import formidable from 'formidable';
+import { NextRequest } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import fsExtra from 'fs-extra';
@@ -8,43 +7,34 @@ import { db } from '@/db';
 import { products } from '@/db/schema/pos';
 import { eq } from 'drizzle-orm';
 
-// Disable body parsing for file uploads
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 // Create the images directory if it doesn't exist
 const imagesDir = path.join(process.cwd(), 'public', 'assets', 'images', 'products');
 mkdirp.sync(imagesDir);
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  // Parse form data
-  const form = formidable({
-    multiples: false,
-    uploadDir: imagesDir,  // Upload directly to images directory
-    keepExtensions: true,
-  });
-
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error('Error parsing form:', err);
-      return res.status(500).json({ message: 'Error parsing form data' });
+export async function POST(request: NextRequest) {
+  try {
+    const formData = await request.formData();
+    
+    // Extract file from FormData
+    const imageFile = formData.get('image') as File | null;
+    const productId = formData.get('productId') as string | null;
+    
+    if (!imageFile) {
+      return new Response(
+        JSON.stringify({ message: 'Image file is required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
     }
+    
+    // Handle temporary image upload (no productId provided)
+    const isTemporaryUpload = !productId;
 
-    // Check if file exists
-    if (!files.image) {
-      return res.status(400).json({ message: 'Image file is required' });
-    }
-
-    const imageFile = Array.isArray(files.image) ? files.image[0] : files.image;
-    const originalName = imageFile.originalFilename || 'image';
-    const fileExtension = path.extname(imageFile.originalFilename || '');
+    // Convert File object to buffer and save
+    const bytes = await imageFile.arrayBuffer();
+    const buffer = Buffer.from(bytes);
+    
+    const originalName = imageFile.name || 'image';
+    const fileExtension = path.extname(originalName);
     
     // Sanitize the filename to remove special characters
     const sanitizedBaseName = originalName
@@ -55,31 +45,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Create the final path
     const finalPath = path.join(imagesDir, sanitizedFileName);
     
-    try {
-      // Move the file to the final location with the sanitized name
-      await fsExtra.move(imageFile.filepath, finalPath, { overwrite: true });
-      
-      // Update the product record with the image URL
-      const productId = fields.productId as string[];
-      if (productId) {
-        const imageUrl = `/assets/images/products/${sanitizedFileName}`;
-        await db.update(products)
-          .set({ imageUrl })
-          .where(eq(products.id, productId));
-      }
-
-      res.status(200).json({ 
-        message: 'Image uploaded successfully',
-        imageUrl: `/assets/images/products/${sanitizedFileName}`,
-        fileName: sanitizedFileName
-      });
-    } catch (error) {
-      console.error('Error handling image upload:', error);
-      // Clean up the temporary file if upload fails
-      if (fs.existsSync(imageFile.filepath)) {
-        fs.unlinkSync(imageFile.filepath);
-      }
-      res.status(500).json({ message: 'Error handling image upload' });
+    // Write the file to the final location
+    fs.writeFileSync(finalPath, buffer);
+    
+    // Update the product record with the image URL if productId is provided
+    if (productId) {
+      const imageUrl = `/assets/images/products/${sanitizedFileName}`;
+      await db.update(products)
+        .set({ 
+          imageUrl, // This corresponds to the imageUrl field in the schema
+          image: imageUrl // Also update the image field for consistency
+        })
+        .where(eq(products.id, productId));
     }
-  });
+
+    return new Response(
+      JSON.stringify({ 
+        success: true,
+        message: 'Image uploaded successfully',
+        data: {
+          imageUrl: `/assets/images/products/${sanitizedFileName}`,
+          fileName: sanitizedFileName
+        }
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    console.error('Error handling image upload:', error);
+    return new Response(
+      JSON.stringify({ message: 'Error handling image upload' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
 }

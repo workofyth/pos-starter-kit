@@ -33,6 +33,7 @@ export const userBranches = pgTable("user_branches", {
   role: userRoleEnum("role").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Categories table
@@ -41,7 +42,7 @@ export const categories = pgTable("categories", {
   name: text("name").notNull(),
   description: text("description"),
   code: text("code").notNull().unique(), // E.g., FB for Freebase, SL for SaltNic, etc.
-  parentId: text("parent_id").references(() => categories.id, { onDelete: "set null" }),
+  parentId: text("parent_id").references((): any => categories.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -224,3 +225,27 @@ export const purchaseOrderDetails = pgTable("purchase_order_details", {
   receivedQuantity: integer("received_quantity").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Draft orders table (for saving partial orders to continue later)
+export const draftOrders = pgTable("draft_orders", {
+  id: text("id").primaryKey().notNull(),
+  userId: text("user_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  branchId: text("branch_id")
+    .notNull()
+    .references(() => branches.id, { onDelete: "cascade" }),
+  cashierId: text("cashier_id")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  memberId: text("member_id").references(() => members.id, { onDelete: "set null" }),
+  cartData: jsonb("cart_data").notNull(), // Stores the cart items as JSON
+  paymentMethod: paymentMethodEnum("payment_method").default("cash"),
+  discountRate: decimal("discount_rate", { precision: 5, scale: 2 }).default("0.00"),
+  notes: text("notes"),
+  total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export { user };

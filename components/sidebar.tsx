@@ -12,11 +12,16 @@ import {
   Settings,
   CreditCard,
   Building,
-  User
+  User,
+  Check // Add the missing Check icon import
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/lib/auth-client";
+import { UserRole, getMenuAccessRules } from "@/lib/role-based-access";
+import { useEffect, useState } from "react";
 
-const sidebarItems = [
+// Define the sidebar items
+const allSidebarItems = [
   {
     title: "Dashboard",
     href: "/dashboard",
@@ -25,6 +30,11 @@ const sidebarItems = [
   {
     title: "POS",
     href: "/pos",
+    icon: ShoppingCart,
+  },
+  {
+    title: "Draft Orders",
+    href: "/draft-orders",
     icon: ShoppingCart,
   },
   {
@@ -46,6 +56,11 @@ const sidebarItems = [
     title: "Members",
     href: "/members",
     icon: Users,
+  },
+  {
+    title: "Approvals",
+    href: "/approvals",
+    icon: Check,
   },
   {
     title: "Reporting",
@@ -76,6 +91,56 @@ const sidebarItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
+  const [userRole, setUserRole] = useState<UserRole>('guest');
+  const [filteredItems, setFilteredItems] = useState<typeof allSidebarItems>(allSidebarItems);
+
+  // Get user role from userBranches table
+  useEffect(() => {
+    const fetchUserRole = async () => {
+      if (session?.user?.id) {
+        try {
+          // Fetch user branch assignment to get role
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              setUserRole(result.data[0].role || 'staff');
+            } else {
+              setUserRole('guest');
+            }
+          } else {
+            setUserRole('guest');
+          }
+        } catch (error) {
+          console.error('Error fetching user role:', error);
+          setUserRole('guest');
+        }
+      } else {
+        setUserRole('guest');
+      }
+    };
+    
+    fetchUserRole();
+  }, [session]);
+
+  // Filter sidebar items based on user role according to menu_role_access.md
+  useEffect(() => {
+    const accessRules = getMenuAccessRules(userRole);
+    
+    // Filter items based on role access rules
+    if (accessRules.hasFullAccess) {
+      // Admin/Manager has access to all items
+      setFilteredItems(allSidebarItems);
+    } else {
+      // Filter items based on allowed main items (in this case, sidebar items)
+      const allowedTitles = accessRules.allowedMainItems;
+      const filtered = allSidebarItems.filter(item => 
+        allowedTitles.includes(item.title)
+      );
+      setFilteredItems(filtered);
+    }
+  }, [userRole]);
 
   return (
     <aside className="hidden md:block w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-full">
@@ -84,7 +149,7 @@ export function Sidebar() {
       </div>
       <nav className="mt-6">
         <ul className="space-y-1 px-2">
-          {sidebarItems.map((item) => {
+          {filteredItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
 
