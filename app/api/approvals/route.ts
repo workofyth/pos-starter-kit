@@ -6,10 +6,14 @@ import {
   userBranches,
   branches,
   products,
-  user
+  user,
+  notifications
 } from '@/db/schema/pos';
-import { eq, and, desc, sql, isNull } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull, or } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
+import { broadcastToBranch, broadcastToAll } from '@/lib/notification-sse';
+import { sendNotificationsToBranchRoles, sendNotificationToMainBranch } from '@/lib/notification-helpers';
 
 // GET - Fetch pending approval requests for a user's branch
 export async function GET(request: NextRequest) {
@@ -109,15 +113,38 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .offset(offset) as typeof query;
     
-    // Filter by branch if user is not admin (managers, staff, and cashiers can only see requests for their branch)
+    // Filter by branch based on user role and branch type
     if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
-      query = query.where(
-        and(
-          eq(inventoryTransactions.type, 'split'),
-          eq(inventoryTransactions.status, status),
-          eq(inventoryTransactions.branchId, userBranchId)
-        )
-      ) as typeof query;
+      // Get user's branch type to determine filtering logic
+      const [userBranchInfo] = await db
+        .select({ type: branches.type, isMainAdmin: userBranches.isMainAdmin })
+        .from(userBranches)
+        .leftJoin(branches, eq(userBranches.branchId, branches.id))
+        .where(eq(userBranches.userId, userId))
+        .limit(1);
+      
+      const userBranchType = userBranchInfo?.type || 'sub';
+      const isMainAdmin = userBranchInfo?.isMainAdmin || false;
+      
+      // For Main Branch Staff/Admin: Show all split requests
+      if (userBranchType === 'main' || isMainAdmin) {
+        // Main branch users see all split requests across all branches
+        // No additional filtering needed - they see everything
+      } 
+      // For Sub Branch Staff: Show only requests for their branch (both incoming and outgoing)
+      else {
+        // Sub branch users see requests where their branch is either source or target
+        query = query.where(
+          and(
+            eq(inventoryTransactions.type, 'split'),
+            eq(inventoryTransactions.status, status),
+            or(
+              eq(inventoryTransactions.branchId, userBranchId), // Their branch is source
+              eq(inventoryTransactions.referenceId, userBranchId) // Their branch is target
+            )
+          )
+        ) as typeof query;
+      }
     }
     
     const approvalRequests = await query;
@@ -131,15 +158,38 @@ export async function GET(request: NextRequest) {
         eq(inventoryTransactions.status, status)
       ));
     
-    // Filter by branch if user is not admin
+    // Filter by branch based on user role and branch type
     if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
-      countQuery = countQuery.where(
-        and(
-          eq(inventoryTransactions.type, 'split'),
-          eq(inventoryTransactions.status, status),
-          eq(inventoryTransactions.branchId, userBranchId)
-        )
-      ) as typeof countQuery;
+      // Get user's branch type to determine filtering logic
+      const [userBranchInfo] = await db
+        .select({ type: branches.type, isMainAdmin: userBranches.isMainAdmin })
+        .from(userBranches)
+        .leftJoin(branches, eq(userBranches.branchId, branches.id))
+        .where(eq(userBranches.userId, userId))
+        .limit(1);
+      
+      const userBranchType = userBranchInfo?.type || 'sub';
+      const isMainAdmin = userBranchInfo?.isMainAdmin || false;
+      
+      // For Main Branch Staff/Admin: Show all split requests
+      if (userBranchType === 'main' || isMainAdmin) {
+        // Main branch users see all split requests across all branches
+        // No additional filtering needed - they see everything
+      } 
+      // For Sub Branch Staff: Show only requests for their branch (both incoming and outgoing)
+      else {
+        // Sub branch users see requests where their branch is either source or target
+        countQuery = countQuery.where(
+          and(
+            eq(inventoryTransactions.type, 'split'),
+            eq(inventoryTransactions.status, status),
+            or(
+              eq(inventoryTransactions.branchId, userBranchId), // Their branch is source
+              eq(inventoryTransactions.referenceId, userBranchId) // Their branch is target
+            )
+          )
+        ) as typeof countQuery;
+      }
     }
     
     const totalCountResult = await countQuery;
@@ -245,13 +295,49 @@ export async function PUT(request: NextRequest) {
       );
     }
     
-    // Get the approval request
-    const [approvalRequest] = await db
-      .select()
+    // Get the approval request with additional details
+    const result = await db
+      .select({
+        id: inventoryTransactions.id,
+        productId: inventoryTransactions.productId,
+        branchId: inventoryTransactions.branchId,
+        referenceId: inventoryTransactions.referenceId,
+        quantity: inventoryTransactions.quantity,
+        type: inventoryTransactions.type,
+        notes: inventoryTransactions.notes,
+        status: inventoryTransactions.status,
+        createdAt: inventoryTransactions.createdAt,
+        updatedAt: inventoryTransactions.updatedAt,
+        createdBy: inventoryTransactions.createdBy,
+        approvedBy: inventoryTransactions.approvedBy,
+        productName: products.name,
+        sourceBranchName: branches.name,
+      })
       .from(inventoryTransactions)
+      .leftJoin(products, eq(inventoryTransactions.productId, products.id))
+      .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id))
       .where(eq(inventoryTransactions.id, id));
     
-    if (!approvalRequest) {
+    const approvalReq = result[0] as any; // Cast to any to allow dynamic properties
+    
+    // If we need target branch information, get it separately
+    if (approvalReq && approvalReq.referenceId) {
+      const targetBranchResult = await db
+        .select({
+          name: branches.name,
+          type: branches.type
+        })
+        .from(branches)
+        .where(eq(branches.id, approvalReq.referenceId))
+        .limit(1);
+      
+      if (targetBranchResult.length > 0) {
+        approvalReq.targetBranchName = targetBranchResult[0].name;
+        approvalReq.targetBranchType = targetBranchResult[0].type;
+      }
+    }
+    
+    if (!approvalReq) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -265,7 +351,7 @@ export async function PUT(request: NextRequest) {
     }
     
     // Check if user has permission to approve this request (admins can approve all, managers only their branch)
-    if (userRole === 'manager' && userBranchId !== approvalRequest.branchId) {
+    if (userRole === 'manager' && userBranchId !== approvalReq.branchId) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -279,14 +365,14 @@ export async function PUT(request: NextRequest) {
     }
     
     // Update the approval request status
-    const newStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : approvalRequest.status;
+    const newStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : approvalReq.status;
     
     const [updatedRequest] = await db
       .update(inventoryTransactions)
       .set({ 
         status: newStatus,
         approvedBy: userId,
-        notes: notes || approvalRequest.notes,
+        notes: notes || approvalReq.notes,
         updatedAt: new Date()
       })
       .where(eq(inventoryTransactions.id, id))
@@ -299,23 +385,23 @@ export async function PUT(request: NextRequest) {
         .select()
         .from(inventory)
         .where(and(
-          eq(inventory.productId, approvalRequest.productId),
-          eq(inventory.branchId, approvalRequest.branchId) // Source branch
+          eq(inventory.productId, approvalReq.productId),
+          eq(inventory.branchId, approvalReq.branchId) // Source branch
         ));
       
       if (!sourceInventory) {
         // Create inventory record if it doesn't exist
         await db.insert(inventory).values({
           id: `inv_${uuidv4()}`,
-          productId: approvalRequest.productId,
-          branchId: approvalRequest.branchId,
+          productId: approvalReq.productId,
+          branchId: approvalReq.branchId,
           quantity: 0,
           minStock: 5,
           lastUpdated: new Date(),
           createdAt: new Date(),
           updatedAt: new Date()
         });
-      } else if (sourceInventory.quantity < approvalRequest.quantity) {
+      } else if (sourceInventory.quantity < approvalReq.quantity) {
         // Not enough stock in source branch
         return new Response(
           JSON.stringify({ 
@@ -331,21 +417,21 @@ export async function PUT(request: NextRequest) {
         // Reduce stock in source branch
         await db.update(inventory)
           .set({ 
-            quantity: sourceInventory.quantity - approvalRequest.quantity,
+            quantity: sourceInventory.quantity - approvalReq.quantity,
             lastUpdated: new Date(),
             updatedAt: new Date()
           })
           .where(and(
-            eq(inventory.productId, approvalRequest.productId),
-            eq(inventory.branchId, approvalRequest.branchId)
+            eq(inventory.productId, approvalReq.productId),
+            eq(inventory.branchId, approvalReq.branchId)
           ));
       }
       
       // Get current inventory in target branch
       const conditions = [
-        eq(inventory.productId, approvalRequest.productId),
-        approvalRequest.referenceId
-          ? eq(inventory.branchId, approvalRequest.referenceId)
+        eq(inventory.productId, approvalReq.productId),
+        approvalReq.referenceId
+          ? eq(inventory.branchId, approvalReq.referenceId)
           : undefined,
       ].filter(Boolean); // remove undefined entries
 
@@ -358,9 +444,9 @@ export async function PUT(request: NextRequest) {
         // Create inventory record if it doesn't exist
         await db.insert(inventory).values({
           id: `inv_${uuidv4()}`,
-          productId: approvalRequest.productId,
-          branchId: approvalRequest.referenceId!, // assert non-null
-          quantity: approvalRequest.quantity,
+          productId: approvalReq.productId,
+          branchId: approvalReq.referenceId!, // assert non-null
+          quantity: approvalReq.quantity,
           minStock: 5,
           lastUpdated: new Date(),
           createdAt: new Date(),
@@ -370,16 +456,103 @@ export async function PUT(request: NextRequest) {
         // Increase stock in target branch
         await db.update(inventory)
           .set({ 
-            quantity: targetInventory.quantity + approvalRequest.quantity,
+            quantity: targetInventory.quantity + approvalReq.quantity,
             lastUpdated: new Date(),
             updatedAt: new Date()
           })
           .where(and(
-            eq(inventory.productId, approvalRequest.productId),
-            approvalRequest.referenceId
-              ? eq(inventory.branchId, approvalRequest.referenceId)
+            eq(inventory.productId, approvalReq.productId),
+            approvalReq.referenceId
+              ? eq(inventory.branchId, approvalReq.referenceId)
               : isNull(inventory.branchId)
           ));
+      }
+      
+      // Create notifications based on the split scenario
+      try {
+        // Use the branch information we already fetched
+        const productName = approvalReq.productName || 'Unknown Product';
+        const sourceBranchName = approvalReq.sourceBranchName || 'Unknown Branch';
+        const sourceBranchType = approvalReq.sourceBranchType || 'sub';
+        const targetBranchName = approvalReq.targetBranchName || 'Unknown Branch';
+        const targetBranchType = approvalReq.targetBranchType || 'sub';
+        
+        // Implementation of the requested notification logic:
+        // 1. If split is approved by a branch, send notification to Admin and Staff Main Branch
+        // 2. If split is requested from Staff/Admin Main Branch to sub-branch, send notification to Admin, Staff, and Manager of the sub-branch
+        
+        // Scenario 1: Split is approved (meaning this is being executed) and goes to main branch
+        // Send notification to Admin and Staff Main Branch
+        if (targetBranchType === 'main') {
+          await sendNotificationToMainBranch({
+            title: 'Stock Split to Main Branch',
+            message: `Main branch received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
+            type: 'stock_split',
+            data: {
+              productId: approvalReq.productId,
+              sourceBranchId: approvalReq.branchId,
+              quantity: approvalReq.quantity,
+              approvalTransactionId: approvalReq.id,
+              productName,
+              sourceBranchName,
+              targetBranchName
+            }
+          });
+        } 
+        // Scenario 2: Split is from Main Branch to Sub Branch
+        // Send notification to Admin, Staff, and Manager of the sub-branch
+        else if (sourceBranchType === 'main' && targetBranchType === 'sub') {
+          await sendNotificationsToBranchRoles(
+            approvalReq.referenceId!, // Target sub branch
+            ['admin', 'manager', 'staff'],
+            {
+              title: 'Stock Split Received',
+              message: `Received ${approvalReq.quantity} units of ${productName} from main branch ${sourceBranchName}`,
+              type: 'stock_split',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName
+              }
+            }
+          );
+        } 
+        // Default case: Regular branch-to-branch split
+        else {
+          // Create notification for the target branch (the receiving end)
+          const [targetNotification] = await db
+            .insert(notifications)
+            .values({
+              id: `notif_${nanoid(10)}`,
+              userId: null, // No specific user, goes to branch
+              branchId: approvalReq.referenceId!, // Target branch
+              title: 'Stock Split Completed',
+              message: `Received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
+              type: 'stock_split',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            })
+            .returning();
+          
+          // Broadcast the notification to the target branch (the receiving end)
+          broadcastToBranch(approvalReq.referenceId!, targetNotification);
+        }
+      } catch (notificationError) {
+        console.error('Error creating notification:', notificationError);
       }
     }
     

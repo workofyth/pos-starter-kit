@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum, bigint } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 // Define enums for the POS application
@@ -248,6 +248,20 @@ export const draftOrders = pgTable("draft_orders", {
   discountRate: decimal("discount_rate", { precision: 5, scale: 2 }).default("0.00"),
   notes: text("notes"),
   total: decimal("total", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Notifications table
+export const notifications = pgTable("notifications", {
+  id: text("id").primaryKey().notNull(),
+  userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // Optional: link to specific user
+  branchId: text("branch_id").references(() => branches.id, { onDelete: "cascade" }).notNull(), // Target branch for the notification
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  type: text("type").notNull(), // e.g., 'stock_split', 'inventory_update', 'approval_request', etc.
+  data: jsonb("data"), // Additional data related to the notification
+  isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

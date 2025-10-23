@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { user } from '@/db/schema/auth';
-import { userBranches } from '@/db/schema/pos';
-import { eq, and, ilike, desc, asc, count, isNull } from 'drizzle-orm';
+import { branches, userBranches } from '@/db/schema/pos';
+import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { auth } from '@/lib/auth';
 
@@ -18,12 +18,13 @@ export async function GET(request: NextRequest) {
     // Search parameters
     const search = searchParams.get('search') || '';
     const branchId = searchParams.get('branchId') || '';
+    const branchType = searchParams.get('branchType') || ''; // Add branch type filter
     const role = searchParams.get('role') || '';
     const isActive = searchParams.get('isActive');
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
-    // Build query to join user and userBranches
+    // Build query to join user, userBranches, and branches
     let query = db
       .select({
         id: user.id,
@@ -36,10 +37,23 @@ export async function GET(request: NextRequest) {
         branchId: userBranches.branchId,
         role: userBranches.role,
         isActive: userBranches.isActive,
-        userBranchCreatedAt: userBranches.createdAt
+        userBranchCreatedAt: userBranches.createdAt,
+        isMainAdmin: userBranches.isMainAdmin,
+        // Include branch information
+        branch: {
+          id: branches.id,
+          name: branches.name,
+          address: branches.address,
+          phone: branches.phone,
+          email: branches.email,
+          type: branches.type,
+          createdAt: branches.createdAt,
+          updatedAt: branches.updatedAt,
+        }
       })
       .from(user)
       .leftJoin(userBranches, eq(user.id, userBranches.userId))
+      .leftJoin(branches, eq(userBranches.branchId, branches.id))
       .limit(limit)
       .offset(offset);
     
@@ -56,6 +70,10 @@ export async function GET(request: NextRequest) {
     
     if (role === "admin" || role === "manager" || role === "cashier" || role === "staff") {
       whereConditions.push(eq(userBranches.role, role)) ;
+    }
+    
+    if (branchType === "main" || branchType === "sub") {
+      whereConditions.push(eq(branches.type, branchType));
     }
     
     if (isActive !== null && isActive !== undefined) {
@@ -90,10 +108,11 @@ export async function GET(request: NextRequest) {
     const employeesList = await query;
     
     // Get total count for pagination
-    let countQuery = db
+    let countQuery: any = db
       .select({ count: count() })
       .from(user)
-      .leftJoin(userBranches, eq(user.id, userBranches.userId)) ;
+      .leftJoin(userBranches, eq(user.id, userBranches.userId))
+      .leftJoin(branches, eq(userBranches.branchId, branches.id));
     
     let countWhereConditions = [];
     
@@ -104,9 +123,13 @@ export async function GET(request: NextRequest) {
     if (branchId) {
       countWhereConditions.push(eq(userBranches.branchId, branchId));
     }
-     
+    
     if (role === "admin" || role === "manager" || role === "cashier" || role === "staff") {
-      whereConditions.push(eq(userBranches.role, role));
+      countWhereConditions.push(eq(userBranches.role, role));
+    }
+
+    if (branchType === "main" || branchType === "sub") {
+      countWhereConditions.push(eq(branches.type, branchType));
     }
 
     if (isActive !== null && isActive !== undefined) {
@@ -114,7 +137,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (countWhereConditions.length > 0) {
-       countQuery.where(and(...countWhereConditions)) ;
+      countQuery = countQuery.where(and(...countWhereConditions));
     }
     
     const totalCountResult = await countQuery;
@@ -135,7 +158,9 @@ export async function GET(request: NextRequest) {
           updatedAt: emp.updatedAt,
           branchId: emp.branchId,
           role: emp.role,
-          isActive: emp.isActive
+          isActive: emp.isActive,
+          isMainAdmin: emp.isMainAdmin,
+          branch: emp.branch
         })),
         pagination: {
           page,

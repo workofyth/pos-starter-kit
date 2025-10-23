@@ -28,9 +28,21 @@ export async function GET(request: NextRequest) {
         isMainAdmin: userBranches.isMainAdmin,
         isActive: userBranches.isActive,
         createdAt: userBranches.createdAt,
-        updatedAt: userBranches.updatedAt
+        updatedAt: userBranches.updatedAt,
+        // Include branch information
+        branch: {
+          id: branches.id,
+          name: branches.name,
+          address: branches.address,
+          phone: branches.phone,
+          email: branches.email,
+          type: branches.type,
+          createdAt: branches.createdAt,
+          updatedAt: branches.updatedAt,
+        }
       })
       .from(userBranches)
+      .leftJoin(branches, eq(userBranches.branchId, branches.id))
       .limit(limit)
       .offset(offset);
     
@@ -45,8 +57,8 @@ export async function GET(request: NextRequest) {
       whereConditions.push(eq(userBranches.branchId, branchId));
     }
     
-    if (role) {
-      whereConditions.push(eq(userBranches.role, role));
+    if (role === "admin" || role === "manager" || role === "cashier" || role === "staff") {
+      whereConditions.push(eq(userBranches.role, role)) ;
     }
     
     if (isActive !== null && isActive !== undefined) {
@@ -81,7 +93,7 @@ export async function GET(request: NextRequest) {
       countWhereConditions.push(eq(userBranches.branchId, branchId));
     }
     
-    if (role) {
+    if (role === "admin" || role === "manager" || role === "cashier" || role === "staff") {
       countWhereConditions.push(eq(userBranches.role, role)) ;
     }
     

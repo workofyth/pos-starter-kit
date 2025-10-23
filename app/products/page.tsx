@@ -23,6 +23,7 @@ import {
   Download
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
+import { UserRole } from "@/lib/role-based-access"; // Import UserRole type
 
 interface Product {
   branchId?: string;
@@ -91,49 +92,75 @@ interface InventoryItem {
 
 export default function ProductsPage() {
   const { data: session } = useSession(); // Add session hook
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [userBranchType, setUserBranchType] = useState<string | null>(null);
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
-  const [userBranchId, setUserBranchId] = useState<string | null>(null); // Store user's branch ID
   
   // Combined loading state
   const loading = categoriesLoading || productsLoading;
   
-  // Get user's branch ID
+  // Get user's role and branch information
   useEffect(() => {
-    const fetchUserBranch = async () => {
+    const fetchUserBranchInfo = async () => {
       if (session?.user?.id) {
         try {
           const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
-              setUserBranchId(result.data[0].branchId);
+              setUserRole(result.data[0].role || 'staff');
+              setUserBranchId(result.data[0].branchId || null);
+              setIsMainAdmin(result.data[0].isMainAdmin || false);
+              setUserBranchType(result.data[0].branch?.type || null);
             } else {
-              // Fallback to default branch if not found
-              setUserBranchId('brn_XNUWRgFLof');
+              setUserRole('staff');
+              setUserBranchId(null);
+              setIsMainAdmin(false);
+              setUserBranchType(null);
             }
           } else {
-            // Fallback to default branch on error
-            setUserBranchId('brn_XNUWRgFLof');
+            setUserRole('staff');
+            setUserBranchId(null);
+            setIsMainAdmin(false);
+            setUserBranchType(null);
           }
         } catch (error) {
-          console.error('Error fetching user branch:', error);
-          // Fallback to default branch on error
-          setUserBranchId('brn_XNUWRgFLof');
+          console.error('Error fetching user branch info:', error);
+          setUserRole('staff');
+          setUserBranchId(null);
+          setIsMainAdmin(false);
+          setUserBranchType(null);
         }
+      } else {
+        setUserRole(null);
+        setUserBranchId(null);
+        setIsMainAdmin(false);
+        setUserBranchType(null);
       }
     };
-    
-    fetchUserBranch();
+
+    fetchUserBranchInfo();
   }, [session]);
   
   // Load products from API on component mount
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await fetch('/api/products?page=1&limit=100'); // Adjust limit as needed
+        // For sub branch users (not main admin and not on main branch), only show products from their branch
+        let url = '/api/products?page=1&limit=100'; // Adjust limit as needed
+        if (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) {
+          // Add branch filter for sub branch users
+          const params = new URLSearchParams();
+          params.append('branchId', userBranchId);
+          url = `/api/products?${params}`;
+        }
+        
+        const response = await fetch(url);
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
@@ -163,8 +190,13 @@ export default function ProductsPage() {
       }
     };
     
-    fetchProducts();
-  }, []);
+    // Only fetch products if user information is ready
+    if ((userRole !== null && !isMainAdmin && userBranchType !== 'main' && userBranchId !== null) || 
+        (userRole !== null && isMainAdmin) || 
+        (userRole !== null && userBranchType === 'main')) {
+      fetchProducts();
+    }
+  }, [userRole, userBranchType, isMainAdmin, userBranchId]);
   
   // Load categories from API on component mount
   useEffect(() => {
@@ -196,42 +228,6 @@ export default function ProductsPage() {
     fetchCategories();
   }, []);
   
-  // Load products from API on component mount
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const response = await fetch('/api/products?page=1&limit=100'); // Adjust limit as needed
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success) {
-            // Transform API response to match the Product interface
-            const formattedProducts = result.data.map((apiProduct: any) => ({
-              id: apiProduct.id,
-              name: apiProduct.name,
-              sku: apiProduct.sku,
-              barcode: apiProduct.barcode,
-              category: apiProduct.categoryName || '',
-              categoryId: apiProduct.categoryId,
-              purchasePrice: parseFloat(apiProduct.purchasePrice) || 0,
-              sellingPrice: parseFloat(apiProduct.sellingPrice) || 0,
-              stock: apiProduct.stock || 0,
-              minStock: apiProduct.minStock || 5,
-              profitMargin: parseFloat(apiProduct.profitMargin) || 0,
-              image: apiProduct.image,
-              imageUrl: apiProduct.imageUrl
-            }));
-            setProducts(formattedProducts);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching products:', error);
-      } finally {
-        setProductsLoading(false);
-      }
-    };
-    
-    fetchProducts();
-  }, []);
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -562,6 +558,8 @@ export default function ProductsPage() {
         </div>
         
         <div className="flex flex-wrap gap-2">
+          {/* Only show Add Product button for main admin or main branch users */}
+          {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             setIsAddDialogOpen(open);
             if (!open) {
@@ -817,6 +815,7 @@ export default function ProductsPage() {
               <Button onClick={handleAddProduct}>Add Product</Button>
             </DialogContent>
           </Dialog>
+          )}
           
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogContent>
@@ -1008,6 +1007,8 @@ export default function ProductsPage() {
             </DialogContent>
           </Dialog>
           
+          {/* Only show Bulk Import button for main admin or main branch users */}
+          {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
           <Dialog>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -1094,6 +1095,7 @@ export default function ProductsPage() {
               </div>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -1180,35 +1182,44 @@ export default function ProductsPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => startEditProduct(product)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => {
-                          setAdjustingProduct(product);
-                          setAdjustmentData({
-                            quantity: 0,
-                            type: 'adjustment',
-                            notes: ''
-                          });
-                          setIsAdjustStockDialogOpen(true);
-                        }}
-                      >
-                        <Package className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => deleteProduct(product.id!)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      {/* Only show edit button for main admin or main branch users */}
+                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => startEditProduct(product)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {/* Only show stock adjustment button for main admin or main branch users */}
+                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => {
+                            setAdjustingProduct(product);
+                            setAdjustmentData({
+                              quantity: 0,
+                              type: 'adjustment',
+                              notes: ''
+                            });
+                            setIsAdjustStockDialogOpen(true);
+                          }}
+                        >
+                          <Package className="h-4 w-4" />
+                        </Button>
+                      )}
+                      {/* Only show delete button for main admin or main branch users */}
+                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => deleteProduct(product.id!)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>

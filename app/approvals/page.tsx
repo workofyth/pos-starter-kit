@@ -21,7 +21,9 @@ import {
   Package,
   TrendingDown,
   TrendingUp,
-  AlertTriangle
+  AlertTriangle,
+  Building,
+  Building2
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 
@@ -53,6 +55,32 @@ export default function ApprovalsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [userBranchType, setUserBranchType] = useState<string | null>(null);
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+
+  // Load user's branch information
+  useEffect(() => {
+    const fetchUserBranchInfo = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              setUserBranchId(result.data[0].branchId || null);
+              setUserBranchType(result.data[0].branch?.type || null);
+              setIsMainAdmin(result.data[0].isMainAdmin || false);
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching user branch info:", error);
+        }
+      }
+    };
+
+    fetchUserBranchInfo();
+  }, [session]);
 
   // Load approvals
   useEffect(() => {
@@ -142,6 +170,17 @@ export default function ApprovalsPage() {
         <div>
           <h1 className="text-2xl font-bold">Approval Requests</h1>
           <p className="text-gray-500">Manage inventory split requests</p>
+          {userBranchType === 'main' || isMainAdmin ? (
+            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+              <Building className="inline h-4 w-4 mr-1" />
+              Viewing all split requests across all branches
+            </p>
+          ) : userBranchType === 'sub' && userBranchId ? (
+            <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+              <Building2 className="inline h-4 w-4 mr-1" />
+              Viewing split requests for your branch only
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -173,8 +212,7 @@ export default function ApprovalsPage() {
               <TableRow>
                 <TableHead>Product</TableHead>
                 <TableHead>SKU</TableHead>
-                <TableHead>Source Branch</TableHead>
-                <TableHead>Target Branch</TableHead>
+                <TableHead>Direction</TableHead>
                 <TableHead>Quantity</TableHead>
                 <TableHead>Requested By</TableHead>
                 <TableHead>Date</TableHead>
@@ -184,7 +222,7 @@ export default function ApprovalsPage() {
             <TableBody>
               {filteredApprovals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     <div className="flex flex-col items-center justify-center">
                       <Package className="h-12 w-12 text-gray-300 mb-2" />
                       <p className="text-gray-500">No approval requests found</p>
@@ -199,8 +237,29 @@ export default function ApprovalsPage() {
                   <TableRow key={request.id}>
                     <TableCell className="font-medium">{request.productName}</TableCell>
                     <TableCell>{request.productSku}</TableCell>
-                    <TableCell>{request.sourceBranchName}</TableCell>
-                    <TableCell>{request.targetBranchName}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        {userBranchType === 'sub' && userBranchId ? (
+                          request.sourceBranchId === userBranchId ? (
+                            <>
+                              <TrendingUp className="h-4 w-4 text-blue-500" />
+                              <span className="text-xs">Outgoing</span>
+                            </>
+                          ) : request.targetBranchId === userBranchId ? (
+                            <>
+                              <TrendingDown className="h-4 w-4 text-green-500" />
+                              <span className="text-xs">Incoming</span>
+                            </>
+                          ) : (
+                            <span className="text-xs">Other</span>
+                          )
+                        ) : (
+                          <>
+                            <span className="text-xs">{request.sourceBranchName} → {request.targetBranchName}</span>
+                          </>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{request.quantity}</TableCell>
                     <TableCell>{request.createdBy}</TableCell>
                     <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
@@ -289,22 +348,27 @@ export default function ApprovalsPage() {
               
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium">Source Branch</label>
-                  <Input 
-                    value={selectedRequest.sourceBranchName} 
-                    readOnly 
-                  />
+                  <label className="text-sm font-medium">Direction</label>
+                  <div className="p-2 border rounded-md">
+                    {userBranchType === 'sub' && userBranchId ? (
+                      selectedRequest.sourceBranchId === userBranchId ? (
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-blue-500" />
+                          <span>Outgoing to {selectedRequest.targetBranchName}</span>
+                        </div>
+                      ) : selectedRequest.targetBranchId === userBranchId ? (
+                        <div className="flex items-center gap-2">
+                          <TrendingDown className="h-4 w-4 text-green-500" />
+                          <span>Incoming from {selectedRequest.sourceBranchName}</span>
+                        </div>
+                      ) : (
+                        <span>Other branch transfer</span>
+                      )
+                    ) : (
+                      <span>{selectedRequest.sourceBranchName} → {selectedRequest.targetBranchName}</span>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Target Branch</label>
-                  <Input 
-                    value={selectedRequest.targetBranchName} 
-                    readOnly 
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">Quantity</label>
                   <Input 

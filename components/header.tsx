@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "@/lib/auth-client";
-import { MoonIcon, SunIcon, LogOut } from "lucide-react";
+import { MoonIcon, SunIcon, LogOut, Bell } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,10 +11,54 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserRole } from "@/lib/role-based-access";
+import { useEffect, useState } from "react";
+import { NotificationMenu } from "@/components/notification-menu";
 
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { data: session, isPending } = useSession();
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [branchType, setBranchType] = useState<string | null>(null);
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+
+  // Fetch user role and branch information
+  useEffect(() => {
+    const fetchUserBranchInfo = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              setUserRole(result.data[0].role || 'staff');
+              setBranchType(result.data[0].branch?.type || null);
+              setIsMainAdmin(result.data[0].isMainAdmin || false);
+            } else {
+              setUserRole('staff'); // Default role if none found
+              setBranchType(null);
+              setIsMainAdmin(false);
+            }
+          } else {
+            setUserRole('staff'); // Default role on error
+            setBranchType(null);
+            setIsMainAdmin(false);
+          }
+        } catch (error) {
+          console.error('Error fetching user branch info:', error);
+          setUserRole('staff'); // Default role on error
+          setBranchType(null);
+          setIsMainAdmin(false);
+        }
+      } else {
+        setUserRole(null);
+        setBranchType(null);
+        setIsMainAdmin(false);
+      }
+    };
+
+    fetchUserBranchInfo();
+  }, [session]);
 
   if (isPending) {
     return (
@@ -159,6 +203,23 @@ export function Header() {
           )}
         </Button>
         
+        {/* Notification Menu */}
+        <NotificationMenu />
+        
+        {/* Display the role and branch information */}
+        {userRole && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded capitalize">
+              {userRole}
+            </span>
+            {(branchType || isMainAdmin) && (
+              <span className={`text-xs px-2 py-1 rounded ${isMainAdmin ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100' : branchType === 'main' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'}`}>
+                {isMainAdmin ? 'Main Admin' : branchType === 'main' ? 'Main Branch' : 'Sub Branch'}
+              </span>
+            )}
+          </div>
+        )}
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
@@ -177,6 +238,16 @@ export function Header() {
                 {user.email && (
                   <p className="w-[200px] truncate text-sm text-muted-foreground">
                     {user.email}
+                  </p>
+                )}
+                {userRole && (
+                  <p className="text-xs text-muted-foreground capitalize">
+                    Role: {userRole}
+                  </p>
+                )}
+                {(branchType || isMainAdmin) && (
+                  <p className="text-xs text-muted-foreground">
+                    Branch: {isMainAdmin ? 'Main Admin' : branchType === 'main' ? 'Main Branch' : 'Sub Branch'}
                   </p>
                 )}
               </div>

@@ -46,11 +46,12 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check user's role - only staff can initiate split requests
+    // Check user's role and branch assignment
     const userBranchResponse = await db
       .select({
         role: userBranches.role,
-        branchId: userBranches.branchId
+        branchId: userBranches.branchId,
+        isMainAdmin: userBranches.isMainAdmin
       })
       .from(userBranches)
       .where(eq(userBranches.userId, userId));
@@ -70,33 +71,54 @@ export async function POST(request: NextRequest) {
     
     const userRole = userBranchResponse[0].role;
     const userBranchId = userBranchResponse[0].branchId;
+    const isMainAdmin = userBranchResponse[0].isMainAdmin || false;
     
-    // Only staff and cashiers can initiate split requests
-    if (userRole !== 'staff' && userRole !== 'cashier') {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Only staff and cashier users can initiate inventory split requests' 
-        }),
-        { 
-          status: 403, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-    
-    // Staff can only initiate splits from their assigned branch
-    if (userBranchId !== sourceBranchId) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Users can only initiate inventory splits from their assigned branch' 
-        }),
-        { 
-          status: 403, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+    // Main admin can initiate splits from any branch
+    if (isMainAdmin) {
+      // Main admin can split from any source branch to any target branch
+    } else {
+      // Non-main admin users have more restrictions
+      // Only staff and cashiers can initiate split requests (unless they're a manager)
+      if (userRole !== 'staff' && userRole !== 'cashier' && userRole !== 'manager') {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Only staff, cashier, and manager users can initiate inventory split requests' 
+          }),
+          { 
+            status: 403, 
+            headers: { 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      // Staff and cashier can only initiate splits from their assigned branch
+      if (userRole !== 'manager' && userBranchId !== sourceBranchId) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Users can only initiate inventory splits from their assigned branch' 
+          }),
+          { 
+            status: 403, 
+            headers: { 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+      
+      // Manager can initiate splits from their assigned branch
+      if (userRole === 'manager' && userBranchId !== sourceBranchId) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: 'Managers can only initiate inventory splits from their assigned branch' 
+          }),
+          { 
+            status: 403, 
+            headers: { 'Content-Type': 'application/json' } 
+          }
+        );
+      }
     }
     
     // Check if source inventory exists and has enough stock
@@ -152,7 +174,7 @@ export async function POST(request: NextRequest) {
       createdAt: new Date(),
       updatedAt: new Date(),
       lastUpdated: new Date()
-    }).returning();
+    } as any).returning();
     
     return new Response(
       JSON.stringify({ 
