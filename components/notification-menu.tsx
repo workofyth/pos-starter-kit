@@ -77,10 +77,17 @@ export function NotificationMenu() {
     const fetchNotifications = async () => {
       try {
         let url = '/api/notifications?limit=10';
-        if (!isMainAdmin && userBranchId) {
-          // For non-main admin users, only get notifications for their branch
+        if (!isMainAdmin && userBranchId && session?.user?.id) {
+          // For non-main admin users, get notifications for their user ID and branch
           const params = new URLSearchParams();
+          params.append('userId', session.user.id);
           params.append('branchId', userBranchId);
+          params.append('limit', '10');
+          url = `/api/notifications?${params}`;
+        } else if (session?.user?.id) {
+          // For main admin users, get notifications for their user ID
+          const params = new URLSearchParams();
+          params.append('userId', session.user.id);
           params.append('limit', '10');
           url = `/api/notifications?${params}`;
         }
@@ -103,15 +110,16 @@ export function NotificationMenu() {
     fetchNotifications();
     
     // Set up real-time connection if user is not main admin (main admin might get too many notifications)
-    if (!isMainAdmin && userBranchId) {
+    if (!isMainAdmin && userBranchId && session?.user?.id) {
       // In a real app, this would connect to an SSE endpoint
       // For now we'll use polling to simulate real-time updates
       const interval = setInterval(() => {
         // Only fetch new notifications (notifications that were created after the last fetch)
         // For this to work properly, we'd need to track the last fetch time
         // For now, we'll just refetch periodically
-        if (userBranchId) {
+        if (userBranchId && session?.user?.id) {
           const params = new URLSearchParams();
+          params.append('userId', session.user.id);
           params.append('branchId', userBranchId);
           params.append('limit', '10');
           
@@ -215,6 +223,37 @@ export function NotificationMenu() {
     }
   };
 
+  // Clear all notifications
+  const clearAllNotifications = async () => {
+    if (!window.confirm('Are you sure you want to clear all notifications? This cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      // Delete all notifications for the user
+      let deleteUrl = '/api/notifications';
+      if (session?.user?.id) {
+        deleteUrl += `?userId=${session.user.id}`;
+      } else if (userBranchId) {
+        deleteUrl += `?branchId=${userBranchId}`;
+      }
+      
+      const response = await fetch(deleteUrl, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        // Update local state
+        setNotifications([]);
+        setUnreadCount(0);
+      } else {
+        console.error('Failed to clear notifications:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error clearing all notifications:', error);
+    }
+  };
+
   // Format date to relative time
   const formatTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
@@ -249,15 +288,25 @@ export function NotificationMenu() {
       <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold">Notifications</h3>
-          {unreadCount > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={markAllAsRead}
-              className="text-xs"
-            >
-              Mark all as read
-            </Button>
+          {notifications.length > 0 && (
+            <div className="flex gap-2">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={markAllAsRead}
+                className="text-xs"
+              >
+                Mark all read
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearAllNotifications}
+                className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+              >
+                Clear all
+              </Button>
+            </div>
           )}
         </div>
         <div className="max-h-80 overflow-y-auto">

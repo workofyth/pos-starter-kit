@@ -9,7 +9,7 @@ import {
   user,
   notifications
 } from '@/db/schema/pos';
-import { eq, and, desc, sql, isNull, or } from 'drizzle-orm';
+import { eq, and, desc, sql, isNull, or, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch, broadcastToAll } from '@/lib/notification-sse';
@@ -365,13 +365,20 @@ export async function PUT(request: NextRequest) {
     }
     
     // Update the approval request status
-    const newStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : approvalReq.status;
+    let newStatus = approvalReq.status;
+    if (action === 'approve') {
+      newStatus = 'approved';
+    } else if (action === 'reject') {
+      newStatus = 'rejected';
+    } else if (action === 'resend') {
+      newStatus = 'pending'; // Reset to pending to allow resubmission
+    }
     
     const [updatedRequest] = await db
       .update(inventoryTransactions)
       .set({ 
         status: newStatus,
-        approvedBy: userId,
+        approvedBy: action === 'resend' ? null : userId, // Clear approvedBy when resending
         notes: notes || approvalReq.notes,
         updatedAt: new Date()
       })
@@ -467,47 +474,237 @@ export async function PUT(request: NextRequest) {
               : isNull(inventory.branchId)
           ));
       }
+    }
+    
+    // Create notifications based on action (approve, reject, or resend)
+    try {
+      // Use the branch information we already fetched
+      const productName = approvalReq.productName || 'Unknown Product';
+      const sourceBranchName = approvalReq.sourceBranchName || 'Unknown Branch';
+      const sourceBranchType = approvalReq.sourceBranchType || 'sub';
+      const targetBranchName = approvalReq.targetBranchName || 'Unknown Branch';
+      const targetBranchType = approvalReq.targetBranchType || 'sub';
       
-      // Create notifications based on the split scenario
-      try {
-        // Use the branch information we already fetched
-        const productName = approvalReq.productName || 'Unknown Product';
-        const sourceBranchName = approvalReq.sourceBranchName || 'Unknown Branch';
-        const sourceBranchType = approvalReq.sourceBranchType || 'sub';
-        const targetBranchName = approvalReq.targetBranchName || 'Unknown Branch';
-        const targetBranchType = approvalReq.targetBranchType || 'sub';
+      // Get the user who performed the action
+      const [approverInfo] = await db
+        .select({ name: user.name })
+        .from(user)
+        .where(eq(user.id, userId));
+      const approverName = approverInfo?.name || 'Unknown User';
+      
+      if (action === 'reject') {
+        // Send notification to main branch users (admin, staff, manager) when request is rejected
+        // Create individual notifications for each user to prevent duplicates
+        const [mainBranch] = await db
+          .select()
+          .from(branches)
+          .where(eq(branches.type, 'main'))
+          .limit(1);
+
+        if (mainBranch) {
+          // Get all users with admin, staff, and manager roles in the main branch
+          const usersToNotify = await db
+            .select({ userId: userBranches.userId })
+            .from(userBranches)
+            .where(
+              and(
+                eq(userBranches.branchId, mainBranch.id),
+                inArray(userBranches.role, ['admin', 'staff', 'manager'])
+              )
+            );
+
+          // Create individual notifications for each user 
+          for (const user of usersToNotify) {
+            await db
+              .insert(notifications)
+              .values({
+                id: `notif_${nanoid(10)}`,
+                userId: user.userId, // Specific user notification
+                branchId: mainBranch.id,
+                title: 'Stock Split Request Rejected',
+                message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been rejected by ${approverName}. Reason: ${notes || approvalReq.notes || 'No reason provided'}`,
+                type: 'stock_split_rejected',
+                data: {
+                  productId: approvalReq.productId,
+                  sourceBranchId: approvalReq.branchId,
+                  targetBranchId: approvalReq.referenceId,
+                  quantity: approvalReq.quantity,
+                  approvalTransactionId: approvalReq.id,
+                  productName,
+                  sourceBranchName,
+                  targetBranchName,
+                  approverName,
+                  reason: notes || approvalReq.notes || 'No reason provided',
+                  createdAt: approvalReq.createdAt
+                },
+                isRead: false,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              })
+              .returning();
+          }
+          
+          // Also broadcast to the main branch so the notification appears in real-time
+          const notificationForBroadcast = {
+            id: `notif_${nanoid(10)}`,
+            userId: null, // Not targeting specific user
+            branchId: mainBranch.id,
+            title: 'Stock Split Request Rejected',
+            message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been rejected by ${approverName}. Reason: ${notes || approvalReq.notes || 'No reason provided'}`,
+            type: 'stock_split_rejected',
+            data: {
+              productId: approvalReq.productId,
+              sourceBranchId: approvalReq.branchId,
+              targetBranchId: approvalReq.referenceId,
+              quantity: approvalReq.quantity,
+              approvalTransactionId: approvalReq.id,
+              productName,
+              sourceBranchName,
+              targetBranchName,
+              approverName,
+              reason: notes || approvalReq.notes || 'No reason provided',
+              createdAt: approvalReq.createdAt
+            },
+            isRead: false,
+            createdAt: new Date(),
+            updatedAt: new Date()
+          };
+          
+          broadcastToBranch(mainBranch.id, notificationForBroadcast);
+        }
+      } else if (action === 'resend') {
+        // Send notification to target branch (sub-branch) users when request is resent (Rule 3)
+        const targetBranchId = approvalReq.referenceId!;
         
+        // Get all users in the target sub-branch (admin, staff, manager) to send individual notifications
+        const usersToNotify = await db
+          .select({ userId: userBranches.userId })
+          .from(userBranches)
+          .where(
+            and(
+              eq(userBranches.branchId, targetBranchId),
+              inArray(userBranches.role, ['admin', 'staff', 'manager'])
+            )
+          );
+
+        // Create individual notifications for each user to ensure they only get 1 notification (Rule 3)
+        for (const user of usersToNotify) {
+          await db
+            .insert(notifications)
+            .values({
+              id: `notif_${nanoid(10)}`,
+              userId: user.userId, // Specific user notification
+              branchId: targetBranchId,
+              title: 'Stock Split Request Resent',
+              message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been resent by main branch and requires your attention.`,
+              type: 'stock_split_resent',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                targetBranchId: approvalReq.referenceId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName,
+                resentBy: approverName,
+                createdAt: approvalReq.createdAt
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            })
+            .returning();
+        }
+        
+        // Broadcast to target branch for real-time updates
+        const notificationForBroadcast = {
+          id: `notif_${nanoid(10)}`,
+          userId: null,
+          branchId: targetBranchId,
+          title: 'Stock Split Request Resent',
+          message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been resent by main branch and requires your attention.`,
+          type: 'stock_split_resent',
+          data: {
+            productId: approvalReq.productId,
+            sourceBranchId: approvalReq.branchId,
+            targetBranchId: approvalReq.referenceId,
+            quantity: approvalReq.quantity,
+            approvalTransactionId: approvalReq.id,
+            productName,
+            sourceBranchName,
+            targetBranchName,
+            resentBy: approverName,
+            createdAt: approvalReq.createdAt
+          },
+          isRead: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        
+        broadcastToBranch(targetBranchId, notificationForBroadcast);
+      } else if (action === 'approve') {
+        // Original notification logic for approved requests
         // Implementation of the requested notification logic:
         // 1. If split is approved by a branch, send notification to Admin and Staff Main Branch
         // 2. If split is requested from Staff/Admin Main Branch to sub-branch, send notification to Admin, Staff, and Manager of the sub-branch
         
         // Scenario 1: Split is approved (meaning this is being executed) and goes to main branch
-        // Send notification to Admin and Staff Main Branch
+        // Send notification to Admin, Staff, and Manager Main Branch (Rule 2)
         if (targetBranchType === 'main') {
-          await sendNotificationToMainBranch({
-            title: 'Stock Split to Main Branch',
-            message: `Main branch received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
-            type: 'stock_split',
-            data: {
-              productId: approvalReq.productId,
-              sourceBranchId: approvalReq.branchId,
-              quantity: approvalReq.quantity,
-              approvalTransactionId: approvalReq.id,
-              productName,
-              sourceBranchName,
-              targetBranchName
+          // Get the main branch
+          const [mainBranch] = await db
+            .select()
+            .from(branches)
+            .where(eq(branches.type, 'main'))
+            .limit(1);
+
+          if (mainBranch) {
+            // Get all users with admin, staff, and manager roles in the main branch
+            const usersToNotify = await db
+              .select({ userId: userBranches.userId })
+              .from(userBranches)
+              .where(
+                and(
+                  eq(userBranches.branchId, mainBranch.id),
+                  inArray(userBranches.role, ['admin', 'staff', 'manager'])
+                )
+              );
+
+            // Create individual notifications for each main branch user to ensure they only get 1 notification (Rule 2)
+            for (const user of usersToNotify) {
+              await db
+                .insert(notifications)
+                .values({
+                  id: `notif_${nanoid(10)}`,
+                  userId: user.userId, // Specific user notification
+                  branchId: mainBranch.id,
+                  title: 'Stock Split to Main Branch',
+                  message: `Main branch received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
+                  type: 'stock_split',
+                  data: {
+                    productId: approvalReq.productId,
+                    sourceBranchId: approvalReq.branchId,
+                    quantity: approvalReq.quantity,
+                    approvalTransactionId: approvalReq.id,
+                    productName,
+                    sourceBranchName,
+                    targetBranchName
+                  },
+                  isRead: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                })
+                .returning();
             }
-          });
-        } 
-        // Scenario 2: Split is from Main Branch to Sub Branch
-        // Send notification to Admin, Staff, and Manager of the sub-branch
-        else if (sourceBranchType === 'main' && targetBranchType === 'sub') {
-          await sendNotificationsToBranchRoles(
-            approvalReq.referenceId!, // Target sub branch
-            ['admin', 'manager', 'staff'],
-            {
-              title: 'Stock Split Received',
-              message: `Received ${approvalReq.quantity} units of ${productName} from main branch ${sourceBranchName}`,
+            
+            // Broadcast to main branch for real-time updates
+            const notificationForBroadcast = {
+              id: `notif_${nanoid(10)}`,
+              userId: null,
+              branchId: mainBranch.id,
+              title: 'Stock Split to Main Branch',
+              message: `Main branch received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
               type: 'stock_split',
               data: {
                 productId: approvalReq.productId,
@@ -517,9 +714,252 @@ export async function PUT(request: NextRequest) {
                 productName,
                 sourceBranchName,
                 targetBranchName
-              }
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            };
+            
+            broadcastToBranch(mainBranch.id, notificationForBroadcast);
+          }
+        } 
+        // Scenario 2: Split is from Main Branch to Sub Branch
+        // Send notification to Admin, Staff, and Manager of the sub-branch
+        else if (sourceBranchType === 'main' && targetBranchType === 'sub') {
+          // Get all users in the target sub-branch (admin, staff, manager) to send individual notifications
+          const targetUsers = await db
+            .select({ userId: userBranches.userId })
+            .from(userBranches)
+            .where(
+              and(
+                eq(userBranches.branchId, approvalReq.referenceId!),
+                inArray(userBranches.role, ['admin', 'staff', 'manager'])
+              )
+            );
+
+          // Create individual notifications for each target user
+          for (const user of targetUsers) {
+            await db
+              .insert(notifications)
+              .values({
+                id: `notif_${nanoid(10)}`,
+                userId: user.userId, // Specific user notification
+                branchId: approvalReq.referenceId!,
+                title: 'Stock Split Received',
+                message: `Received ${approvalReq.quantity} units of ${productName} from main branch ${sourceBranchName}`,
+                type: 'stock_split',
+                data: {
+                  productId: approvalReq.productId,
+                  sourceBranchId: approvalReq.branchId,
+                  quantity: approvalReq.quantity,
+                  approvalTransactionId: approvalReq.id,
+                  productName,
+                  sourceBranchName,
+                  targetBranchName
+                },
+                isRead: false,
+                createdAt: new Date(),
+                updatedAt: new Date()
+              })
+              .returning();
+          }
+          
+          // Also notify main branch that the split to sub-branch was completed (Rule 2)
+          const [mainBranch] = await db
+            .select()
+            .from(branches)
+            .where(eq(branches.type, 'main'))
+            .limit(1);
+
+          if (mainBranch) {
+            // Get all users with admin, staff, and manager roles in the main branch
+            const mainUsers = await db
+              .select({ userId: userBranches.userId })
+              .from(userBranches)
+              .where(
+                and(
+                  eq(userBranches.branchId, mainBranch.id),
+                  inArray(userBranches.role, ['admin', 'staff', 'manager'])
+                )
+              );
+
+            // Create individual notifications for each main branch user to ensure they only get 1 notification (Rule 2)
+            for (const user of mainUsers) {
+              await db
+                .insert(notifications)
+                .values({
+                  id: `notif_${nanoid(10)}`,
+                  userId: user.userId, // Specific user notification
+                  branchId: mainBranch.id,
+                  title: 'Stock Split Completed',
+                  message: `Stock split of ${approvalReq.quantity} units of ${productName} from main branch to ${targetBranchName} has been completed`,
+                  type: 'stock_split_completed',
+                  data: {
+                    productId: approvalReq.productId,
+                    sourceBranchId: approvalReq.branchId,
+                    targetBranchId: approvalReq.referenceId,
+                    quantity: approvalReq.quantity,
+                    approvalTransactionId: approvalReq.id,
+                    productName,
+                    sourceBranchName,
+                    targetBranchName
+                  },
+                  isRead: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                })
+                .returning();
             }
-          );
+            
+            // Broadcast to main branch for real-time updates
+            const notificationForBroadcast = {
+              id: `notif_${nanoid(10)}`,
+              userId: null,
+              branchId: mainBranch.id,
+              title: 'Stock Split Completed',
+              message: `Stock split of ${approvalReq.quantity} units of ${productName} from main branch to ${targetBranchName} has been completed`,
+              type: 'stock_split_completed',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                targetBranchId: approvalReq.referenceId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            };
+            
+            broadcastToBranch(mainBranch.id, notificationForBroadcast);
+          }
+        }
+        // Default case: Regular branch-to-branch split (not main-to-sub)
+        else {
+          // Create notification for the target branch (the receiving end)
+          const [targetNotification] = await db
+            .insert(notifications)
+            .values({
+              id: `notif_${nanoid(10)}`,
+              userId: null, // No specific user, goes to branch
+              branchId: approvalReq.referenceId!, // Target branch
+              title: 'Stock Split Completed',
+              message: `Received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
+              type: 'stock_split',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            })
+            .returning();
+          
+          // Broadcast the notification to the target branch (the receiving end)
+          broadcastToBranch(approvalReq.referenceId!, targetNotification);
+        }
+        
+        // For Rule 2: If sub-branch admin approves/rejects any request, also notify main branch
+        // Check if the approver is from a sub-branch
+        const [approverBranchInfo] = await db
+          .select({ type: branches.type })
+          .from(branches)
+          .where(eq(branches.id, userBranchId));
+        const approverBranchType = approverBranchInfo?.type || 'sub';
+        
+        // If approver is from a sub-branch, notify main branch about the approval (Rule 2)
+        if (approverBranchType === 'sub') {
+          const [mainBranch] = await db
+            .select()
+            .from(branches)
+            .where(eq(branches.type, 'main'))
+            .limit(1);
+
+          if (mainBranch) {
+            // Get all users with admin, staff, and manager roles in the main branch
+            const mainUsers = await db
+              .select({ userId: userBranches.userId })
+              .from(userBranches)
+              .where(
+                and(
+                  eq(userBranches.branchId, mainBranch.id),
+                  inArray(userBranches.role, ['admin', 'staff', 'manager'])
+                )
+              );
+
+            // Get the user who performed the action
+            const [approverInfo] = await db
+              .select({ name: user.name })
+              .from(user)
+              .where(eq(user.id, userId));
+            const approverName = approverInfo?.name || 'User';
+
+            // Create individual notifications for each main branch user
+            for (const user of mainUsers) {
+              await db
+                .insert(notifications)
+                .values({
+                  id: `notif_${nanoid(10)}`,
+                  userId: user.userId, // Specific user notification
+                  branchId: mainBranch.id,
+                  title: 'Stock Split Request Approved',
+                  message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been approved by ${approverName}`,
+                  type: 'stock_split_approved',
+                  data: {
+                    productId: approvalReq.productId,
+                    sourceBranchId: approvalReq.branchId,
+                    targetBranchId: approvalReq.referenceId,
+                    quantity: approvalReq.quantity,
+                    approvalTransactionId: approvalReq.id,
+                    productName,
+                    sourceBranchName,
+                    targetBranchName,
+                    approvedBy: approverName,
+                    approverUserId: userId
+                  },
+                  isRead: false,
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                })
+                .returning();
+            }
+            
+            // Broadcast to main branch for real-time updates
+            const notificationForBroadcast = {
+              id: `notif_${nanoid(10)}`,
+              userId: null,
+              branchId: mainBranch.id,
+              title: 'Stock Split Request Approved',
+              message: `Request to transfer ${approvalReq.quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName} has been approved by ${approverName}`,
+              type: 'stock_split_approved',
+              data: {
+                productId: approvalReq.productId,
+                sourceBranchId: approvalReq.branchId,
+                targetBranchId: approvalReq.referenceId,
+                quantity: approvalReq.quantity,
+                approvalTransactionId: approvalReq.id,
+                productName,
+                sourceBranchName,
+                targetBranchName,
+                approvedBy: approverName,
+                approverUserId: userId
+              },
+              isRead: false,
+              createdAt: new Date(),
+              updatedAt: new Date()
+            };
+            
+            broadcastToBranch(mainBranch.id, notificationForBroadcast);
+          }
         } 
         // Default case: Regular branch-to-branch split
         else {
@@ -551,9 +991,9 @@ export async function PUT(request: NextRequest) {
           // Broadcast the notification to the target branch (the receiving end)
           broadcastToBranch(approvalReq.referenceId!, targetNotification);
         }
-      } catch (notificationError) {
-        console.error('Error creating notification:', notificationError);
       }
+    } catch (notificationError) {
+      console.error('Error creating notification:', notificationError);
     }
     
     return new Response(

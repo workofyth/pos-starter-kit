@@ -23,10 +23,7 @@ import {
   TrendingUp,
   AlertTriangle,
   Building,
-  Building2,
-  Clock,
-  CheckCircle,
-  XCircle
+  Building2
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 
@@ -58,12 +55,9 @@ export default function ApprovalsPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedRequest, setSelectedRequest] = useState<ApprovalRequest | null>(null);
   const [isDetailViewOpen, setIsDetailViewOpen] = useState(false);
-  const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState<string>('');
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
 
   // Load user's branch information
   useEffect(() => {
@@ -88,14 +82,14 @@ export default function ApprovalsPage() {
     fetchUserBranchInfo();
   }, [session]);
 
-  // Load approvals based on active tab
+  // Load approvals
   useEffect(() => {
     const loadApprovals = async () => {
       if (!session?.user?.id) return;
       
       setLoading(true);
       try {
-        const response = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
+        const response = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=pending&search=${searchTerm}`);
         if (response.ok) {
           const result = await response.json();
           if (result.success) {
@@ -104,17 +98,17 @@ export default function ApprovalsPage() {
           }
         }
       } catch (error) {
-        console.error(`Error loading ${activeTab} approvals:`, error);
+        console.error("Error loading approvals:", error);
       } finally {
         setLoading(false);
       }
     };
 
     loadApprovals();
-  }, [session, approvalsPage, searchTerm, activeTab]);
+  }, [session, approvalsPage, searchTerm]);
 
   // Handle approval action
-  const handleApprovalAction = async (id: string, action: 'approve' | 'reject', reason?: string) => {
+  const handleApprovalAction = async (id: string, action: 'approve' | 'reject') => {
     if (!session?.user?.id) return;
     
     try {
@@ -126,7 +120,7 @@ export default function ApprovalsPage() {
         body: JSON.stringify({
           userId: session.user.id,
           action,
-          notes: reason || `Request ${action}d by ${session.user.name || 'user'}`
+          notes: `Request ${action}d by ${session.user.name || 'user'}`
         }),
       });
       
@@ -137,10 +131,7 @@ export default function ApprovalsPage() {
         setApprovals(approvals.map(req => 
           req.id === id ? { ...req, status: action === 'approve' ? 'approved' : 'rejected' } : req
         ));
-        if (action === 'approve') {
-          alert(`Request approved successfully!`);
-        }
-        // For rejection, the rejection dialog will handle the alert
+        alert(`Request ${action}d successfully!`);
       } else {
         alert(`Error ${action}ing request: ${result.message}`);
       }
@@ -148,69 +139,6 @@ export default function ApprovalsPage() {
       console.error(`Error ${action}ing request:`, error);
       alert(`Error ${action}ing request: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
     }
-  };
-
-  // Handle reject with reason
-  const handleRejectWithReason = async () => {
-    if (!selectedRequest || !rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
-      return;
-    }
-    
-    await handleApprovalAction(selectedRequest.id, 'reject', rejectionReason);
-    setIsRejectDialogOpen(false);
-    setRejectionReason('');
-    alert(`Request rejected with reason: ${rejectionReason}`);
-  };
-
-  // Handle resending a rejected request
-  const handleResendRequest = async (request: ApprovalRequest) => {
-    if (!session?.user?.id) return;
-    
-    try {
-      // First, we need to update the status back to pending to make it resubmittable
-      const response = await fetch(`/api/approvals?id=${request.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: session.user.id,
-          action: 'resend', // Our custom action for resending
-          notes: `Request resent by ${session.user.name || 'user'}`
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        // Update local state to reflect the change
-        setApprovals(approvals.map(req => 
-          req.id === request.id ? { ...req, status: 'pending' } : req
-        ));
-        alert(`Request resent successfully! It's now pending approval again.`);
-        // Refresh the data to show the updated status
-        const refreshResponse = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
-        if (refreshResponse.ok) {
-          const refreshResult = await refreshResponse.json();
-          if (refreshResult.success) {
-            setApprovals(refreshResult.data);
-            setTotalPages(refreshResult.pagination.totalPages || 1);
-          }
-        }
-      } else {
-        alert(`Error resending request: ${result.message}`);
-      }
-    } catch (error) {
-      console.error('Error resending request:', error);
-      alert(`Error resending request: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
-    }
-  };
-
-  // Open reject dialog
-  const openRejectDialog = (request: ApprovalRequest) => {
-    setSelectedRequest(request);
-    setIsRejectDialogOpen(true);
   };
 
   // Open detail view
@@ -256,49 +184,6 @@ export default function ApprovalsPage() {
         </div>
       </div>
 
-      {/* Tabs for different statuses */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-md w-fit">
-        <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'pending'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-          onClick={() => setActiveTab('pending')}
-        >
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            Pending
-          </div>
-        </button>
-        <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'approved'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-          onClick={() => setActiveTab('approved')}
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Approved
-          </div>
-        </button>
-        <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'rejected'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-          onClick={() => setActiveTab('rejected')}
-        >
-          <div className="flex items-center gap-2">
-            <XCircle className="h-4 w-4" />
-            Rejected
-          </div>
-        </button>
-      </div>
-
       {/* Search Bar */}
       <Card>
         <CardContent className="pt-6">
@@ -319,11 +204,7 @@ export default function ApprovalsPage() {
       {/* Approval Requests Table */}
       <Card>
         <CardHeader>
-          <CardTitle>
-            {activeTab === 'pending' && 'Pending Approval Requests'}
-            {activeTab === 'approved' && 'Approved Requests'}
-            {activeTab === 'rejected' && 'Rejected Requests'}
-          </CardTitle>
+          <CardTitle>Pending Approval Requests</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -341,12 +222,12 @@ export default function ApprovalsPage() {
             <TableBody>
               {filteredApprovals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-gray-500">
                     <div className="flex flex-col items-center justify-center">
                       <Package className="h-12 w-12 text-gray-300 mb-2" />
                       <p className="text-gray-500">No approval requests found</p>
                       <p className="text-sm text-gray-400 mt-1">
-                        {searchTerm ? 'Try adjusting your search criteria' : `No ${activeTab} requests`}
+                        {searchTerm ? 'Try adjusting your search criteria' : 'All requests have been processed'}
                       </p>
                     </div>
                   </TableCell>
@@ -391,32 +272,20 @@ export default function ApprovalsPage() {
                         >
                           View Details
                         </Button>
-                        {request.status === 'pending' ? (
-                          <>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => handleApprovalAction(request.id, 'approve')}
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="outline" 
-                              size="sm"
-                              onClick={() => openRejectDialog(request)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : request.status === 'rejected' ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleResendRequest(request)}
-                          >
-                            Resend
-                          </Button>
-                        ) : null}
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleApprovalAction(request.id, 'approve')}
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleApprovalAction(request.id, 'reject')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -559,75 +428,13 @@ export default function ApprovalsPage() {
                   </Button>
                   <Button 
                     variant="destructive" 
-                    onClick={() => openRejectDialog(selectedRequest)}
+                    onClick={() => handleApprovalAction(selectedRequest.id, 'reject')}
                   >
                     <X className="h-4 w-4 mr-2" />
                     Reject
                   </Button>
                 </div>
               )}
-              {selectedRequest.status === 'rejected' && (
-                <div className="flex gap-2 pt-4">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => handleResendRequest(selectedRequest)}
-                  >
-                    <Clock className="h-4 w-4 mr-2" />
-                    Resend Request
-                  </Button>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
-      )}
-
-      {/* Reject Dialog */}
-      {isRejectDialogOpen && selectedRequest && (
-        <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Reject Request</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div>
-                <label className="text-sm font-medium">Product</label>
-                <Input 
-                  value={selectedRequest.productName} 
-                  readOnly 
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Direction</label>
-                <div className="p-2 border rounded-md">
-                  {selectedRequest.sourceBranchName} → {selectedRequest.targetBranchName}
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Reason for Rejection</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter reason for rejecting this request..."
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  rows={4}
-                />
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setIsRejectDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button 
-                variant="destructive" 
-                onClick={handleRejectWithReason}
-              >
-                <X className="h-4 w-4 mr-2" />
-                Reject Request
-              </Button>
             </div>
           </DialogContent>
         </Dialog>

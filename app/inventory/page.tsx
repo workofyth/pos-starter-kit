@@ -324,7 +324,7 @@ export default function InventoryPage() {
         
         setInventory([newItem, ...inventory]);
         setIsAddDialogOpen(false);
-        alert('Inventory item added successfully!');
+      alert('Inventory item added successfully!');
       } else {
         alert('Error adding inventory item: ' + result.message);
       }

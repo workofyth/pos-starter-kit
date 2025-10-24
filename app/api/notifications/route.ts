@@ -275,12 +275,65 @@ export async function DELETE(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const branchId = searchParams.get('branchId');
+    const userId = searchParams.get('userId');
     
-    if (!id) {
+    // If ID is provided, delete specific notification
+    if (id) {
+      await db
+        .delete(notifications)
+        .where(eq(notifications.id, id));
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'Notification deleted successfully'
+        }),
+        { 
+          status: 200, 
+          headers: { 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    // If userId is provided, delete all notifications for that user
+    else if (userId) {
+      await db
+        .delete(notifications)
+        .where(eq(notifications.userId, userId));
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'All notifications for user cleared successfully'
+        }),
+        { 
+          status: 200, 
+          headers: { 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    // If branchId is provided, delete all notifications for that branch
+    else if (branchId) {
+      await db
+        .delete(notifications)
+        .where(eq(notifications.branchId, branchId));
+      
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: 'All notifications for branch cleared successfully'
+        }),
+        { 
+          status: 200, 
+          headers: { 'Content-Type': 'application/json' } 
+        }
+      );
+    }
+    else {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'ID is required' 
+          message: 'ID, userId, or branchId is required' 
         }),
         { 
           status: 400, 
@@ -288,21 +341,6 @@ export async function DELETE(request: NextRequest) {
         }
       );
     }
-    
-    await db
-      .delete(notifications)
-      .where(eq(notifications.id, id));
-    
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Notification deleted successfully'
-      }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
-    );
   } catch (error) {
     console.error('Error deleting notification:', error);
     return new Response(
