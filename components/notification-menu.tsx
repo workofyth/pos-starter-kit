@@ -76,30 +76,71 @@ export function NotificationMenu() {
 
     const fetchNotifications = async () => {
       try {
-        let url = '/api/notifications?limit=10';
-        if (!isMainAdmin && userBranchId && session?.user?.id) {
-          // For non-main admin users, get notifications for their user ID and branch
-          const params = new URLSearchParams();
-          params.append('userId', session.user.id);
-          params.append('branchId', userBranchId);
-          params.append('limit', '10');
-          url = `/api/notifications?${params}`;
-        } else if (session?.user?.id) {
-          // For main admin users, get notifications for their user ID
-          const params = new URLSearchParams();
-          params.append('userId', session.user.id);
-          params.append('limit', '10');
-          url = `/api/notifications?${params}`;
-        }
-
-        const response = await fetch(url);
-        if (response.ok) {
-          const result = await response.json();
-          if (result.success) {
-            setNotifications(result.data);
-            setUnreadCount(result.data.filter((n: Notification) => !n.isRead).length);
+        // Fetch both user-specific and branch-specific notifications from database
+        let userNotifications: Notification[] = [];
+        let branchNotifications: Notification[] = [];
+        
+        // Fetch user-specific notifications
+        if (session?.user?.id) {
+          const userUrl = `/api/notifications?userId=${session.user.id}&limit=10`;
+          const userResponse = await fetch(userUrl);
+          if (userResponse.ok) {
+            const userResult = await userResponse.json();
+            if (userResult.success) {
+              userNotifications = userResult.data;
+            }
           }
         }
+        
+        // Fetch branch-specific notifications
+        if (userBranchId) {
+          const branchUrl = `/api/notifications?branchId=${userBranchId}&limit=10`;
+          const branchResponse = await fetch(branchUrl);
+          if (branchResponse.ok) {
+            const branchResult = await branchResponse.json();
+            if (branchResult.success) {
+              branchNotifications = branchResult.data;
+            }
+          }
+        }
+        
+        // For main admins, also fetch main branch notifications
+        let mainBranchNotifications: Notification[] = [];
+        if (isMainAdmin) {
+          const mainBranchResponse = await fetch('/api/branches?type=main');
+          if (mainBranchResponse.ok) {
+            const mainBranchResult = await mainBranchResponse.json();
+            if (mainBranchResult.success && mainBranchResult.data && mainBranchResult.data.length > 0) {
+              const mainBranchId = mainBranchResult.data[0].id;
+              const mainBranchUrl = `/api/notifications?branchId=${mainBranchId}&limit=10`;
+              const mainBranchResponse2 = await fetch(mainBranchUrl);
+              if (mainBranchResponse2.ok) {
+                const mainBranchResult2 = await mainBranchResponse2.json();
+                if (mainBranchResult2.success) {
+                  mainBranchNotifications = mainBranchResult2.data;
+                }
+              }
+            }
+          }
+        }
+        
+        // Combine all database notifications, removing duplicates by ID
+        const allDbNotifications = [
+          ...userNotifications,
+          ...branchNotifications,
+          ...mainBranchNotifications
+        ].filter((notification, index, self) => 
+          index === self.findIndex(n => n.id === notification.id)
+        );
+        
+        // Sort by creation date (newest first)
+        allDbNotifications.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        // Take only the most recent 10 from database
+        const dbRecentNotifications = allDbNotifications.slice(0, 10);
+        
+        setNotifications(dbRecentNotifications);
+        setUnreadCount(dbRecentNotifications.filter((n: Notification) => !n.isRead).length);
       } catch (error) {
         console.error('Error fetching notifications:', error);
       } finally {
@@ -109,53 +150,146 @@ export function NotificationMenu() {
 
     fetchNotifications();
     
-    // Set up real-time connection if user is not main admin (main admin might get too many notifications)
-    if (!isMainAdmin && userBranchId && session?.user?.id) {
-      // In a real app, this would connect to an SSE endpoint
-      // For now we'll use polling to simulate real-time updates
-      const interval = setInterval(() => {
-        // Only fetch new notifications (notifications that were created after the last fetch)
-        // For this to work properly, we'd need to track the last fetch time
-        // For now, we'll just refetch periodically
-        if (userBranchId && session?.user?.id) {
-          const params = new URLSearchParams();
-          params.append('userId', session.user.id);
-          params.append('branchId', userBranchId);
-          params.append('limit', '10');
-          
-          fetch(`/api/notifications?${params}`)
-            .then(response => {
-              if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+    // Set up real-time connection using Server-Sent Events (SSE) for live updates
+    if ((!isMainAdmin && userBranchId && session?.user?.id) || (isMainAdmin && session?.user?.id)) {
+      let reconnectAttempts = 0;
+      const maxReconnectAttempts = 5;
+      let reconnectTimeout: NodeJS.Timeout | null = null;
+      
+      const setupNotificationStream = async () => {
+        // Determine the branch ID to subscribe to
+        let targetBranchId = userBranchId;
+        
+        // If it's a main admin, connect to the main branch notifications
+        if (isMainAdmin) {
+          // For main admins, we get the main branch ID
+          try {
+            const response = await fetch('/api/branches?type=main');
+            if (response.ok) {
+              const result = await response.json();
+              if (result.success && result.data && result.data.length > 0) {
+                targetBranchId = result.data[0].id;
+              } else {
+                console.error('Could not find main branch for main admin');
+                return;
               }
-              return response.json();
-            })
-            .then(result => {
-              if (result.success) {
-                const newNotifications = result.data;
-                const newUnreadCount = newNotifications.filter((n: Notification) => !n.isRead).length;
-                
-                // Only update if there are changes
-                if (newNotifications.length !== notifications.length || 
-                    newUnreadCount !== unreadCount) {
-                  setNotifications(newNotifications);
-                  setUnreadCount(newUnreadCount);
-                }
-              }
-            })
-            .catch(error => console.error('Error refetching notifications:', error));
+            } else {
+              console.error('Failed to fetch main branch for main admin');
+              return;
+            }
+          } catch (error) {
+            console.error('Error fetching main branch for main admin:', error);
+            return;
+          }
         }
-      }, 5000); // Poll every 5 seconds
+        
+        if (!targetBranchId) {
+          console.error('No target branch ID found for notification stream');
+          return;
+        }
+        
+        // Connect to the SSE notification stream for the target branch
+        const sseUrl = `/api/notifications/stream/client?branchId=${targetBranchId}`;
+        const eventSource = new EventSource(sseUrl);
+        
+        eventSource.onopen = () => {
+          console.log('Connected to SSE notification stream');
+          reconnectAttempts = 0; // Reset attempts on successful connection
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'notification') {
+              // Add new notification to the list
+              const newNotification = data.notification;
+              
+              // Ensure newNotification has all required fields
+              const completeNotification = {
+                id: newNotification.id,
+                userId: newNotification.userId || null,
+                branchId: newNotification.branchId,
+                title: newNotification.title,
+                message: newNotification.message,
+                type: newNotification.type,
+                data: newNotification.data || null,
+                isRead: newNotification.isRead || false,
+                createdAt: newNotification.createdAt || new Date().toISOString(),
+                updatedAt: newNotification.updatedAt || new Date().toISOString(),
+                branchName: newNotification.branchName || null
+              };
+              
+              setNotifications(prev => {
+                // Check if notification already exists to prevent duplicates
+                const exists = prev.some(n => n.id === completeNotification.id);
+                
+                // If it doesn't exist, add it to the beginning of the list
+                if (!exists) {
+                  // Create new list with the new notification at the beginning
+                  const updatedList = [completeNotification, ...prev];
+                  
+                  // Remove duplicates (in case the notification was added from DB after SSE)
+                  const uniqueUpdatedList = updatedList.filter((notification, index, self) => 
+                    index === self.findIndex(n => n.id === notification.id)
+                  );
+                  
+                  // Limit to 10 most recent notifications
+                  const finalList = uniqueUpdatedList.slice(0, 10);
+                  
+                  // Update unread count
+                  setUnreadCount(finalList.filter(n => !n.isRead).length);
+                  return finalList;
+                }
+                
+                // If it already exists, just return the current list
+                return prev;
+              });
+            }
+          } catch (error) {
+            console.error('Error parsing SSE message:', error);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('SSE error:', error);
+          
+          // Attempt to reconnect with exponential backoff
+          if (reconnectAttempts < maxReconnectAttempts && eventSource.readyState !== eventSource.CLOSED) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Cap at 30s
+            
+            if (reconnectTimeout) {
+              clearTimeout(reconnectTimeout);
+            }
+            
+            reconnectTimeout = setTimeout(() => {
+              console.log(`Attempting to reconnect to SSE (attempt ${reconnectAttempts}/${maxReconnectAttempts})`);
+              eventSource.close();
+              setupNotificationStream();
+            }, delay);
+          }
+        };
+
+        eventSourceRef.current = eventSource;
+      };
+
+      setupNotificationStream();
       
-      // TODO: In a real production app, implement proper SSE connection
-      // For now, this polling approach will simulate real-time updates
-      
-      // Clean up
+      // Set up periodic refresh of database notifications (every 30 seconds to reduce load while maintaining consistency)
+      const refreshInterval = setInterval(() => {
+        fetchNotifications().catch(err => console.error('Error refreshing notifications:', err));
+      }, 30000); // 30 seconds - balanced frequency for consistency
+
+      // Return cleanup function
       return () => {
-        clearInterval(interval);
         if (eventSourceRef.current) {
           eventSourceRef.current.close();
+          eventSourceRef.current = null;
         }
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+        }
+        clearInterval(refreshInterval);
       };
     }
 
@@ -163,15 +297,24 @@ export function NotificationMenu() {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+        eventSourceRef.current = null;
       }
     };
-  }, [userBranchId, isMainAdmin]);
+  }, [userBranchId, isMainAdmin, session?.user?.id]);
 
   // Get notification icon based on type
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'stock_split':
         return <Package className="h-5 w-5 text-blue-500" />;
+      case 'stock_split_request':
+        return <Package className="h-5 w-5 text-blue-500" />;
+      case 'stock_split_approved':
+        return <CheckCircle className="h-5 w-5 text-green-500" />;
+      case 'stock_split_rejected':
+        return <X className="h-5 w-5 text-red-500" />;
+      case 'stock_split_resent':
+        return <Clock className="h-5 w-5 text-yellow-500" />;
       case 'inventory_update':
         return <Package className="h-5 w-5 text-green-500" />;
       case 'approval_request':
@@ -320,11 +463,16 @@ export function NotificationMenu() {
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
-                <div
-                  key={notification.id}
-                  className={`p-3 ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
-                >
+              {notifications
+                .filter(notification => notification.id) // Ensure notification has an ID
+                .filter((notification, index, self) => 
+                  index === self.findIndex(n => n.id === notification.id) // Ensure unique IDs
+                )
+                .map((notification) => (
+                  <div
+                    key={notification.id}
+                    className={`p-3 ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
+                  >
                   <div className="flex gap-3">
                     <div className="flex-shrink-0">
                       {getNotificationIcon(notification.type)}

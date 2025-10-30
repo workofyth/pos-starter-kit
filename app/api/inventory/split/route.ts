@@ -4,6 +4,7 @@ import { inventory, products, branches, inventoryTransactions, userBranches, not
 import { eq, and, count, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
+import redis from '@/lib/redis';
 
 // POST - Create approval request for splitting inventory from one branch to another
 export async function POST(request: NextRequest) {
@@ -173,13 +174,12 @@ export async function POST(request: NextRequest) {
       createdBy: userId, // Track who initiated the request
       approvedBy: null, // Will be set when approved
       createdAt: new Date(),
-      updatedAt: new Date(),
-      lastUpdated: new Date()
+      updatedAt: new Date()
     }).returning();
     
     // Get branch information to determine if we need to send notification
     const [sourceBranch] = await db
-      .select({ type: branches.type })
+      .select({ type: branches.type, name: branches.name })
       .from(branches)
       .where(eq(branches.id, sourceBranchId));
     
@@ -197,83 +197,51 @@ export async function POST(request: NextRequest) {
     // Send notification to target branch if source is main branch and target is sub-branch (Rule 1)
     if (sourceBranch && targetBranch && sourceBranch.type === 'main' && targetBranch.type === 'sub') {
       try {
-        // Get all users in the target sub-branch (admin, staff, manager) to send individual notifications
-        const usersToNotify = await db
-          .select({ userId: userBranches.userId })
-          .from(userBranches)
-          .where(
-            and(
-              eq(userBranches.branchId, targetBranchId),
-              inArray(userBranches.role, ['admin', 'staff', 'manager'])
-            )
-          );
-
-        // Create individual notifications for each user to ensure they only get 1 notification (Rule 1)
-        for (const user of usersToNotify) {
-          await db
-            .insert(notifications)
-            .values({
-              id: `notif_${nanoid(10)}`,
-              userId: user.userId, // Specific user notification
-              branchId: targetBranchId,
-              title: 'New Stock Request from Main Branch',
-              message: `New request to receive ${quantity} units of ${product?.name || 'product'} from main branch ${sourceBranch.name}. Awaiting approval.`,
-              type: 'stock_split_request',
-              data: {
-                productId,
-                sourceBranchId,
-                quantity,
-                transactionId: approvalRequest.id,
-                productName: product?.name || 'Unknown Product',
-                sourceBranchName: sourceBranch.name,
-                targetBranchName: targetBranch.name,
-                status: 'pending'
-              },
-              isRead: false,
-              createdAt: new Date(),
-              updatedAt: new Date()
-            })
-            .returning();
-        }
-        
-        // Broadcast to target branch for real-time updates
-        const notificationForBroadcast = {
-          id: `notif_${nanoid(10)}`,
-          userId: null,
-          branchId: targetBranchId,
-          title: 'New Stock Request from Main Branch',
-          message: `New request to receive ${quantity} units of ${product?.name || 'product'} from main branch ${sourceBranch.name}. Awaiting approval.`,
-          type: 'stock_split_request',
-          data: {
-            productId,
-            sourceBranchId,
-            quantity,
-            transactionId: approvalRequest.id,
-            productName: product?.name || 'Unknown Product',
-            sourceBranchName: sourceBranch.name,
-            targetBranchName: targetBranch.name,
-            status: 'pending'
-          },
-          isRead: false,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-        
-        broadcastToBranch(targetBranchId, notificationForBroadcast);
+        // Use helper function to send notifications to target branch roles
+        await sendNotificationsToBranchRoles(
+          targetBranchId, // Target branch
+          ['admin', 'staff', 'manager'], // Send to all relevant roles at sub branch
+          {
+            title: 'New Stock Request from Main Branch',
+            message: `New request to receive ${quantity} units of ${product?.name || 'product'} from main branch ${sourceBranch.name}. Awaiting approval.`,
+            type: 'stock_split_request',
+            data: {
+              productId,
+              sourceBranchId,
+              quantity,
+              transactionId: approvalRequest.id,
+              productName: product?.name || 'Unknown Product',
+              sourceBranchName: sourceBranch.name,
+              targetBranchName: targetBranch.name,
+              status: 'pending'
+            }
+          }
+        );
       } catch (notificationError) {
         console.error('Error sending notification:', notificationError);
         // Don't fail the request if notification fails
       }
     }
-    
+    // Return success response
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Inventory split request submitted for approval',
-        data: approvalRequest
+        message: 'Split request created successfully',
+        data: {
+          id: approvalRequest.id,
+          productId,
+          sourceBranchId,
+          targetBranchId,
+          quantity,
+          notes: notes || `Request to split ${quantity} units to branch ${targetBranchId}`,
+          status: 'pending',
+          createdBy: userId,
+          createdAt: approvalRequest.createdAt,
+          updatedAt: approvalRequest.updatedAt
+        }
       }),
       { 
-        status: 200, 
+        status: 201, 
         headers: { 'Content-Type': 'application/json' } 
       }
     );

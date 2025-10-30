@@ -1,84 +1,95 @@
 import { NextRequest } from 'next/server';
+import { db } from '@/db';
+import { notifications } from '@/db/schema/pos';
+import { eq } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
+import { broadcastToBranch } from '@/lib/notification-sse';
 
-// Store active connections by branch
-const connections: Map<string, Set<WritableStreamDefaultWriter>> = new Map();
-
+// GET - Returns information about the notification streaming endpoint
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
-  const branchId = searchParams.get('branchId');
-
-  if (!branchId) {
-    return new Response('Branch ID is required', { status: 400 });
-  }
-
-  // Create a server-sent events response
-  const encoder = new TextEncoder();
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-
-  // Add this connection to the branch's connections
-  if (!connections.has(branchId)) {
-    connections.set(branchId, new Set());
-  }
-  const branchConnections = connections.get(branchId)!;
-  branchConnections.add(writer);
-
-  // Send initial connection message
-  writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'connected', branchId })}\n\n`));
-
-  // Handle connection close
-  const onClose = () => {
-    branchConnections.delete(writer);
-    if (branchConnections.size === 0) {
-      connections.delete(branchId);
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      message: 'Notification streaming endpoint - Use POST to send notifications' 
+    }),
+    { 
+      status: 200, 
+      headers: { 'Content-Type': 'application/json' } 
     }
-  };
-
-  // Set up cleanup when client disconnects
-  request.signal.addEventListener('abort', onClose);
-
-  return new Response(stream.readable, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  });
+  );
 }
 
-// Function to broadcast notification to a specific branch
-export function broadcastToBranch(branchId: string, notification: any) {
-  const branchConnections = connections.get(branchId);
-  if (!branchConnections) return;
-
-  const encoder = new TextEncoder();
-  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\n\n`;
-
-  branchConnections.forEach(async (writer) => {
-    try {
-      await writer.write(encoder.encode(data));
-    } catch (error) {
-      // Remove broken connections
-      branchConnections.delete(writer);
-      if (branchConnections.size === 0) {
-        connections.delete(branchId);
-      }
+// POST - Send notification to specific branch via SSE
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    
+    const {
+      branchId,
+      title,
+      message,
+      type,
+      data
+    } = body;
+    
+    // Validate required fields
+    if (!branchId || !title || !message || !type) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          message: 'Branch ID, title, message, and type are required' 
+        }),
+        { 
+          status: 400, 
+          headers: { 'Content-Type': 'application/json' } 
+        }
+      );
     }
-  });
-}
-
-// Function to broadcast to all connections (for testing)
-export function broadcastToAll(notification: any) {
-  const encoder = new TextEncoder();
-  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\n\n`;
-
-  connections.forEach((branchConnections) => {
-    branchConnections.forEach(async (writer) => {
-      try {
-        await writer.write(encoder.encode(data));
-      } catch (error) {
-        // Handle connection errors
-      }
+    
+    // Broadcast notification via SSE
+    await broadcastToBranch(branchId, {
+      title,
+      message,
+      type,
+      data: data || {}
     });
-  });
+    
+    // Generate unique ID for response
+    const notificationId = `notif_${nanoid(10)}`;
+    
+    return new Response(
+      JSON.stringify({ 
+        success: true, 
+        message: 'Notification sent successfully via SSE',
+        data: {
+          id: notificationId,
+          branchId,
+          title,
+          message,
+          type,
+          data: data || {},
+          isRead: false,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        }
+      }),
+      { 
+        status: 200, 
+        headers: { 'Content-Type': 'application/json' } 
+      }
+    );
+  } catch (error) {
+    console.error('Error sending notification via SSE:', error);
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        message: 'Internal server error',
+        error: (error as Error).message 
+      }),
+      { 
+        status: 500, 
+        headers: { 'Content-Type': 'application/json' } 
+      }
+    );
+  }
 }

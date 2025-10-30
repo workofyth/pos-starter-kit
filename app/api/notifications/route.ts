@@ -4,6 +4,7 @@ import { notifications, branches } from '@/db/schema/pos';
 import { eq, and, desc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch } from '@/lib/notification-sse';
+import redis from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -16,6 +17,25 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
+    
+    // Create cache key based on parameters
+    const cacheKey = `notifications:${userId}:${branchId}:${isRead}:${page}:${limit}`;
+    
+    // Try to get from Redis cache first
+    try {
+      const cachedResult = await redis.get(cacheKey);
+      if (cachedResult) {
+        return new Response(
+          JSON.stringify(cachedResult),
+          { 
+            status: 200, 
+            headers: { 'Content-Type': 'application/json' } 
+          }
+        );
+      }
+    } catch (cacheError) {
+      console.warn('Redis cache error, falling back to database:', cacheError);
+    }
     
     // Build query
     let query = db
@@ -88,19 +108,28 @@ export async function GET(request: NextRequest) {
       : parseInt(totalCountResult[0].count as string);
     const totalPages = Math.ceil(totalCount / limit);
     
+    const result = {
+      success: true,
+      data: notificationList,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    };
+    
+    // Cache the result for 30 seconds
+    try {
+      await redis.setex(cacheKey, 30, result);
+    } catch (cacheError) {
+      console.warn('Failed to cache notifications result:', cacheError);
+    }
+    
     return new Response(
-      JSON.stringify({
-        success: true,
-        data: notificationList,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      }),
+      JSON.stringify(result),
       { 
         status: 200, 
         headers: { 'Content-Type': 'application/json' } 
@@ -157,7 +186,7 @@ export async function POST(request: NextRequest) {
       .insert(notifications)
       .values({
         id: notificationId,
-        userId,
+        userId: userId || null, // Explicitly set to null if not provided
         branchId,
         title,
         message,
@@ -168,6 +197,29 @@ export async function POST(request: NextRequest) {
         updatedAt: new Date()
       })
       .returning();
+    
+    // Invalidate Redis cache for this branch and user
+    try {
+      const pattern = `notifications:*:${branchId}:*:*:*`;
+      const keys : string[] = await redis.keys(pattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+      
+      // Also invalidate cache for specific user if userId is provided
+      if (userId) {
+        const userPattern = `notifications:${userId}:*:*:*:*`;
+        const userKeys = await redis.keys(userPattern);
+        if (userKeys.length > 0) {
+          await redis.del(...userKeys);
+        }
+      }
+    } catch (cacheError) {
+      console.warn('Failed to invalidate Redis cache:', cacheError);
+    }
+    
+    // Broadcast the notification to the branch
+    broadcastToBranch(branchId, newNotification);
     
     return new Response(
       JSON.stringify({ 
@@ -243,6 +295,30 @@ export async function PUT(request: NextRequest) {
       );
     }
     
+    // Invalidate Redis cache for this notification's branch and user
+    try {
+      // Get the branchId and userId for the notification to invalidate appropriate caches
+      const notificationBranchId = updatedNotification.branchId;
+      const notificationUserId = updatedNotification.userId;
+      
+      const pattern = `notifications:*:${notificationBranchId}:*:*:*`;
+      const keys = await redis.keys(pattern);
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+      
+      // Also invalidate cache for specific user if userId is available
+      if (notificationUserId) {
+        const userPattern = `notifications:${notificationUserId}:*:*:*:*`;
+        const userKeys = await redis.keys(userPattern);
+        if (userKeys.length > 0) {
+          await redis.del(...userKeys);
+        }
+      }
+    } catch (cacheError) {
+      console.warn('Failed to invalidate Redis cache:', cacheError);
+    }
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
@@ -280,9 +356,41 @@ export async function DELETE(request: NextRequest) {
     
     // If ID is provided, delete specific notification
     if (id) {
+      // First get the notification to know which cache to invalidate
+      const [notificationToDelete] = await db
+        .select()
+        .from(notifications)
+        .where(eq(notifications.id, id))
+        .limit(1);
+      
       await db
         .delete(notifications)
         .where(eq(notifications.id, id));
+      
+      // Invalidate Redis cache for this notification's branch and user
+      if (notificationToDelete) {
+        try {
+          const notificationBranchId = notificationToDelete.branchId;
+          const notificationUserId = notificationToDelete.userId;
+          
+          const pattern = `notifications:*:${notificationBranchId}:*:*:*`;
+          const keys = await redis.keys(pattern);
+          if (keys.length > 0) {
+            await redis.del(...keys);
+          }
+          
+          // Also invalidate cache for specific user if userId is available
+          if (notificationUserId) {
+            const userPattern = `notifications:${notificationUserId}:*:*:*:*`;
+            const userKeys = await redis.keys(userPattern);
+            if (userKeys.length > 0) {
+              await redis.del(...userKeys);
+            }
+          }
+        } catch (cacheError) {
+          console.warn('Failed to invalidate Redis cache:', cacheError);
+        }
+      }
       
       return new Response(
         JSON.stringify({ 
@@ -301,6 +409,17 @@ export async function DELETE(request: NextRequest) {
         .delete(notifications)
         .where(eq(notifications.userId, userId));
       
+      // Invalidate Redis cache for this user
+      try {
+        const userPattern = `notifications:${userId}:*:*:*:*`;
+        const userKeys = await redis.keys(userPattern);
+        if (userKeys.length > 0) {
+          await redis.del(...userKeys);
+        }
+      } catch (cacheError) {
+        console.warn('Failed to invalidate Redis cache:', cacheError);
+      }
+      
       return new Response(
         JSON.stringify({ 
           success: true, 
@@ -317,6 +436,17 @@ export async function DELETE(request: NextRequest) {
       await db
         .delete(notifications)
         .where(eq(notifications.branchId, branchId));
+      
+      // Invalidate Redis cache for this branch
+      try {
+        const pattern = `notifications:*:${branchId}:*:*:*`;
+        const keys = await redis.keys(pattern);
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } catch (cacheError) {
+        console.warn('Failed to invalidate Redis cache:', cacheError);
+      }
       
       return new Response(
         JSON.stringify({ 

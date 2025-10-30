@@ -113,6 +113,7 @@ export const inventory = pgTable("inventory", {
     .references(() => branches.id, { onDelete: "cascade" }),
   quantity: integer("quantity").default(0).notNull(),
   minStock: integer("min_stock").default(0).notNull(),
+  maxStock: integer("min_stock").default(0).notNull(),
   lastUpdated: timestamp("last_updated").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

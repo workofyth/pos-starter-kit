@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,18 +13,16 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useRealTimeUpdates } from "@/hooks/use-real-time-updates";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { RefreshButton } from "@/components/refresh-button";
 import { 
-  Search, 
-  Plus, 
-  Edit, 
-  Trash2,
   Package,
-  TrendingDown,
   TrendingUp,
-  AlertTriangle
+  TrendingDown
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
+import { StockMovementIndicator } from "@/components/stock-movement-indicator";
 
 interface InventoryItem {
   id: string;
@@ -73,14 +71,24 @@ export default function InventoryPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false);
+  const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [splittingItem, setSplittingItem] = useState<any | null>(null);
+  const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
+  const [adjustmentData, setAdjustmentData] = useState({
+    quantity: 0,
+    type: 'adjustment' as 'in' | 'out' | 'adjustment',
+    notes: ''
+  });
   
   // State for data lists
   const [branchList, setBranchList] = useState<any[]>([]);
   const [products, setProducts] = useState<any[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null); // Added state for user role
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false); // Added state for main admin status
+  
+  // State for stock movement tracking
+  const [stockMovements, setStockMovements] = useState<Record<string, {initialValue: number, currentValue: number}>>({});
   
   // Get user's branch ID, role, and main admin status
   useEffect(() => {
@@ -118,8 +126,6 @@ export default function InventoryPage() {
     return { status: "good", variant: "outline" };
   };
 
-
-
   // Load data on component mount and when dependencies change
   useEffect(() => {
     const loadData = async () => {
@@ -128,10 +134,20 @@ export default function InventoryPage() {
         // Determine branch filter - main admins can access all branches, other users only their assigned branch
         const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
         
-        // Load inventory items with branch filtering for staff users
-        // Main admins can access all branches, other users only their assigned branch
-        const effectiveBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
-        const inventoryResponse = await fetch(`/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}&branchId=${effectiveBranchId}&lowStock=${showLowStock}&outOfStock=${showOutOfStock}`);
+        // Load inventory items with proper branch filtering
+        // Only include branchId parameter when it's actually needed (not empty)
+        let inventoryUrl = `/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`;
+        if (branchFilter) {
+          inventoryUrl += `&branchId=${branchFilter}`;
+        }
+        if (showLowStock) {
+          inventoryUrl += `&lowStock=true`;
+        }
+        if (showOutOfStock) {
+          inventoryUrl += `&outOfStock=true`;
+        }
+        
+        const inventoryResponse = await fetch(inventoryUrl);
         if (inventoryResponse.ok) {
           const inventoryResult = await inventoryResponse.json();
           if (inventoryResult.success) {
@@ -159,8 +175,8 @@ export default function InventoryPage() {
               branchEmail: item.branchEmail
             }));
             // Deduplicate inventory items by ID to prevent duplicate keys
-            const uniqueInventory = formattedInventory.filter((item, index, self) =>
-              index === self.findIndex(i => i.id === item.id)
+            const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
+              index === self.findIndex((i: { id: any; }) => i.id === item.id)
             );
             setInventory(uniqueInventory);
             setTotalPages(inventoryResult.pagination.totalPages || 1);
@@ -175,8 +191,8 @@ export default function InventoryPage() {
           const branchesResult = await branchesResponse.json();
           if (branchesResult.success) {
             // Deduplicate branches by ID to prevent duplicate keys
-            const uniqueBranches = branchesResult.data.filter((branch, index, self) =>
-              index === self.findIndex(b => b.id === branch.id)
+            const uniqueBranches = branchesResult.data.filter((branch : any, index : any, self : any) =>
+              index === self.findIndex((b: { id: any; }) => b.id === branch.id)
             );
             
             setBranchList(uniqueBranches);
@@ -200,8 +216,8 @@ export default function InventoryPage() {
           const productsResult = await productsResponse.json();
           if (productsResult.success) {
             // Deduplicate products by ID to prevent duplicate keys
-            const uniqueProducts = productsResult.data.filter((product, index, self) =>
-              index === self.findIndex(p => p.id === product.id)
+            const uniqueProducts = productsResult.data.filter((product : any, index : any, self : any) =>
+              index === self.findIndex((p: { id: any; }) => p.id === product.id)
             );
             setProducts(uniqueProducts);
           }
@@ -214,7 +230,90 @@ export default function InventoryPage() {
     };
 
     loadData();
-  }, [inventoryPage, searchTerm, searchSKU, searchCategory, selectedBranch, showLowStock, showOutOfStock, userBranchId]);
+  }, [inventoryPage, searchTerm, searchSKU, searchCategory, selectedBranch, showLowStock, showOutOfStock, userBranchId, isMainAdmin]);
+
+  // Define the real-time update handler before using it in the hook
+  const handleRealTimeUpdate = useCallback((data: any) => {
+    if (data.type === 'inventory_updated' || data.type === 'stock_split_completed' || data.type === 'stock_adjustment') {
+      // Reload inventory to reflect the latest changes
+      const loadDataInternal = async () => {
+        setLoading(true);
+        try {
+          // Determine branch filter - main admins can access all branches, other users only their assigned branch
+          const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+          
+          // Load inventory items with proper branch filtering
+          // Only include branchId parameter when it's actually needed (not empty)
+          let inventoryUrl = `/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`;
+          if (branchFilter) {
+            inventoryUrl += `&branchId=${branchFilter}`;
+          }
+          if (showLowStock) {
+            inventoryUrl += `&lowStock=true`;
+          }
+          if (showOutOfStock) {
+            inventoryUrl += `&outOfStock=true`;
+          }
+          
+          const inventoryResponse = await fetch(inventoryUrl);
+          if (inventoryResponse.ok) {
+            const inventoryResult = await inventoryResponse.json();
+            if (inventoryResult.success) {
+              // Transform API response to match the InventoryItem interface
+              const formattedInventory = inventoryResult.data.map((item: any) => ({
+                id: item.id,
+                productId: item.productId,
+                branchId: item.branchId,
+                productName: item.productName,
+                sku: item.productSku || '',  // Map productSku to sku
+                currentStock: item.quantity || 0,  // Map quantity to currentStock
+                minStock: item.minStock || 5,
+                maxStock: item.maxStock || 100,
+                branch: item.branchName || 'Main Branch',
+                lastUpdated: item.lastUpdated || new Date().toISOString(),
+                productBarcode: item.productBarcode,
+                productDescription: item.productDescription,
+                productImage: item.productImage,
+                productImageUrl: item.productImageUrl,
+                productCategoryId: item.productCategoryId,
+                productCategoryName: item.productCategoryName,
+                productCategoryCode: item.productCategoryCode,
+                branchAddress: item.branchAddress,
+                branchPhone: item.branchPhone,
+                branchEmail: item.branchEmail
+              }));
+              // Deduplicate inventory items by ID to prevent duplicate keys
+              const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
+                index === self.findIndex((i: { id: any; }) => i.id === item.id)
+              );
+              setInventory(uniqueInventory);
+              setTotalPages(inventoryResult.pagination.totalPages || 1);
+            }
+          }
+          
+          // Load inventory summary with branch filtering
+          // Main admins can access all branches, other users only their assigned branch
+          const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+          const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
+          if (summaryResponse.ok) {
+            const summaryResult = await summaryResponse.json();
+            if (summaryResult.success) {
+              setSummary(summaryResult.data.summary);
+            }
+          }
+        } catch (error) {
+          console.error('Error reloading inventory data:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      loadDataInternal();
+    }
+  }, [inventoryPage, searchTerm, searchSKU, searchCategory, selectedBranch, showLowStock, showOutOfStock, userBranchId, isMainAdmin]);
+
+  // Subscribe to real-time updates using HTTP polling
+  useRealTimeUpdates('inventory', handleRealTimeUpdate);
 
   // Handle stock adjustment (increase/decrease)
   const handleStockAdjustment = async (id: string, adjustment: number) => {
@@ -224,227 +323,348 @@ export default function InventoryPage() {
       
       const newStock = item.currentStock + adjustment;
       if (newStock < 0) {
-        alert('Cannot reduce stock below zero');
+        alert('Stock cannot be negative');
         return;
       }
       
-      const response = await fetch(`/api/inventory/${id}`, {
-        method: 'PUT',
+      const response = await fetch(`/api/inventory/${id}/adjust`, {
+        method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          quantity: newStock,
-          notes: `Stock adjustment: ${adjustment > 0 ? '+' : ''}${adjustment}`
+          quantity: adjustment,
+          reason: adjustment > 0 ? 'Restock' : 'Adjustment'
         }),
       });
       
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
+      if (response.ok) {
         // Update local state
-        setInventory(inventory.map(i => 
-          i.id === id ? { ...i, currentStock: newStock, lastUpdated: new Date().toISOString() } : i
-        ));
-        alert('Stock adjusted successfully!');
+        setInventory(prev => 
+          prev.map(i => 
+            i.id === id ? { ...i, currentStock: i.currentStock + adjustment } : i
+          )
+        );
+        // Recalculate summary
+        setSummary(prev => ({
+          ...prev,
+          lowStockCount: prev.lowStockCount + (newStock < item.minStock ? 1 : 0),
+          outOfStockCount: prev.outOfStockCount + (newStock === 0 ? 1 : 0)
+        }));
       } else {
-        alert('Error adjusting stock: ' + result.message);
+        alert('Failed to adjust stock');
       }
     } catch (error) {
       console.error('Error adjusting stock:', error);
-      alert('Error adjusting stock: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+      alert('Error adjusting stock');
     }
   };
 
   // Handle adding new inventory item
-  const handleAddInventory = async () => {
+  const handleAddInventory = async (product: any, branchId: string, quantity: number) => {
     try {
-      // Get form values using more specific selectors
-      const productSelect = document.querySelector('select[name="productId"]') as HTMLSelectElement;
-      const currentStockInput = document.querySelector('input[name="currentStock"]') as HTMLInputElement;
-      const adjustmentInput = document.querySelector('input[name="adjustment"]') as HTMLInputElement;
-      const notesTextarea = document.querySelector('textarea[name="notes"]') as HTMLTextAreaElement;
-      
-      const productId = productSelect?.value;
-      const currentStock = parseInt(currentStockInput?.value || '0');
-      const adjustment = parseInt(adjustmentInput?.value || '0');
-      const notes = notesTextarea?.value || '';
-
-      if (!productId) {
-        alert('Please select a product');
-        return;
-      }
-      
-      // Get the selected product details
-      const selectedProduct = products.find(p => p.id === productId);
-      if (!selectedProduct) {
-        alert('Selected product not found');
-        return;
-      }
-      
-      // Calculate new stock level
-      const newStock = currentStock + adjustment;
-      if (newStock < 0) {
-        alert('Cannot reduce stock below zero');
-        return;
-      }
-      
-      // Create new inventory entry
       const response = await fetch('/api/inventory', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          productId: selectedProduct.id,
-          branchId: (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || 'brn_XNUWRgFLof', // Use user's branch ID if they're not main admin, then selected branch, then fallback
-          quantity: newStock,
-          minStock: 5, // Default minimum stock
-          maxStock: 100, // Default maximum stock
-          notes: notes || 'Initial stock adjustment'
+          productId: product.id,
+          branchId: branchId,
+          quantity: quantity,
+          minStock: product.minStock || 5,
+          maxStock: product.maxStock || 100
         }),
       });
       
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        // Add to local state
-        const newItem: InventoryItem = {
-          id: result.data.id,
-          productId: result.data.productId,
-          branchId: result.data.branchId,
-          productName: selectedProduct.name,
-          sku: selectedProduct.sku,
-          currentStock: newStock,
-          minStock: result.data.minStock,
-          maxStock: result.data.maxStock,
-          branch: result.data.branchName || 'Main Branch',
-          lastUpdated: new Date().toISOString()
+      if (response.ok) {
+        // Refresh the inventory data
+        const loadData = async () => {
+          setLoading(true);
+          try {
+            // Determine branch filter - main admins can access all branches, other users only their assigned branch
+            const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+            
+            // Load inventory items with proper branch filtering
+            // Only include branchId parameter when it's actually needed (not empty)
+            let inventoryUrl = `/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`;
+            if (branchFilter) {
+              inventoryUrl += `&branchId=${branchFilter}`;
+            }
+            if (showLowStock) {
+              inventoryUrl += `&lowStock=true`;
+            }
+            if (showOutOfStock) {
+              inventoryUrl += `&outOfStock=true`;
+            }
+            
+            const inventoryResponse = await fetch(inventoryUrl);
+            if (inventoryResponse.ok) {
+              const inventoryResult = await inventoryResponse.json();
+              if (inventoryResult.success) {
+                // Transform API response to match the InventoryItem interface
+                const formattedInventory = inventoryResult.data.map((item: any) => ({
+                  id: item.id,
+                  productId: item.productId,
+                  branchId: item.branchId,
+                  productName: item.productName,
+                  sku: item.productSku || '',  // Map productSku to sku
+                  currentStock: item.quantity || 0,  // Map quantity to currentStock
+                  minStock: item.minStock || 5,
+                  maxStock: item.maxStock || 100,
+                  branch: item.branchName || 'Main Branch',
+                  lastUpdated: item.lastUpdated || new Date().toISOString(),
+                  productBarcode: item.productBarcode,
+                  productDescription: item.productDescription,
+                  productImage: item.productImage,
+                  productImageUrl: item.productImageUrl,
+                  productCategoryId: item.productCategoryId,
+                  productCategoryName: item.productCategoryName,
+                  productCategoryCode: item.productCategoryCode,
+                  branchAddress: item.branchAddress,
+                  branchPhone: item.branchPhone,
+                  branchEmail: item.branchEmail
+                }));
+                // Deduplicate inventory items by ID to prevent duplicate keys
+                const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
+                  index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                );
+                setInventory(uniqueInventory);
+                setTotalPages(inventoryResult.pagination.totalPages || 1);
+              }
+            }
+            
+            // Load inventory summary with branch filtering
+            // Main admins can access all branches, other users only their assigned branch
+            const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+            const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
+            if (summaryResponse.ok) {
+              const summaryResult = await summaryResponse.json();
+              if (summaryResult.success) {
+                setSummary(summaryResult.data.summary);
+              }
+            }
+          } catch (error) {
+            console.error('Error reloading inventory data:', error);
+          } finally {
+            setLoading(false);
+          }
         };
         
-        setInventory([newItem, ...inventory]);
+        loadData();
         setIsAddDialogOpen(false);
-      alert('Inventory item added successfully!');
       } else {
-        alert('Error adding inventory item: ' + result.message);
+        // Check if response is JSON or HTML
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Unknown error';
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorResult = await response.json();
+          errorMessage = errorResult.message || 'Failed to add inventory';
+        } else {
+          // If not JSON, it might be an HTML error page
+          const errorText = await response.text();
+          console.error('Non-JSON response:', errorText);
+          errorMessage = 'Server error occurred';
+        }
+        
+        alert(`Failed to add inventory: ${errorMessage}`);
       }
     } catch (error) {
-      console.error('Error adding inventory item:', error);
-      alert('Error adding inventory item: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+      console.error('Error adding inventory:', error);
+      alert('Error adding inventory');
     }
   };
 
-  // Handle editing inventory item
-  const handleEditInventory = async () => {
-    if (!editingItem) return;
-    
+  // Handle editing inventory
+  const handleEditInventory = async (id: string, newQuantity: number) => {
     try {
-      // Get notes from textarea
-      const notesTextarea = document.querySelector('textarea[name="editNotes"]') as HTMLTextAreaElement;
-      const notes = notesTextarea?.value || 'Manual inventory update';
-      
-      const response = await fetch(`/api/inventory/${editingItem.id}`, {
+      const response = await fetch(`/api/inventory/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          quantity: editingItem.currentStock,
-          minStock: editingItem.minStock,
-          maxStock: editingItem.maxStock,
-          notes: notes
+          quantity: newQuantity
         }),
       });
       
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        // Update local state
-        setInventory(inventory.map(i => 
-          i.id === editingItem.id ? { ...editingItem } : i
-        ));
-        setIsEditDialogOpen(false);
-        setEditingItem(null);
-        alert('Inventory updated successfully!');
+      if (response.ok) {
+        setInventory(prev => 
+          prev.map(item => 
+            item.id === id ? { ...item, currentStock: newQuantity } : item
+          )
+        );
+        setEditingStockId(null);
+        setNewStockValue(0);
       } else {
-        alert('Error updating inventory: ' + result.message);
+        alert('Failed to update inventory');
       }
     } catch (error) {
       console.error('Error updating inventory:', error);
-      alert('Error updating inventory: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+      alert('Error updating inventory');
     }
   };
 
-  // Handle deleting inventory item
-  const handleDeleteInventory = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this inventory item?')) {
-      return;
-    }
-    
+  // Handle split stock
+  const handleSplitStock = async (id: string, targetBranchId: string, quantity: number) => {
     try {
-      const response = await fetch(`/api/inventory/${id}`, {
-        method: 'DELETE',
-      });
-      
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        // Remove from local state
-        setInventory(inventory.filter(i => i.id !== id));
-        alert('Inventory item deleted successfully!');
-      } else {
-        alert('Error deleting inventory item: ' + result.message);
-      }
-    } catch (error) {
-      console.error('Error deleting inventory item:', error);
-      alert('Error deleting inventory item: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
-    }
-  };
-
-  // Handle canceling stock adjustment
-  const handleCancelStockAdjustment = () => {
-    setEditingStockId(null);
-    setNewStockValue(0);
-  };
-
-  // Handle saving stock adjustment
-  const handleSaveStock = async (id: string, newStock: number) => {
-    try {
-      const item = inventory.find(i => i.id === id);
-      if (!item) {
-        alert('Inventory item not found');
-        return;
-      }
-
-      // Calculate the difference
-      const quantityDifference = newStock - item.currentStock;
-      const type = quantityDifference > 0 ? 'in' : quantityDifference < 0 ? 'out' : 'adjustment';
-
-      const response = await fetch('/api/inventory', {
+      const response = await fetch(`/api/inventory/${id}/split`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          productId: item.productId,
-          branchId: item.branchId,
-          quantity: Math.abs(quantityDifference),
-          type,
-          notes: `Inline stock adjustment from ${item.currentStock} to ${newStock}`
+          sourceBranchId: selectedBranch || userBranchId || '',
+          targetBranchId,
+          quantity,
+          userId: session?.user?.id || '' // Include user ID for role-based validation
         }),
       });
+      
+      if (response.ok) {
+        // Refresh the inventory data
+        const loadData = async () => {
+          setLoading(true);
+          try {
+            // Determine branch filter - main admins can access all branches, other users only their assigned branch
+            const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+            
+            // Load inventory items with proper branch filtering
+            // Only include branchId parameter when it's actually needed (not empty)
+            let inventoryUrl = `/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`;
+            if (branchFilter) {
+              inventoryUrl += `&branchId=${branchFilter}`;
+            }
+            if (showLowStock) {
+              inventoryUrl += `&lowStock=true`;
+            }
+            if (showOutOfStock) {
+              inventoryUrl += `&outOfStock=true`;
+            }
+            
+            const inventoryResponse = await fetch(inventoryUrl);
+            if (inventoryResponse.ok) {
+              const inventoryResult = await inventoryResponse.json();
+              if (inventoryResult.success) {
+                // Transform API response to match the InventoryItem interface
+                const formattedInventory = inventoryResult.data.map((item: any) => ({
+                  id: item.id,
+                  productId: item.productId,
+                  branchId: item.branchId,
+                  productName: item.productName,
+                  sku: item.productSku || '',  // Map productSku to sku
+                  currentStock: item.quantity || 0,  // Map quantity to currentStock
+                  minStock: item.minStock || 5,
+                  maxStock: item.maxStock || 100,
+                  branch: item.branchName || 'Main Branch',
+                  lastUpdated: item.lastUpdated || new Date().toISOString(),
+                  productBarcode: item.productBarcode,
+                  productDescription: item.productDescription,
+                  productImage: item.productImage,
+                  productImageUrl: item.productImageUrl,
+                  productCategoryId: item.productCategoryId,
+                  productCategoryName: item.productCategoryName,
+                  productCategoryCode: item.productCategoryCode,
+                  branchAddress: item.branchAddress,
+                  branchPhone: item.branchPhone,
+                  branchEmail: item.branchEmail
+                }));
+                // Deduplicate inventory items by ID to prevent duplicate keys
+                const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
+                  index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                );
+                setInventory(uniqueInventory);
+                setTotalPages(inventoryResult.pagination.totalPages || 1);
+              }
+            }
+            
+            // Load inventory summary with branch filtering
+            // Main admins can access all branches, other users only their assigned branch
+            const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+            const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
+            if (summaryResponse.ok) {
+              const summaryResult = await summaryResponse.json();
+              if (summaryResult.success) {
+                setSummary(summaryResult.data.summary);
+              }
+            }
+          } catch (error) {
+            console.error('Error reloading inventory data:', error);
+          } finally {
+            setLoading(false);
+          }
+        };
+        
+        loadData();
+        setIsSplitDialogOpen(false);
+        setSplittingItem(null);
+      } else {
+        // Check if response is JSON or HTML
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Unknown error';
+        
+        if (contentType && contentType.includes('application/json')) {
+          const errorResult = await response.json();
+          errorMessage = errorResult.message || 'Failed to split stock';
+        } else {
+          // If not JSON, it might be an HTML error page
+          const errorText = await response.text();
+          console.error('Non-JSON response:', errorText);
+          errorMessage = 'Server error occurred';
+        }
+        
+        alert(`Failed to split stock: ${errorMessage}`);
+      }
+    } catch (error) {
+      console.error('Error splitting stock:', error);
+      alert('Error splitting stock: ' + (error as Error).message);
+    }
+  };
 
+  // Handle stock adjustment
+  const handleAdjustStock = async () => {
+    if (!adjustingItem) return;
+    
+    try {
+      // Prepare the stock adjustment data
+      const adjustmentDataToSend = {
+        productId: adjustingItem.productId,
+        branchId: adjustingItem.branchId,
+        quantity: adjustmentData.quantity,
+        type: adjustmentData.type,
+        notes: adjustmentData.notes || 'Stock adjustment from inventory page'
+      };
+      
+      // Call the inventory API to adjust stock
+      const response = await fetch('/api/inventory', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(adjustmentDataToSend),
+      });
+      
       const result = await response.json();
-
+      
       if (response.ok && result.success) {
-        // Update local state
-        setInventory(inventory.map(i => 
-          i.id === id ? { ...i, currentStock: newStock, lastUpdated: new Date().toISOString() } : i
+        // Update the inventory in the local state with new stock level
+        setInventory(inventory.map(item => 
+          item.id === adjustingItem.id ? { 
+            ...item, 
+            currentStock: result.data.quantity,
+            lastUpdated: result.data.lastUpdated
+          } : item
         ));
         
-        // Exit edit mode
-        setEditingStockId(null);
-        setNewStockValue(0);
+        // Close the dialog and reset state
+        setIsAdjustDialogOpen(false);
+        setAdjustingItem(null);
+        setAdjustmentData({
+          quantity: 0,
+          type: 'adjustment',
+          notes: ''
+        });
         
         alert('Stock adjusted successfully!');
       } else {
@@ -452,537 +672,615 @@ export default function InventoryPage() {
       }
     } catch (error) {
       console.error('Error adjusting stock:', error);
-      alert('Error adjusting stock: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+      alert('Error adjusting stock: ' + (error as Error).message);
     }
   };
 
-  // Handle splitting inventory between branches
-  const handleSplitInventory = async () => {
-    if (!splittingItem || !session?.user?.id) return;
-    
-    try {
-      // Get form values
-      const targetBranchSelect = document.querySelector('select[name="targetBranch"]') as HTMLSelectElement;
-      const quantityInput = document.querySelector('input[name="splitQuantity"]') as HTMLInputElement;
-      const notesTextarea = document.querySelector('textarea[name="splitNotes"]') as HTMLTextAreaElement;
-      
-      const targetBranchId = targetBranchSelect?.value;
-      const quantity = parseInt(quantityInput?.value || '0');
-      const notes = notesTextarea?.value || '';
-      
-      if (!targetBranchId) {
-        alert('Please select a target branch');
-        return;
-      }
-      
-      if (quantity <= 0 || quantity > splittingItem.currentStock) {
-        alert(`Please enter a valid quantity (1-${splittingItem.currentStock})`);
-        return;
-      }
-      
-      const response = await fetch('/api/inventory/split', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          productId: splittingItem.productId,
-          sourceBranchId: splittingItem.branchId,
-          targetBranchId,
-          quantity,
-          notes,
-          userId: session.user.id // Pass the userId to track who initiated the request
-        }),
-      });
-      
-      const result = await response.json();
-      
-      if (response.ok && result.success) {
-        // Refresh the inventory data
-        setInventoryPage(1); // Reset to first page to refresh
-        setIsSplitDialogOpen(false);
-        setSplittingItem(null);
-        alert('Inventory split request submitted successfully!');
-      } else {
-        alert('Error submitting split request: ' + result.message);
-      }
-    } catch (error) {
-      console.error('Error splitting inventory:', error);
-      alert('Error submitting split request: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+  // Pagination handlers
+  const handlePreviousPage = () => {
+    if (inventoryPage > 1) {
+      setInventoryPage(prev => prev - 1);
+    }
+  };
+
+  const handleNextPage = () => {
+    if (inventoryPage < totalPages) {
+      setInventoryPage(prev => prev + 1);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <p>Loading inventory data...</p>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-2xl font-semibold">Loading inventory...</div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Inventory</h1>
-          <p className="text-gray-500">Manage stock levels across branches</p>
-        </div>
-        
-        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Adjust Stock
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Adjust Stock</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div>
-                <label className="text-sm font-medium">Product</label>
-                <select className="w-full p-2 border rounded-md" name="productId">
-                  <option value="">Select a product</option>
-                  {products.map(product => (
-                    <option key={product.id} value={product.id}>
-                      {product.name} - {product.sku}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Current Stock</label>
-                  <Input type="number" placeholder="Current stock" name="currentStock" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Adjustment</label>
-                  <Input type="number" placeholder="Adjustment amount" name="adjustment" />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Notes</label>
-                <textarea 
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter adjustment notes"
-                  name="notes"
-                  rows={2}
-                />
-              </div>
-            </div>
-            <Button onClick={handleAddInventory}>Adjust Stock</Button>
-          </DialogContent>
-        </Dialog>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold">Inventory Management</h1>
+        <p className="text-gray-600">Manage your product stock across all branches</p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <Package className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Products</p>
-                <p className="text-2xl font-bold">{summary.totalProducts}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Products</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.totalProducts}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="bg-yellow-100 p-3 rounded-full">
-                <AlertTriangle className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Low Stock</p>
-                <p className="text-2xl font-bold">{summary.lowStockCount}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.lowStockCount}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="bg-red-100 p-3 rounded-full">
-                <TrendingDown className="h-6 w-6 text-red-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Out of Stock</p>
-                <p className="text-2xl font-bold">{summary.outOfStockCount}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.outOfStockCount}</div>
           </CardContent>
         </Card>
-
         <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="bg-green-100 p-3 rounded-full">
-                <TrendingUp className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Overstocked</p>
-                <p className="text-2xl font-bold">{summary.overstockCount}</p>
-              </div>
-            </div>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Overstock</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{summary.overstockCount}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Search and Filter Bar */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+      {/* Filters */}
+      <Card className="mb-6">
+        <CardContent className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+            <div>
               <Input
-                placeholder="Search by product name..."
+                placeholder="Search products..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8"
               />
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div>
               <Input
-                placeholder="Filter by SKU..."
+                placeholder="Search by SKU..."
                 value={searchSKU}
                 onChange={(e) => setSearchSKU(e.target.value)}
               />
+            </div>
+            <div>
               <Input
-                placeholder="Filter by category..."
+                placeholder="Search by Category..."
                 value={searchCategory}
                 onChange={(e) => setSearchCategory(e.target.value)}
               />
+            </div>
+            <div>
               <select
-                className="p-2 border rounded-md"
                 value={selectedBranch}
                 onChange={(e) => setSelectedBranch(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded"
               >
                 <option value="">All Branches</option>
-                {branchList.map(branch => (
+                {branchList.map((branch: any) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
                   </option>
                 ))}
               </select>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setShowLowStock(!showLowStock)}
-                className={showLowStock ? "bg-yellow-100 border-yellow-300" : ""}
-              >
-                <AlertTriangle className="h-4 w-4 mr-2" />
-                Low Stock
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowOutOfStock(!showOutOfStock)}
-                className={showOutOfStock ? "bg-red-100 border-red-300" : ""}
-              >
-                <TrendingDown className="h-4 w-4 mr-2" />
-                Out of Stock
-              </Button>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="showLowStock"
+                checked={showLowStock}
+                onChange={(e) => setShowLowStock(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="showLowStock">Low Stock Only</label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="showOutOfStock"
+                checked={showOutOfStock}
+                onChange={(e) => setShowOutOfStock(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <label htmlFor="showOutOfStock">Out of Stock Only</label>
             </div>
           </div>
         </CardContent>
       </Card>
 
+      {/* Controls */}
+      <div className="flex justify-between mb-4">
+        <div className="flex space-x-2">
+          <RefreshButton onRefresh={async () => {
+            const loadData = async () => {
+              setLoading(true);
+              try {
+                // Determine branch filter - main admins can access all branches, other users only their assigned branch
+                const branchFilter = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+                
+                // Load inventory items with proper branch filtering
+                // Only include branchId parameter when it's actually needed (not empty)
+                let inventoryUrl = `/api/inventory?page=${inventoryPage}&limit=10&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`;
+                if (branchFilter) {
+                  inventoryUrl += `&branchId=${branchFilter}`;
+                }
+                if (showLowStock) {
+                  inventoryUrl += `&lowStock=true`;
+                }
+                if (showOutOfStock) {
+                  inventoryUrl += `&outOfStock=true`;
+                }
+                
+                const inventoryResponse = await fetch(inventoryUrl);
+                if (inventoryResponse.ok) {
+                  const inventoryResult = await inventoryResponse.json();
+                  if (inventoryResult.success) {
+                    // Transform API response to match the InventoryItem interface
+                    const formattedInventory = inventoryResult.data.map((item: any) => ({
+                      id: item.id,
+                      productId: item.productId,
+                      branchId: item.branchId,
+                      productName: item.productName,
+                      sku: item.productSku || '',  // Map productSku to sku
+                      currentStock: item.quantity || 0,  // Map quantity to currentStock
+                      minStock: item.minStock || 5,
+                      maxStock: item.maxStock || 100,
+                      branch: item.branchName || 'Main Branch',
+                      lastUpdated: item.lastUpdated || new Date().toISOString(),
+                      productBarcode: item.productBarcode,
+                      productDescription: item.productDescription,
+                      productImage: item.productImage,
+                      productImageUrl: item.productImageUrl,
+                      productCategoryId: item.productCategoryId,
+                      productCategoryName: item.productCategoryName,
+                      productCategoryCode: item.productCategoryCode,
+                      branchAddress: item.branchAddress,
+                      branchPhone: item.branchPhone,
+                      branchEmail: item.branchEmail
+                    }));
+                    // Deduplicate inventory items by ID to prevent duplicate keys
+                    const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
+                      index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                    );
+                    setInventory(uniqueInventory);
+                    setTotalPages(inventoryResult.pagination.totalPages || 1);
+                  }
+                }
+                
+                // Load inventory summary with branch filtering
+                // Main admins can access all branches, other users only their assigned branch
+                const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
+                const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
+                if (summaryResponse.ok) {
+                  const summaryResult = await summaryResponse.json();
+                  if (summaryResult.success) {
+                    setSummary(summaryResult.data.summary);
+                  }
+                }
+              } catch (error) {
+                console.error('Error reloading inventory data:', error);
+              } finally {
+                setLoading(false);
+              }
+            };
+            
+            await loadData();
+          }} />
+        </div>
+        <div className="flex space-x-2">
+          <Button onClick={() => setIsAddDialogOpen(true)}>
+            Add New Item
+          </Button>
+        </div>
+      </div>
+
       {/* Inventory Table */}
       <Card>
-        <CardHeader>
-          <CardTitle>Inventory List</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Branch</TableHead>
-                <TableHead>Current Stock</TableHead>
-                <TableHead>Min Stock</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Last Updated</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {inventory.length === 0 ? (
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
-                    <div className="flex flex-col items-center justify-center">
-                      <Package className="h-12 w-12 text-gray-300 mb-2" />
-                      <p className="text-gray-500">No inventory items found</p>
-                      <p className="text-sm text-gray-400 mt-1">
-                        {searchTerm || selectedBranch ? 'Try adjusting your search or filter criteria' : 'Add products to get started'}
-                      </p>
-                    </div>
-                  </TableCell>
+                  <TableHead>Product</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Branch</TableHead>
+                  <TableHead>Current Stock</TableHead>
+                  <TableHead>Min Stock</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ) : (
-                inventory.map((item) => {
+              </TableHeader>
+              <TableBody>
+                {inventory.map((item) => {
                   const stockStatus = getStockStatus(item.currentStock, item.minStock);
                   return (
-                    <TableRow 
-                      key={item.id} 
-                      className={stockStatus.status === "out" ? "bg-red-50" : 
-                                stockStatus.status === "low" ? "bg-yellow-50" : ""}
-                    >
+                    <TableRow key={item.id}>
                       <TableCell className="font-medium">{item.productName}</TableCell>
                       <TableCell>{item.sku}</TableCell>
                       <TableCell>{item.branch}</TableCell>
                       <TableCell>
                         {editingStockId === item.id ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center space-x-2">
                             <Input
                               type="number"
                               value={newStockValue}
-                              onChange={(e) => setNewStockValue(parseInt(e.target.value) || 0)}
-                              className="w-20"
-                              min="0"
+                              onChange={(e) => setNewStockValue(Number(e.target.value))}
+                              className="w-24"
                             />
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleSaveStock(item.id, newStockValue)}
+                            <Button
+                              onClick={() => handleEditInventory(item.id, newStockValue)}
+                              size="sm"
                             >
                               Save
                             </Button>
-                            <Button 
-                              size="sm" 
+                            <Button
+                              onClick={() => {
+                                setEditingStockId(null);
+                                setNewStockValue(0);
+                              }}
                               variant="outline"
-                              onClick={handleCancelStockAdjustment}
+                              size="sm"
                             >
                               Cancel
                             </Button>
                           </div>
                         ) : (
-                          <span className={stockStatus.status === "out" ? "text-red-600 font-bold" : ""}>
-                            {item.currentStock}
-                          </span>
+                          <div className="flex items-center">
+                            <span className="mr-2">{item.currentStock}</span>
+                            <StockMovementIndicator 
+                              productId={item.productId}
+                              branchId={item.branchId}
+                              initialValue={stockMovements[item.id]?.initialValue || item.currentStock} 
+                              currentValue={item.currentStock} 
+                            />
+                          </div>
                         )}
                       </TableCell>
                       <TableCell>{item.minStock}</TableCell>
                       <TableCell>
-                        <Badge variant={stockStatus.variant as "default" | "outline" | "destructive" | "secondary"}>
-                          {stockStatus.status === "out"
-                            ? "Out of Stock"
-                            : stockStatus.status === "low"
-                            ? "Low Stock"
-                            : stockStatus.status === "moderate"
-                            ? "Moderate"
-                            : "Good"}
+                        <Badge variant={stockStatus.variant as any}>
+                          {stockStatus.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          <Button 
-                            variant="outline" 
+                        <div className="flex space-x-2">
+                          <Button
                             size="sm"
+                            variant="outline"
                             onClick={() => {
-                              setEditingItem(item);
-                              setIsEditDialogOpen(true);
+                              setEditingStockId(item.id);
+                              setNewStockValue(item.currentStock);
                             }}
                           >
-                            <Edit className="h-4 w-4" />
+                            <Package className="h-4 w-4 mr-2" />
+                            Edit
                           </Button>
-                          <Button 
-                            variant="outline" 
+                          <Button
                             size="sm"
+                            variant="outline"
                             onClick={() => {
                               setSplittingItem(item);
                               setIsSplitDialogOpen(true);
                             }}
                           >
-                            <Package className="h-4 w-4" />
+                            <TrendingUp className="h-4 w-4 mr-2" />
+                            Split
                           </Button>
-                          <Button 
-                            variant="outline" 
+                          <Button
                             size="sm"
-                            onClick={() => handleDeleteInventory(item.id)}
+                            variant="outline"
+                            onClick={() => {
+                              setAdjustingItem(item);
+                              setAdjustmentData({
+                                quantity: 0,
+                                type: 'adjustment',
+                                notes: ''
+                              });
+                              setIsAdjustDialogOpen(true);
+                            }}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Package className="h-4 w-4 mr-2" />
+                            Adjust
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
                   );
-                })
-              )}
-            </TableBody>
-          </Table>
-          
-          {/* Pagination */}
-          <div className="flex justify-between items-center mt-4">
-            <div className="text-sm text-gray-500">
-              Showing page {inventoryPage} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setInventoryPage(prev => Math.max(prev - 1, 1))}
-                disabled={inventoryPage === 1}
-              >
-                Previous
-              </Button>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setInventoryPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={inventoryPage === totalPages}
-              >
-                Next
-              </Button>
-            </div>
+                })}
+              </TableBody>
+            </Table>
           </div>
         </CardContent>
       </Card>
 
-      {/* Edit Inventory Dialog */}
-      {isEditDialogOpen && editingItem && (
-        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Edit Inventory Item</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div>
-                <label className="text-sm font-medium">Product</label>
-                <Input 
-                  value={`${editingItem.productName} (${editingItem.sku})`} 
-                  readOnly 
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Branch</label>
-                <Input 
-                  value={editingItem.branch} 
-                  readOnly 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Current Stock</label>
-                  <Input 
-                    type="number" 
-                    value={editingItem.currentStock}
-                    onChange={(e) => setEditingItem({...editingItem, currentStock: parseInt(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Min Stock</label>
-                  <Input 
-                    type="number" 
-                    value={editingItem.minStock}
-                    onChange={(e) => setEditingItem({...editingItem, minStock: parseInt(e.target.value) || 0})}
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Max Stock</label>
-                  <Input 
-                    type="number" 
-                    value={editingItem.maxStock}
-                    onChange={(e) => setEditingItem({...editingItem, maxStock: parseInt(e.target.value) || 0})}
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Last Updated</label>
-                  <Input 
-                    value={new Date(editingItem.lastUpdated).toLocaleDateString()}
-                    readOnly
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Notes</label>
-                <textarea 
-                  name="editNotes"
-                  className="w-full p-2 border rounded-md" 
-                  placeholder="Enter adjustment notes"
-                  rows={3}
-                  defaultValue={editingItem.notes || ''}
-                />
-              </div>
-            </div>
-            <Button onClick={handleEditInventory}>Update Inventory</Button>
-          </DialogContent>
-        </Dialog>
-      )}
+      {/* Pagination */}
+      <div className="flex justify-between items-center mt-4">
+        <div>
+          Page {inventoryPage} of {totalPages}
+        </div>
+        <div className="flex space-x-2">
+          <Button
+            onClick={handlePreviousPage}
+            disabled={inventoryPage === 1}
+          >
+            Previous
+          </Button>
+          <Button
+            onClick={handleNextPage}
+            disabled={inventoryPage === totalPages}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
 
-      {/* Split Inventory Dialog */}
-      {isSplitDialogOpen && splittingItem && (
+      {/* Add Inventory Dialog */}
+      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Inventory Item</DialogTitle>
+          </DialogHeader>
+          <div className="p-4">
+            <form onSubmit={(e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target as HTMLFormElement);
+              // Handle form submission here
+            }}>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Product</label>
+                  <select className="w-full p-2 border border-gray-300 rounded">
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Branch</label>
+                  <select className="w-full p-2 border border-gray-300 rounded">
+                    {branchList.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Quantity</label>
+                  <Input type="number" name="quantity" />
+                </div>
+                <Button type="submit">Add Item</Button>
+              </div>
+            </form>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Split Stock Dialog */}
+      {splittingItem && (
         <Dialog open={isSplitDialogOpen} onOpenChange={setIsSplitDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Split Inventory</DialogTitle>
+              <DialogTitle>Split Stock: {splittingItem.productName}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div>
-                <label className="text-sm font-medium">Product</label>
-                <Input 
-                  value={`${splittingItem.productName} (${splittingItem.sku})`} 
-                  readOnly 
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Product</label>
+                  <Input 
+                    value={splittingItem.productName} 
+                    readOnly 
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">SKU</label>
+                  <Input 
+                    value={splittingItem.sku} 
+                    readOnly 
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Source Branch</label>
-                <Input 
-                  value={splittingItem.branch} 
-                  readOnly 
-                />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Current Branch</label>
+                  <Input 
+                    value={splittingItem.branch} 
+                    readOnly 
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Current Stock</label>
+                  <Input 
+                    value={splittingItem.currentStock} 
+                    readOnly 
+                  />
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium">Current Stock</label>
-                <Input 
-                  value={splittingItem.currentStock} 
-                  readOnly 
-                />
-              </div>
+              
               <div>
                 <label className="text-sm font-medium">Target Branch</label>
                 <select 
-                  name="targetBranch"
+                  name="targetBranch" 
                   className="w-full p-2 border rounded-md"
+                  defaultValue=""
                 >
-                  <option value="">Select target branch</option>
-                  {branchList.filter(b => b.id !== splittingItem.branchId).map(branch => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
+                  <option value="">Select target branch...</option>
+                  {branchList
+                    .filter((branch: any) => branch.id !== splittingItem.branchId)
+                    .map((branch: any) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
                 </select>
               </div>
+              
               <div>
-                <label className="text-sm font-medium">Quantity to Transfer</label>
+                <label className="text-sm font-medium">Quantity to Split</label>
                 <Input 
-                  name="splitQuantity"
-                  type="number" 
-                  placeholder="Enter quantity to transfer"
-                  min="1"
-                  max={splittingItem.currentStock}
+                  type="number"
+                  name="quantity"
+                  min="1" 
+                  max={splittingItem.currentStock} 
+                  placeholder={`Enter quantity (max: ${splittingItem.currentStock})`}
                 />
               </div>
+              
               <div>
-                <label className="text-sm font-medium">Notes</label>
+                <label className="text-sm font-medium">Notes (Optional)</label>
                 <textarea 
-                  name="splitNotes"
+                  name="notes"
                   className="w-full p-2 border rounded-md" 
-                  placeholder="Enter transfer notes"
+                  placeholder="Add any notes about this split..."
                   rows={3}
                 />
               </div>
             </div>
-            <Button onClick={handleSplitInventory}>Split Inventory</Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsSplitDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={() => {
+                  const targetBranch = (document.querySelector('select[name="targetBranch"]') as HTMLSelectElement).value;
+                  const quantity = Number((document.querySelector('input[name="quantity"]') as HTMLInputElement).value);
+                  const notes = (document.querySelector('textarea[name="notes"]') as HTMLTextAreaElement)?.value || '';
+                  
+                  if (!targetBranch) {
+                    alert('Please select a target branch');
+                    return;
+                  }
+                  
+                  if (!quantity || quantity <= 0 || quantity > splittingItem.currentStock) {
+                    alert(`Please enter a valid quantity between 1 and ${splittingItem.currentStock}`);
+                    return;
+                  }
+                  
+                  handleSplitStock(splittingItem.id, targetBranch, quantity);
+                  setIsSplitDialogOpen(false);
+                }}
+              >
+                Split Stock
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      
+      {/* Adjust Stock Dialog */}
+      {adjustingItem && (
+        <Dialog open={isAdjustDialogOpen} onOpenChange={setIsAdjustDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adjust Stock: {adjustingItem.productName}</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Product</label>
+                  <Input 
+                    value={adjustingItem.productName} 
+                    readOnly 
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">SKU</label>
+                  <Input 
+                    value={adjustingItem.sku} 
+                    readOnly 
+                  />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Current Stock</label>
+                  <Input 
+                    value={adjustingItem.currentStock} 
+                    readOnly 
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Adjustment Type</label>
+                  <select 
+                    className="w-full p-2 border rounded-md"
+                    value={adjustmentData.type}
+                    onChange={(e) => setAdjustmentData({
+                      ...adjustmentData, 
+                      type: e.target.value as 'in' | 'out' | 'adjustment'
+                    })}
+                  >
+                    <option value="in">Stock In</option>
+                    <option value="out">Stock Out</option>
+                    <option value="adjustment">Adjustment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Quantity</label>
+                  <Input 
+                    type="number"
+                    value={adjustmentData.quantity}
+                    onChange={(e) => setAdjustmentData({
+                      ...adjustmentData, 
+                      quantity: parseInt(e.target.value) || 0
+                    })}
+                    min="0"
+                    placeholder="Enter quantity"
+                  />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Notes</label>
+                <textarea 
+                  className="w-full p-2 border rounded-md" 
+                  placeholder="Enter adjustment notes"
+                  value={adjustmentData.notes}
+                  onChange={(e) => setAdjustmentData({
+                    ...adjustmentData, 
+                    notes: e.target.value
+                  })}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setIsAdjustDialogOpen(false);
+                  setAdjustingItem(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleAdjustStock}
+              >
+                Adjust Stock
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       )}

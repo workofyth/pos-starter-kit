@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,11 +13,10 @@ import {
   TableRow 
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { useRealTimeUpdates } from "@/hooks/use-real-time-updates";import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { RefreshButton } from "@/components/refresh-button";
 import { 
   Search, 
-  Check,
-  X,
   Package,
   TrendingDown,
   TrendingUp,
@@ -63,7 +62,11 @@ export default function ApprovalsPage() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  // Default to 'pending' status to only show pending approval requests by default
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  
+  // State for stock movement tracking
+  const [stockMovements, setStockMovements] = useState<Record<string, {initialValue: number, currentValue: number}>>({});
 
   // Load user's branch information
   useEffect(() => {
@@ -88,13 +91,17 @@ export default function ApprovalsPage() {
     fetchUserBranchInfo();
   }, [session]);
 
-  // Load approvals based on active tab
+  // Load approvals based on active tab and user context
+  // For sub-branches, this will automatically filter to show only relevant requests (incoming/outgoing)
   useEffect(() => {
     const loadApprovals = async () => {
       if (!session?.user?.id) return;
       
       setLoading(true);
       try {
+        // The API automatically filters requests based on user role and branch assignment
+        // Sub-branches will only see requests relevant to their branch (incoming or outgoing)
+        // Main admins see all requests across all branches
         const response = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
         if (response.ok) {
           const result = await response.json();
@@ -112,6 +119,37 @@ export default function ApprovalsPage() {
 
     loadApprovals();
   }, [session, approvalsPage, searchTerm, activeTab]);
+
+  // Real-time updates for approvals
+  // Define the real-time update handler before using it in the hook
+  const handleRealTimeUpdate = useCallback((data: any) => {
+    if (data.type === 'approval_updated' || data.type === 'stock_split_approved' || data.type === 'stock_split_rejected') {
+      // Reload approvals to reflect the latest changes
+      const loadApprovals = async () => {
+        if (!session?.user?.id) return;
+        
+        try {
+          const response = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success) {
+              setApprovals(result.data);
+              setTotalPages(result.pagination.totalPages || 1);
+            }
+          }
+        } catch (error) {
+          console.error('Error reloading approvals:', error);
+        }
+      };
+
+      loadApprovals();
+    }
+  }, [session, approvalsPage, activeTab, searchTerm]);
+
+  // Subscribe to real-time updates using HTTP polling
+  useRealTimeUpdates('approvals', handleRealTimeUpdate);
+
+  // Handle approval action
 
   // Handle approval action
   const handleApprovalAction = async (id: string, action: 'approve' | 'reject', reason?: string) => {
@@ -312,6 +350,30 @@ export default function ApprovalsPage() {
                 className="pl-8"
               />
             </div>
+            <RefreshButton 
+              onRefresh={async () => {
+                // Create a simplified reload function
+                const reloadApprovals = async () => {
+                  setLoading(true);
+                  try {
+                    const response = await fetch(`/api/approvals?userId=${session?.user?.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
+                    if (response.ok) {
+                      const result = await response.json();
+                      if (result.success) {
+                        setApprovals(result.data);
+                        setTotalPages(result.pagination.totalPages || 1);
+                      }
+                    }
+                  } catch (error) {
+                    console.error('Error reloading approvals:', error);
+                  } finally {
+                    setLoading(false);
+                  }
+                };
+
+                await reloadApprovals();
+              }}
+            />
           </div>
         </CardContent>
       </Card>
@@ -320,10 +382,17 @@ export default function ApprovalsPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            {activeTab === 'pending' && 'Pending Approval Requests'}
-            {activeTab === 'approved' && 'Approved Requests'}
-            {activeTab === 'rejected' && 'Rejected Requests'}
+            {activeTab === 'pending' && 'Pending Stock Transfer Requests'}
+            {activeTab === 'approved' && 'Approved Stock Transfers'}
+            {activeTab === 'rejected' && 'Rejected Stock Transfers'}
           </CardTitle>
+          {activeTab === 'pending' && (
+            <p className="text-sm text-gray-500">
+              {userBranchType === 'sub' 
+                ? 'Showing only pending stock transfer requests for your branch' 
+                : 'Showing all pending stock transfer requests'}
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <Table>
@@ -398,14 +467,14 @@ export default function ApprovalsPage() {
                               size="sm"
                               onClick={() => handleApprovalAction(request.id, 'approve')}
                             >
-                              <Check className="h-4 w-4" />
+                              <CheckCircle className="h-4 w-4" />
                             </Button>
                             <Button 
                               variant="outline" 
                               size="sm"
                               onClick={() => openRejectDialog(request)}
                             >
-                              <X className="h-4 w-4" />
+                              <XCircle className="h-4 w-4" />
                             </Button>
                           </>
                         ) : request.status === 'rejected' ? (
@@ -554,14 +623,14 @@ export default function ApprovalsPage() {
                     variant="default" 
                     onClick={() => handleApprovalAction(selectedRequest.id, 'approve')}
                   >
-                    <Check className="h-4 w-4 mr-2" />
+                    <CheckCircle className="h-4 w-4 mr-2" />
                     Approve
                   </Button>
                   <Button 
                     variant="destructive" 
                     onClick={() => openRejectDialog(selectedRequest)}
                   >
-                    <X className="h-4 w-4 mr-2" />
+                    <XCircle className="h-4 w-4 mr-2" />
                     Reject
                   </Button>
                 </div>
@@ -625,7 +694,7 @@ export default function ApprovalsPage() {
                 variant="destructive" 
                 onClick={handleRejectWithReason}
               >
-                <X className="h-4 w-4 mr-2" />
+                <XCircle className="h-4 w-4 mr-2" />
                 Reject Request
               </Button>
             </div>

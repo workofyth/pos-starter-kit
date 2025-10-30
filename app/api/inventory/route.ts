@@ -47,14 +47,29 @@ export async function GET(request: NextRequest) {
     // If requestedBranchId is specified and it's not the user's assigned branch and they're not main admin,
     // we should reject the request
     
-    // Build query with joins
-    let query = db
+    // Validate and sanitize query parameters
+    const sanitizedParams = {
+      page: Math.max(1, page),
+      limit: Math.min(100, Math.max(1, limit)), // Cap limit at 100 for performance
+      search: search ? search.trim() : '',
+      sku: sku ? sku.trim() : '',
+      category: category ? category.trim() : '',
+      requestedBranchId: requestedBranchId ? requestedBranchId.trim() : '',
+      lowStock: lowStock === 'true',
+      outOfStock: outOfStock === 'true',
+      sortBy: ['productName', 'quantity', 'lastUpdated'].includes(sortBy) ? sortBy : 'productName',
+      sortOrder: ['asc', 'desc'].includes(sortOrder) ? sortOrder : 'asc'
+    };
+    
+    // Simplified query structure for better performance and clarity
+    let baseQuery = db
       .select({
         id: inventory.id,
         productId: inventory.productId,
         branchId: inventory.branchId,
         quantity: inventory.quantity,
         minStock: inventory.minStock,
+        maxStock: inventory.maxStock,
         lastUpdated: inventory.lastUpdated,
         createdAt: inventory.createdAt,
         updatedAt: inventory.updatedAt,
@@ -68,76 +83,83 @@ export async function GET(request: NextRequest) {
         productCategoryName: categories.name,
         productCategoryCode: categories.code,
         branchName: branches.name,
-        branchAddress: branches.address
+        branchAddress: branches.address,
+        branchPhone: branches.phone,
+        branchEmail: branches.email
       })
       .from(inventory)
       .leftJoin(products, eq(inventory.productId, products.id))
       .leftJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .limit(limit)
-      .offset(offset);
+      .limit(sanitizedParams.limit)
+      .offset((sanitizedParams.page - 1) * sanitizedParams.limit);
     
-    // Apply filters
+    // Apply filters with proper validation using sanitized parameters
     let whereConditions = [];
     
-    if (search) {
+    if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
       whereConditions.push(
-        ilike(products.name, `%${search}%`)
+        ilike(products.name, `%${sanitizedParams.search.trim()}%`)
       );
     }
     
-    if (sku) {
+    if (sanitizedParams.sku && sanitizedParams.sku.trim() !== '') {
       whereConditions.push(
-        ilike(products.sku, `%${sku}%`)
+        ilike(products.sku, `%${sanitizedParams.sku.trim()}%`)
       );
     }
     
-    if (category) {
+    if (sanitizedParams.category && sanitizedParams.category.trim() !== '') {
       whereConditions.push(
-        ilike(categories.name, `%${category}%`)
+        ilike(categories.name, `%${sanitizedParams.category.trim()}%`)
       );
     }
     
-    // This is where we would apply the branch access validation
-    // For now, we'll just use the requested branch ID
-    if (requestedBranchId) {
-      whereConditions.push(eq(inventory.branchId, requestedBranchId));
+    // Branch filtering - apply only when requestedBranchId is provided and not empty
+    if (sanitizedParams.requestedBranchId && sanitizedParams.requestedBranchId.trim() !== '') {
+      whereConditions.push(eq(inventory.branchId, sanitizedParams.requestedBranchId.trim()));
     }
     
-    if (lowStock === 'true') {
+    if (sanitizedParams.lowStock === true) {
       whereConditions.push(
         sql`${inventory.quantity} <= ${inventory.minStock} AND ${inventory.quantity} > 0`
       );
     }
     
-    if (outOfStock === 'true') {
+    if (sanitizedParams.outOfStock === true) {
       whereConditions.push(eq(inventory.quantity, 0));
     }
     
+    // Apply where conditions if any exist and are not empty
     if (whereConditions.length > 0) {
-      query = query.where(and(...whereConditions)) as typeof query;
+      // Filter out any empty conditions
+      const filteredConditions = whereConditions.filter(condition => condition !== undefined);
+      if (filteredConditions.length > 0) {
+        baseQuery = baseQuery.where(and(...filteredConditions)) as typeof baseQuery;
+      }
     }
     
-    // Apply sorting
-    if (sortBy === 'productName') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(products.name)) as typeof query
-        : query.orderBy(desc(products.name)) as typeof query;
-    } else if (sortBy === 'quantity') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(inventory.quantity)) as typeof query
-        : query.orderBy(desc(inventory.quantity)) as typeof query;
-    } else if (sortBy === 'lastUpdated') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(inventory.lastUpdated)) as typeof query
-        : query.orderBy(desc(inventory.lastUpdated)) as typeof query;
+    // Apply sorting with proper validation using sanitized parameters
+    if (sanitizedParams.sortBy === 'productName') {
+      baseQuery = sanitizedParams.sortOrder === 'asc' 
+        ? baseQuery.orderBy(asc(products.name)) as typeof baseQuery
+        : baseQuery.orderBy(desc(products.name)) as typeof baseQuery;
+    } else if (sanitizedParams.sortBy === 'quantity') {
+      baseQuery = sanitizedParams.sortOrder === 'asc' 
+        ? baseQuery.orderBy(asc(inventory.quantity)) as typeof baseQuery
+        : baseQuery.orderBy(desc(inventory.quantity)) as typeof baseQuery;
+    } else if (sanitizedParams.sortBy === 'lastUpdated') {
+      baseQuery = sanitizedParams.sortOrder === 'asc' 
+        ? baseQuery.orderBy(asc(inventory.lastUpdated)) as typeof baseQuery
+        : baseQuery.orderBy(desc(inventory.lastUpdated)) as typeof baseQuery;
     } else {
-      query = query.orderBy(desc(inventory.lastUpdated)) as typeof query;
+      // Default sorting by last updated descending
+      baseQuery = baseQuery.orderBy(desc(inventory.lastUpdated)) as typeof baseQuery;
     }
     
-    const inventoryList = await query;
+    const inventoryList = await baseQuery;
     
-    // Get total count for pagination
+    // Get total count for pagination with proper filtering using sanitized parameters
     let countQuery: any = db
       .select({ count: count() })
       .from(inventory)
@@ -145,62 +167,68 @@ export async function GET(request: NextRequest) {
       .leftJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(categories, eq(products.categoryId, categories.id));
     
+    // Apply the same filtering conditions to the count query using sanitized parameters
     let countWhereConditions = [];
     
-    if (search) {
+    if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
       countWhereConditions.push(
-        ilike(products.name, `%${search}%`)
+        ilike(products.name, `%${sanitizedParams.search.trim()}%`)
       );
     }
     
-    if (sku) {
+    if (sanitizedParams.sku && sanitizedParams.sku.trim() !== '') {
       countWhereConditions.push(
-        ilike(products.sku, `%${sku}%`)
+        ilike(products.sku, `%${sanitizedParams.sku.trim()}%`)
       );
     }
     
-    if (category) {
+    if (sanitizedParams.category && sanitizedParams.category.trim() !== '') {
       countWhereConditions.push(
-        ilike(categories.name, `%${category}%`)
+        ilike(categories.name, `%${sanitizedParams.category.trim()}%`)
       );
     }
     
-    // Apply the same branch filter for the count query
-    if (requestedBranchId) {
-      countWhereConditions.push(eq(inventory.branchId, requestedBranchId));
+    // Apply branch filter to count query using sanitized parameters
+    if (sanitizedParams.requestedBranchId && sanitizedParams.requestedBranchId.trim() !== '') {
+      countWhereConditions.push(eq(inventory.branchId, sanitizedParams.requestedBranchId.trim()));
     }
     
-    if (lowStock === 'true') {
+    if (sanitizedParams.lowStock === true) {
       countWhereConditions.push(
         sql`${inventory.quantity} <= ${inventory.minStock} AND ${inventory.quantity} > 0`
       );
     }
     
-    if (outOfStock === 'true') {
+    if (sanitizedParams.outOfStock === true) {
       countWhereConditions.push(eq(inventory.quantity, 0));
     }
     
+    // Apply where conditions to count query if any exist and are not empty
     if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions));
+      // Filter out any empty conditions
+      const filteredConditions = countWhereConditions.filter(condition => condition !== undefined);
+      if (filteredConditions.length > 0) {
+        countQuery = countQuery.where(and(...filteredConditions));
+      }
     }
     
     const totalCountResult = await countQuery;
     const totalCount = typeof totalCountResult[0].count === 'number' 
       ? totalCountResult[0].count 
       : parseInt(totalCountResult[0].count as string);
-    const totalPages = Math.ceil(totalCount / limit);
+    const totalPages = Math.ceil(totalCount / sanitizedParams.limit);
     
     return new Response(
       JSON.stringify({
         success: true,
         data: inventoryList,
         pagination: {
-          page,
-          limit,
+          page: sanitizedParams.page,
+          limit: sanitizedParams.limit,
           totalCount,
           totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
+          hasNext: sanitizedParams.page < totalPages,
+          hasPrev: sanitizedParams.page > 1
         }
       }),
       { 
