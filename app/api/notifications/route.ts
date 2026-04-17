@@ -101,7 +101,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions));
+      countQuery = countQuery.where(and(...countWhereConditions)) as typeof countQuery;
     }
     
     const totalCountResult = await countQuery;

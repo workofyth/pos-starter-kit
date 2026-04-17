@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       // Filter out any undefined conditions
       const validCountConditions = countWhereConditions.filter(condition => condition !== undefined);
       if (validCountConditions.length > 0) {
-        countQuery = countQuery.where(and(...validCountConditions));
+        countQuery = countQuery.where(and(...validCountConditions)) as typeof countQuery;
       }
     }
     

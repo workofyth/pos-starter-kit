@@ -211,7 +211,7 @@ export async function GET(request: NextRequest) {
       // Filter out any empty conditions
       const filteredConditions = countWhereConditions.filter(condition => condition !== undefined);
       if (filteredConditions.length > 0) {
-        countQuery = countQuery.where(and(...filteredConditions));
+        countQuery = countQuery.where(and(...filteredConditions)) as typeof countQuery;
       }
     }
     

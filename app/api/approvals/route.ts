@@ -358,7 +358,7 @@ export async function GET(request: NextRequest) {
               eq(inventoryTransactions.referenceId, userBranchId)
             )
           )
-        );
+        ) as typeof countQuery;
       }
     }
 
