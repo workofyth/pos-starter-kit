@@ -13,8 +13,13 @@ interface RealTimeNotification {
   message: string;
   timestamp: Date;
   read: boolean;
-  data?: unknown;
+  data?: any;
 }
+
+const playNotificationSound = () => {
+  const audio = new Audio('/sounds/notification.mp3');
+  audio.play().catch(error => console.error('Error playing sound:', error));
+};
 
 export function RealTimeNotificationBanner() {
   const [notifications, setNotifications] = useState<RealTimeNotification[]>([]);
@@ -60,6 +65,34 @@ export function RealTimeNotificationBanner() {
       setUserBranchDataLoaded(true);
     }
   }, [session, isPending]);
+  
+  // Fetch unread notifications from database on mount
+  useEffect(() => {
+    if (!session?.user?.id || isPending || !userBranchDataLoaded) return;
+
+    const fetchUnreadNotifications = async () => {
+      try {
+        const url = `/api/notifications?branchId=${userBranchId || ''}&userId=${session.user.id}&isRead=false&limit=5`;
+        const response = await fetch(url);
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data.length > 0) {
+            const formattedNotifs = result.data.map((n: any) => ({
+              ...n,
+              timestamp: new Date(n.createdAt),
+              read: n.isRead
+            }));
+            setNotifications(formattedNotifs);
+            setIsVisible(true);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching unread notifications:', error);
+      }
+    };
+
+    fetchUnreadNotifications();
+  }, [session, isPending, userBranchDataLoaded, userBranchId]);
 
   // Set up real-time notifications using Server Sent Events (SSE)
   useEffect(() => {
@@ -68,47 +101,40 @@ export function RealTimeNotificationBanner() {
     let eventSource: EventSource | null = null;
 
     const connectToSSE = () => {
-      // Check if EventSource is available in the environment
       if (typeof EventSource !== 'undefined') {
-        // In a real implementation, you would connect to a specific user's notification channel
-        // For now, we'll connect to a general notification stream
-        eventSource = new EventSource('/api/notifications/sse');
+        const sseUrl = userBranchId 
+          ? `/api/notifications/sse?branchId=${userBranchId}`
+          : '/api/notifications/sse';
+          
+        eventSource = new EventSource(sseUrl);
         
         eventSource.onmessage = (event) => {
           try {
             const notificationData = JSON.parse(event.data);
-            
-            // Only process specific notification types
-            if ([
-              'stock_split_request',
-              'stock_split_approved', 
-              'stock_split_rejected',
-              'stock_split_resent'
-            ].includes(notificationData.type)) {
-              // Ensure timestamp is a Date object (convert from string if needed)
+            if (notificationData.type === 'stock_split_request' || 
+                notificationData.type === 'stock_split_approved' || 
+                notificationData.type === 'stock_split_rejected' || 
+                notificationData.type === 'stock_split_resent') {
+              
               const processedNotification = {
                 ...notificationData,
-                timestamp: notificationData.timestamp instanceof Date 
-                  ? notificationData.timestamp 
-                  : new Date(notificationData.timestamp)
+                id: notificationData.id || `notif_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+                timestamp: notificationData.timestamp ? new Date(notificationData.timestamp) : new Date()
               };
               
-              // Add the new notification to the list
               setNotifications(prev => {
-                const updatedNotifications = [processedNotification, ...prev.slice(0, 4)]; // Keep only last 5
-                
-                // Show the banner for new notifications
+                const updatedNotifications = [processedNotification, ...prev.slice(0, 4)];
+                playNotificationSound();
                 setIsVisible(true);
                 
-                // Auto-hide after 5 seconds
                 setTimeout(() => {
-                  // Hide the banner only if no other relevant notifications exist
-                  const activeNotifications = updatedNotifications.filter(n => 
-                    ['stock_split_request', 'stock_split_approved', 'stock_split_rejected', 'stock_split_resent'].includes(n.type)
-                  );
-                  if (activeNotifications.length <= 1) {
-                    setIsVisible(false);
-                  }
+                  setNotifications(currentNotifs => {
+                    const activeCount = currentNotifs.filter(n => 
+                      ['stock_split_request', 'stock_split_approved', 'stock_split_rejected', 'stock_split_resent'].includes(n.type)
+                    ).length;
+                    if (activeCount <= 1) setIsVisible(false);
+                    return currentNotifs;
+                  });
                 }, 5000);
                 
                 return updatedNotifications;
@@ -120,11 +146,15 @@ export function RealTimeNotificationBanner() {
         };
 
         eventSource.onerror = (error) => {
-          console.error('SSE connection error:', error);
-          eventSource?.close();
-          
-          // Retry connection after a delay
-          setTimeout(connectToSSE, 5000);
+          // Only log if connection was actually established then lost, 
+          // or if it's a persistent failure
+          if (eventSource?.readyState === EventSource.CLOSED) {
+            console.warn('SSE connection was closed, will reconnect automatically...');
+          } else if (eventSource?.readyState === EventSource.CONNECTING) {
+            // This is normal during reconnection
+          } else {
+            console.error('SSE connection error:', error);
+          }
         };
       }
     };
@@ -137,93 +167,30 @@ export function RealTimeNotificationBanner() {
         eventSource.close();
       }
     };
-  }, [session, isPending, userBranchDataLoaded]);
+  }, [session, isPending, userBranchDataLoaded, userBranchId]);
   
-  // Simulate receiving real-time notifications for split stock events only
+  // Simulation removed to ensure only real notifications are shown
   useEffect(() => {
-    // In a real implementation, this would connect to your SSE or WebSocket
-    // For now, we'll just simulate periodic notifications for split stock events only
-    
-    if (isPending || !userBranchDataLoaded) return; // Don't process notifications until session and user branch data are loaded
-    
-    // In a real implementation, we would use SSE or WebSocket to receive notifications
-    // For now, we'll set up an event listener or simulate receiving notifications
-    
-    // Simulate receiving notifications via a global event or SSE
-    // This is just to demonstrate how the banner would work in a real scenario
-    const interval = setInterval(() => {
-      // Randomly generate demo notifications for split stock events only
-      // Reduce the frequency further to make it less intrusive
-      if (Math.random() > 0.95) { // 5% chance of a new notification (much less frequent)
-        const notificationTypes: RealTimeNotification['type'][] = [
-          'stock_split_request',    // Split stock request
-          'stock_split_approved',   // Approve split stock
-          'stock_split_rejected',   // Reject split stock
-          'stock_split_resent'      // Resend split stock
-        ];
-        
-        const randomType = notificationTypes[Math.floor(Math.random() * notificationTypes.length)];
-        const messages = {
-          'stock_split_request': 'New stock transfer request received',
-          'stock_split_approved': 'Stock transfer approved',
-          'stock_split_rejected': 'Stock transfer rejected',
-          'stock_split_resent': 'Stock transfer resent for approval'
-        };
-        
-        const titles = {
-          'stock_split_request': 'New Stock Request',
-          'stock_split_approved': 'Transfer Approved', 
-          'stock_split_rejected': 'Transfer Rejected',
-          'stock_split_resent': 'Transfer Resent'
-        };
-        
-        // Generate a unique ID using timestamp and random number
-        const uniqueId = `notif_${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
-        
-        // In a real implementation, the data would come from the SSE/notifications API
-        // and would be targeted specifically to the user based on their role and branch
-        const newNotification: RealTimeNotification = {
-          id: uniqueId,
-          type: randomType,
-          title: titles[randomType],
-          message: messages[randomType],
-          timestamp: new Date(),
-          read: false,
-          data: {
-            productId: `prod_${Math.random().toString(36).substr(2, 9)}`,
-            quantity: Math.floor(Math.random() * 100) + 1,
-            branch: ['Main Branch', 'Sub Branch A', 'Sub Branch B'][Math.floor(Math.random() * 3)],
-            // For demonstration purposes, simulate branch data
-            sourceBranch: 'Sub Branch A',
-            targetBranch: 'Main Branch'
-          }
-        };
-        
-        // Add the notification to the list but don't immediately show the banner
-        setNotifications(prev => {
-          const updatedNotifications = [newNotification, ...prev.slice(0, 4)]; // Keep only last 5
-          
-          // Only show the banner for new notifications
-          setIsVisible(true);
-          
-          // Auto-hide after 5 seconds
-          setTimeout(() => {
-            // Hide the banner only if no other relevant notifications exist
-            const activeNotifications = updatedNotifications.filter(n => 
-              ['stock_split_request', 'stock_split_approved', 'stock_split_rejected', 'stock_split_resent'].includes(n.type)
-            );
-            if (activeNotifications.length <= 1) {
-              setIsVisible(false);
-            }
-          }, 5000);
-          
-          return updatedNotifications;
-        });
-      }
-    }, 30000); // Check every 30 seconds (much less frequent)
-    
-    return () => clearInterval(interval);
+    // This effect is now empty as we are using true real-time SSE via Redis Pub/Sub
   }, [isPending, userBranchDataLoaded]);
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      // Mark as read in local state first for immediate UI response
+      setNotifications(prev => prev.filter(n => n.id !== id));
+      
+      // Update in database
+      await fetch('/api/notifications', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id, isRead: true }),
+      });
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
 
   const getNotificationIcon = (type: RealTimeNotification['type']) => {
     switch (type) {
@@ -305,7 +272,7 @@ export function RealTimeNotificationBanner() {
               variant="ghost" 
               size="sm"
               className="h-6 w-6 p-0 ml-2"
-              onClick={() => setNotifications(prev => prev.filter(n => n.id !== notification.id))}
+              onClick={() => handleMarkAsRead(notification.id)}
             >
               ×
             </Button>

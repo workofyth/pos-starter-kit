@@ -38,6 +38,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <RedisInitializer />
+          <RealTimeNotificationBanner />
           {children}
         </ThemeProvider>
       </body>

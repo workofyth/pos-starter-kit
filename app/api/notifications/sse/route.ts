@@ -1,72 +1,80 @@
 import { NextRequest } from 'next/server';
+import { getRedis } from '@/lib/redis';
+
+export const dynamic = 'force-dynamic';
 
 // GET - Server Sent Events endpoint for real-time notifications
 export async function GET(request: NextRequest) {
-  const headers = {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'Access-Control-Allow-Origin': '*',
+  const { searchParams } = new URL(request.url);
+  const branchId = searchParams.get('branchId');
+  
+  const responseStream = new TransformStream();
+  const writer = responseStream.writable.getWriter();
+  const encoder = new TextEncoder();
+
+  const sendEvent = async (data: any) => {
+    try {
+      await writer.write(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+    } catch (e) {
+      // Stream closed
+    }
   };
 
-  // Create a readable stream for SSE
-  const stream = new ReadableStream({
-    start(controller) {
-      // Send initial connection event
-      const sendEvent = (data: unknown) => {
-        const encodedData = `data: ${JSON.stringify(data)}\n\n`;
-        controller.enqueue(new TextEncoder().encode(encodedData));
-      };
+  const headers = {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  };
 
-      sendEvent({ type: 'connected', message: 'Connected to notification stream' });
+  const redis = await getRedis();
+  if (!redis) {
+    return new Response('Redis not available', { status: 500 });
+  }
 
-      // In a real implementation, you would subscribe to a Redis channel or database notifications
-      // and push updates to the client when they occur
-      
-      // For demonstration purposes, we'll send a periodic event
-      const interval = setInterval(() => {
-        // Randomly generate events to simulate real notifications
-        if (Math.random() > 0.9) { // 10% chance of event every 15 seconds to make it more realistic
-          const notificationTypes = [
-            'stock_split_request',
-            'stock_split_approved',
-            'stock_split_rejected',
-            'stock_split_resent'
-          ];
-          
-          const randomType = notificationTypes[Math.floor(Math.random() * notificationTypes.length)];
-          
-          const newNotification = {
-            id: `notif_${Date.now()}_${Math.floor(Math.random() * 1000000)}`,
-            type: randomType,
-            title: randomType === 'stock_split_request' ? 'New Stock Request' :
-                   randomType === 'stock_split_approved' ? 'Transfer Approved' :
-                   randomType === 'stock_split_rejected' ? 'Transfer Rejected' : 'Transfer Resent',
-            message: randomType === 'stock_split_request' ? 'New stock transfer request received' :
-                     randomType === 'stock_split_approved' ? 'Stock transfer approved' :
-                     randomType === 'stock_split_rejected' ? 'Stock transfer rejected' :
-                     'Stock transfer resent for approval',
-            timestamp: new Date(),
-            data: {
-              productId: `prod_${Math.random().toString(36).substr(2, 9)}`,
-              quantity: Math.floor(Math.random() * 100) + 1,
-              sourceBranch: 'Sub Branch A',
-              targetBranch: 'Main Branch'
-            }
-          };
-          
-          sendEvent(newNotification);
-        }
-      }, 15000); // Check every 15 seconds
-      
-      // Handle connection close
-      request.signal.onabort = () => {
-        console.log('SSE connection closed by client');
-        clearInterval(interval);
-        controller.close();
-      };
-    },
-  });
+  // Define handler outside for removal
+  const handleMessage = (message: string) => {
+    try {
+      const data = JSON.parse(message);
+      if (data.type === 'notification') {
+        sendEvent({
+          ...data.notification,
+          timestamp: new Date()
+        });
+      }
+    } catch (error) {
+      console.error('[SSE] Error parsing Redis message:', error);
+    }
+  };
 
-  return new Response(stream, { headers });
+  // Channels
+  const branchChannel = branchId ? `channel:notifications:${branchId}` : null;
+  const globalChannel = 'channel:notifications:all';
+
+  // Subscription setup
+  const setupSubscription = async () => {
+    if (branchChannel) await redis.subscribe(branchChannel, handleMessage);
+    await redis.subscribe(globalChannel, handleMessage);
+    
+    await sendEvent({ type: 'connected', message: 'Connected to notification stream' });
+  };
+
+  setupSubscription();
+
+  // Ping interval
+  const pingInterval = setInterval(() => {
+    sendEvent({ type: 'ping' });
+  }, 30000);
+
+  // Clean up
+  request.signal.onabort = async () => {
+    clearInterval(pingInterval);
+    if (branchChannel) await redis.unsubscribe(branchChannel, handleMessage);
+    await redis.unsubscribe(globalChannel, handleMessage);
+    try {
+      await writer.close();
+    } catch (e) {}
+  };
+
+  return new Response(responseStream.readable, { headers });
 }

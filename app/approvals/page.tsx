@@ -122,7 +122,7 @@ export default function ApprovalsPage() {
 
   // Real-time updates for approvals
   // Define the real-time update handler before using it in the hook
-  const handleRealTimeUpdate = useCallback((data: { type: string }) => {
+  const handleRealTimeUpdate = useCallback((data: any) => {
     if (data.type === 'approval_updated' || data.type === 'stock_split_approved' || data.type === 'stock_split_rejected') {
       // Reload approvals to reflect the latest changes
       const loadApprovals = async () => {

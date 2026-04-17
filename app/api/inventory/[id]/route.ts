@@ -9,10 +9,10 @@ import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
 // GET - Get specific inventory item details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return new Response(
@@ -118,10 +118,10 @@ export async function GET(
 // PUT - Update inventory item (stock level, min stock, etc.) or handle split request approval/rejection
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     
     if (!id) {
@@ -649,10 +649,10 @@ async function handleSplitRequestApproval(id: string, body: {
 // DELETE - Delete inventory item (usually not recommended, better to set quantity to 0)
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return new Response(
@@ -721,10 +721,10 @@ export async function DELETE(
 // POST - Split inventory from one branch to another (specific inventory item)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     
     if (!id) {

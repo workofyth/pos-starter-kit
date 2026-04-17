@@ -8,10 +8,10 @@ import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
 // POST - Split inventory from one branch to another (specific inventory item split endpoint)
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: inventoryId } = params;
+    const { id: inventoryId } = await params;
     const body = await request.json();
     
     if (!inventoryId) {
@@ -294,10 +294,10 @@ export async function POST(
 // PUT - Handle split request approval or rejection (for specific inventory item splits)
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: transactionId } = params; // This should be the transaction ID, not inventory ID
+    const { id: transactionId } = await params; // This should be the transaction ID, not inventory ID
     const body = await request.json();
     
     if (!transactionId) {

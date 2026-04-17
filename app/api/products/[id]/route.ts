@@ -5,9 +5,9 @@ import { eq, and, or, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // GET a single product by ID
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return new Response(
@@ -90,9 +90,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 }
 
 // PUT - Update a product by ID
-export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     
     if (!id) {
@@ -256,7 +256,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
               purchasePrice: purchasePrice !== undefined ? purchasePrice.toString() : existingPrice[0].purchasePrice,
               sellingPrice: sellingPrice !== undefined ? sellingPrice.toString() : existingPrice[0].sellingPrice,
               branchId: branchId, // Update branchId if available
-              updatedAt: new Date()
+              effectiveDate: new Date()
             })
             .where(eq(productPrices.productId, id));
         } else {
@@ -372,9 +372,9 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 }
 
 // DELETE a product by ID
-export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     
     if (!id) {
       return new Response(

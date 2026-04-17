@@ -31,7 +31,11 @@ export async function broadcastToBranch(branchId: string, notification: Notifica
       const redis = await getRedis();
       if (redis) {
         const key = `notifications:${branchId}`;
-        await redis.lpush(key, JSON.stringify({ type: 'notification', notification }));
+        const notificationPayload = JSON.stringify({ type: 'notification', notification });
+        await redis.lpush(key, notificationPayload);
+        
+        // Publish to channel for real-time subscribers
+        await redis.publish(`channel:notifications:${branchId}`, notificationPayload);
         
         // Trim list to keep only last 100 notifications
         await redis.ltrim(key, 0, 99);
@@ -84,7 +88,11 @@ export async function broadcastToAll(notification: NotificationData) {
       const redis = await getRedis();
       if (redis) {
         const key = `notifications:all`;
-        await redis.lpush(key, JSON.stringify({ type: 'notification', notification }));
+        const notificationPayload = JSON.stringify({ type: 'notification', notification });
+        await redis.lpush(key, notificationPayload);
+        
+        // Publish to global channel
+        await redis.publish(`channel:notifications:all`, notificationPayload);
         
         // Trim list to keep only last 100 notifications
         await redis.ltrim(key, 0, 99);
