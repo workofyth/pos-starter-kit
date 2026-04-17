@@ -236,7 +236,7 @@ export default function InventoryPage() {
   }, [inventoryPage, searchTerm, searchSKU, searchCategory, selectedBranch, showLowStock, showOutOfStock, userBranchId, isMainAdmin]);
 
   // Define the real-time update handler before using it in the hook
-  const handleRealTimeUpdate = useCallback((data: { type: string }) => {
+  const handleRealTimeUpdate = useCallback((data: any) => {
     if (data.type === 'inventory_updated' || data.type === 'stock_split_completed' || data.type === 'stock_adjustment') {
       // Reload inventory to reflect the latest changes
       const loadDataInternal = async () => {

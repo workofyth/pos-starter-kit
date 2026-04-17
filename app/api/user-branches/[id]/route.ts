@@ -6,10 +6,10 @@ import { eq, and } from 'drizzle-orm';
 // GET - Get user's branch data (role, branchId, etc.)
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id: userId } = params;
+    const { id: userId } = await params;
     
     if (!userId) {
       return new Response(
