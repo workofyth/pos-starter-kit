@@ -15,12 +15,25 @@ import { UserRole } from "@/lib/role-based-access";
 import { useEffect, useState } from "react";
 import { NotificationMenu } from "@/components/notification-menu";
 
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  SheetClose,
+} from "@/components/ui/sheet";
+import { useNavigationItems } from "@/hooks/use-navigation-items";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
+
 export function Header() {
   const { theme, setTheme } = useTheme();
   const { data: session, isPending } = useSession();
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [branchType, setBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const { pathname, filteredItems } = useNavigationItems();
 
   // Fetch user role and branch information
   useEffect(() => {
@@ -60,27 +73,69 @@ export function Header() {
     fetchUserBranchInfo();
   }, [session]);
 
+  const MobileNav = () => (
+    <Sheet>
+      <SheetTrigger asChild>
+        <Button variant="outline" size="icon">
+          <span className="sr-only">Open menu</span>
+          <svg
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M4 6h16M4 12h16M4 18h16"
+            ></path>
+          </svg>
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-64 p-0">
+        <SheetHeader className="p-4 border-b">
+          <SheetTitle className="text-xl font-bold">POS System</SheetTitle>
+        </SheetHeader>
+        <nav className="mt-4">
+          <ul className="space-y-1 px-2">
+            {filteredItems.map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+              const Icon = item.icon;
+
+              return (
+                <li key={item.href}>
+                  <SheetClose asChild>
+                    <Link href={item.href}>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full justify-start space-x-2 px-4 py-3 rounded-lg",
+                          isActive 
+                            ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200" 
+                            : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                        )}
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span>{item.title}</span>
+                      </Button>
+                    </Link>
+                  </SheetClose>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      </SheetContent>
+    </Sheet>
+  );
+
   if (isPending) {
     return (
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
         <div className="flex items-center gap-4">
           <div className="md:hidden">
-            <Button variant="outline" size="icon">
-              <span className="sr-only">Open menu</span>
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                ></path>
-              </svg>
-            </Button>
+            <MobileNav />
           </div>
         </div>
         <div className="flex items-center gap-4 ml-auto">
@@ -112,22 +167,7 @@ export function Header() {
       <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
         <div className="flex items-center gap-4">
           <div className="md:hidden">
-            <Button variant="outline" size="icon">
-              <span className="sr-only">Open menu</span>
-              <svg
-                className="h-5 w-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 6h16M4 12h16M4 18h16"
-                ></path>
-              </svg>
-            </Button>
+            <MobileNav />
           </div>
         </div>
         <div className="flex items-center gap-4 ml-auto">
@@ -166,22 +206,7 @@ export function Header() {
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
       <div className="flex items-center gap-4">
         <div className="md:hidden">
-          <Button variant="outline" size="icon">
-            <span className="sr-only">Open menu</span>
-            <svg
-              className="h-5 w-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M4 6h16M4 12h16M4 18h16"
-              ></path>
-            </svg>
-          </Button>
+          <MobileNav />
         </div>
       </div>
       <div className="flex items-center gap-4 ml-auto">
