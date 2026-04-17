@@ -2,7 +2,11 @@ import { createAuthClient } from "better-auth/react";
 import { useMemo } from "react";
 
 export const authClient = createAuthClient({
-    baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000",
+    baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL?.startsWith('http') 
+        ? process.env.NEXT_PUBLIC_BETTER_AUTH_URL 
+        : process.env.NEXT_PUBLIC_VERCEL_URL 
+            ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` 
+            : "http://localhost:3000",
 });
 
 export const {
