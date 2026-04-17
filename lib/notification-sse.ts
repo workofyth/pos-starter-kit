@@ -6,7 +6,7 @@ export interface ConnectionWriter {
   write?: (chunk: Uint8Array) => Promise<void>;
   enqueue?: (chunk: Uint8Array) => void;
   close?: () => void;
-  [key: string]: any; // Allow other properties
+  [key: string]: unknown; // Allow other properties
 }
 
 // Local fallback for development environments
@@ -17,7 +17,7 @@ interface NotificationData {
   title: string;
   message: string;
   type: string;
-  data?: any;
+  data?: unknown;
 }
 
 // Function to broadcast notification to a specific branch
@@ -145,7 +145,7 @@ export function addConnection(branchId: string, writer: ConnectionWriter) {
 }
 
 // Function to poll for new notifications in a branch (for real-time updates)
-export async function pollForNotifications(branchId: string, callback: (notification: any) => void) {
+export async function pollForNotifications(branchId: string, callback: (notification: unknown) => void) {
   // Only poll in-memory storage on server-side
   if (typeof window === 'undefined') {
     try {

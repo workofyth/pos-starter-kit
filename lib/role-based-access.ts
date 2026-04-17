@@ -7,19 +7,19 @@ export type UserRole = 'admin' | 'manager' | 'cashier' | 'staff' | 'guest';
 export interface MenuItem {
   title: string;
   url: string;
-  icon?: any;
+  icon?: unknown;
   items?: MenuItem[];
 }
 
 export interface DocumentItem {
   name: string;
   url: string;
-  icon: any;
+  icon: unknown;
 }
 
 export interface NavCloudItem {
   title: string;
-  icon: any;
+  icon: unknown;
   url: string;
   isActive?: boolean;
   items?: {

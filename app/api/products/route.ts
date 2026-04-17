@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply search filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (search) {
       whereConditions.push(ilike(products.name, `%${search}%`));
@@ -101,13 +101,13 @@ export async function GET(request: NextRequest) {
     const productList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(inventory, eq(products.id, inventory.productId));
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (search) {
       countWhereConditions.push(ilike(products.name, `%${search}%`));
@@ -201,7 +201,7 @@ export async function POST(request: NextRequest) {
     
     // Check for duplicate SKU and auto-generate if it exists
     let finalSku = sku;
-    let skuExists = true;
+    const skuExists = true;
     let skuNumber = 0;
     
     // If SKU has a numeric suffix (like ABC00001), we'll increment it

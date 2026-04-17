@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply search filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (search) {
       whereConditions.push(ilike(branches.name, `%${search}%`));
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
       .select({ count: count() })
       .from(branches);
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (search) {
       countWhereConditions.push(ilike(branches.name, `%${search}%`));

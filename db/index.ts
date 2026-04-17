@@ -31,6 +31,7 @@ if (!connectionString) {
 
 const pool = new Pool({
   connectionString,
+  ssl: connectionString.includes('supabase') ? { rejectUnauthorized: false } : undefined,
 });
 
 // Export the database instance with schema

@@ -69,7 +69,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (search) {
       whereConditions.push(ilike(products.name, `%${search}%`));
@@ -107,14 +107,14 @@ export async function GET(request: NextRequest) {
     const searchResults = await query;
     
     // Get total count for pagination
-    let countQuery : any= db
+    let countQuery = db
       .select({ count: count() })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(productPrices, eq(products.id, productPrices.productId))
       .leftJoin(inventory, eq(products.id, inventory.productId));
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (search) {
       countWhereConditions.push(ilike(products.name, `%${search}%`));

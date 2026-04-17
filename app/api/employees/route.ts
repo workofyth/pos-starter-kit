@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply search filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (search) {
       whereConditions.push(ilike(user.name, `%${search}%`));
@@ -108,13 +108,13 @@ export async function GET(request: NextRequest) {
     const employeesList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(user)
       .leftJoin(userBranches, eq(user.id, userBranches.userId))
       .leftJoin(branches, eq(userBranches.branchId, branches.id));
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (search) {
       countWhereConditions.push(ilike(user.name, `%${search}%`));
@@ -137,7 +137,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions));
+      countQuery = countQuery.where(and(...countWhereConditions)) as typeof countQuery;
     }
     
     const totalCountResult = await countQuery;

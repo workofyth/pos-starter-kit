@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const branchId = searchParams.get('branchId') || '';
     
     // Build where conditions
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (branchId) {
       whereConditions.push(eq(inventory.branchId, branchId));

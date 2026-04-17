@@ -165,20 +165,20 @@ export default function ProductsPage() {
           const result = await response.json();
           if (result.success) {
             // Transform API response to match the Product interface
-            const formattedProducts = result.data.map((apiProduct: any) => ({
-              id: apiProduct.id,
-              name: apiProduct.name,
-              sku: apiProduct.sku,
-              barcode: apiProduct.barcode,
-              category: apiProduct.categoryName || '',
-              categoryId: apiProduct.categoryId,
-              purchasePrice: parseFloat(apiProduct.purchasePrice) || 0,
-              sellingPrice: parseFloat(apiProduct.sellingPrice) || 0,
-              stock: apiProduct.stock || 0,
-              minStock: apiProduct.minStock || 5,
-              profitMargin: parseFloat(apiProduct.profitMargin) || 0,
-              image: apiProduct.image,
-              imageUrl: apiProduct.imageUrl
+            const formattedProducts = result.data.map((apiProduct: Record<string, unknown>) => ({
+              id: String(apiProduct.id || ''),
+              name: String(apiProduct.name || ''),
+              sku: String(apiProduct.sku || ''),
+              barcode: String(apiProduct.barcode || ''),
+              category: String(apiProduct.categoryName || ''),
+              categoryId: String(apiProduct.categoryId || ''),
+              purchasePrice: parseFloat(apiProduct.purchasePrice as string) || 0,
+              sellingPrice: parseFloat(apiProduct.sellingPrice as string) || 0,
+              stock: Number(apiProduct.stock) || 0,
+              minStock: Number(apiProduct.minStock) || 5,
+              profitMargin: parseFloat(apiProduct.profitMargin as string) || 0,
+              image: apiProduct.image as string,
+              imageUrl: apiProduct.imageUrl as string
             }));
             setProducts(formattedProducts);
           }

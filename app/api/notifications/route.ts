@@ -56,10 +56,11 @@ export async function GET(request: NextRequest) {
       .leftJoin(branches, eq(notifications.branchId, branches.id))
       .orderBy(desc(notifications.createdAt))
       .limit(limit)
-      .offset(offset);
+      .offset(offset)
+      .$dynamic();
     
     // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (branchId) {
       whereConditions.push(eq(notifications.branchId, branchId));
@@ -74,17 +75,18 @@ export async function GET(request: NextRequest) {
     }
     
     if (whereConditions.length > 0) {
-      query = query.where(and(...whereConditions)) as typeof query;
+      query = query.where(and(...whereConditions));
     }
     
     const notificationList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
-      .from(notifications);
+      .from(notifications)
+      .$dynamic();
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (branchId) {
       countWhereConditions.push(eq(notifications.branchId, branchId));

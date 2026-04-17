@@ -14,7 +14,8 @@ import {
   Building,
   User,
   Check, // Add the missing Check icon import
-  Bell
+  Bell,
+  type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
@@ -25,7 +26,7 @@ import { useEffect, useState } from "react";
 type SidebarItem = {
   title: string;
   href: string;
-  icon: any;
+  icon: LucideIcon;
   hideForSubBranch?: boolean; // Add property to hide for sub branch users
 };
 

@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
       .from(categories);
     
     if (search) {
-       countQuery.where(ilike(categories.name, `%${search}%`));
+       countQuery = countQuery.where(ilike(categories.name, `%${search}%`)) as typeof countQuery;
     }
     
     const totalCountResult = await countQuery;

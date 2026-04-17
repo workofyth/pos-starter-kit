@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     }
 
     const userRole = userBranchResponse[0].role;
-    const userBranchId = userBranchResponse[0].branchId;
+    // const userBranchId = userBranchResponse[0].branchId;
 
     if (userRole !== 'admin' && userRole !== 'manager' && userRole !== 'staff') {
       return new Response(
@@ -224,7 +224,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
 
     const userId = searchParams.get('userId') || '';
-    const branchId = searchParams.get('branchId') || '';
+    // const branchId = searchParams.get('branchId') || ''; // Removed unused variable
     const status = searchParams.get('status') || 'pending';
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
@@ -263,7 +263,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Build base query
-    let query: any = db
+    let query = db
       .select({
         id: inventoryTransactions.id,
         productId: inventoryTransactions.productId,
@@ -292,7 +292,8 @@ export async function GET(request: NextRequest) {
       ))
       .orderBy(desc(inventoryTransactions.createdAt))
       .limit(limit)
-      .offset(offset);
+      .offset(offset)
+      .$dynamic();
 
     // Filter by branch (for sub-branch users)
     if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
@@ -325,13 +326,14 @@ export async function GET(request: NextRequest) {
     const approvalRequests = await query;
 
     // total count
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: sql<number>`count(*)`.as('count') })
       .from(inventoryTransactions)
       .where(and(
         eq(inventoryTransactions.type, 'split'),
         eq(inventoryTransactions.status, status)
-      ));
+      ))
+      .$dynamic();
 
     if ((userRole === 'manager' || userRole === 'staff' || userRole === 'cashier') && userBranchId) {
       const [userBranchInfo] = await db
@@ -456,7 +458,25 @@ export async function PUT(request: NextRequest) {
       .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id))
       .where(eq(inventoryTransactions.id, id));
 
-    const approvalReq = result[0] as any;
+    const approvalReq = result[0] as {
+      id: string;
+      productId: string;
+      branchId: string;
+      referenceId: string | null;
+      quantity: number;
+      type: string;
+      notes: string | null;
+      status: string;
+      createdAt: Date | null;
+      updatedAt: Date | null;
+      createdBy: string | null;
+      approvedBy: string | null;
+      productName: string | null;
+      sourceBranchName: string | null;
+      sourceBranchType: string | null;
+      targetBranchName?: string | null;
+      targetBranchType?: string | null;
+    } | undefined;
 
     if (approvalReq && approvalReq.referenceId) {
       const targetBranchResult = await db
@@ -593,7 +613,7 @@ export async function PUT(request: NextRequest) {
       const [targetInventory] = await db
         .select()
         .from(inventory)
-        .where(and(...(conditions as any)));
+        .where(and(...(conditions as import('drizzle-orm').SQL[])));
 
       if (!targetInventory) {
         await db.insert(inventory).values({

@@ -1,12 +1,12 @@
 // In-memory Redis client implementation - server-side only
-type RedisValue = string | number | boolean | object | any[] | Set<any>;
+type RedisValue = string | number | boolean | object | unknown[] | Set<unknown> | unknown;
 
 class InMemoryRedis {
   private store: Map<string, RedisValue> = new Map();
   private listeners: Map<string, Set<(message: string) => void>> = new Map();
 
   // List operations
-  async lpush(key: string, value: any): Promise<number> {
+  async lpush(key: string, value: unknown): Promise<number> {
     if (!this.store.has(key)) {
       this.store.set(key, []);
     }
@@ -20,7 +20,7 @@ class InMemoryRedis {
     return 1;
   }
 
-  async setex(key: string, seconds: number, value: any): Promise<string> {
+  async setex(key: string, seconds: number, value: unknown): Promise<string> {
     this.store.set(key, value);
 
     // Hapus otomatis setelah 'seconds' detik
@@ -48,7 +48,7 @@ class InMemoryRedis {
 
   
 
-  async lrange(key: string, start: number, end: number): Promise<any[]> {
+  async lrange(key: string, start: number, end: number): Promise<unknown[]> {
     const value = this.store.get(key);
     if (!Array.isArray(value)) {
       return [];
@@ -92,13 +92,13 @@ class InMemoryRedis {
   }
 
   // Hash operations
-  async hset(key: string, field: string, value: any): Promise<number> {
+  async hset(key: string, field: string, value: unknown): Promise<number> {
     if (!this.store.has(key)) {
       this.store.set(key, {});
     }
     const hash = this.store.get(key);
     if (hash && typeof hash === 'object' && !Array.isArray(hash)) {
-      (hash as any)[field] = value;
+      (hash as Record<string, unknown>)[field] = value;
       this.store.set(key, hash);
       return 1; // Always return 1 for simplicity
     }
@@ -108,16 +108,16 @@ class InMemoryRedis {
     return 1;
   }
 
-  async hget(key: string, field: string): Promise<any> {
+  async hget(key: string, field: string): Promise<unknown> {
     const hash = this.store.get(key);
     if (hash && typeof hash === 'object' && !Array.isArray(hash)) {
-      return (hash as any)[field];
+      return (hash as Record<string, unknown>)[field];
     }
     return null;
   }
 
   // Set operations
-  async sadd(key: string, member: any): Promise<number> {
+  async sadd(key: string, member: unknown): Promise<number> {
     if (!this.store.has(key)) {
       this.store.set(key, new Set());
     }
@@ -133,7 +133,7 @@ class InMemoryRedis {
     return 1;
   }
 
-  async smembers(key: string): Promise<any[]> {
+  async smembers(key: string): Promise<unknown[]> {
     const set = this.store.get(key);
     if (set instanceof Set) {
       return Array.from(set);
@@ -142,12 +142,12 @@ class InMemoryRedis {
   }
 
   // String operations
-  async set(key: string, value: any): Promise<string> {
+  async set(key: string, value: unknown): Promise<string> {
     this.store.set(key, value);
     return 'OK';
   }
 
-  async get(key: string): Promise<any> {
+  async get(key: string): Promise<unknown> {
     return this.store.get(key);
   }
 
@@ -201,7 +201,7 @@ class InMemoryRedis {
   // Pipeline operations (simplified)
   pipeline() {
     return {
-      hset: (key: string, field: string, value: any) => {
+      hset: (key: string, field: string, value: unknown) => {
         this.hset(key, field, value).catch(console.error);
         return this;
       },

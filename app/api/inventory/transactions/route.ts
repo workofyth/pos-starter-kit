@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (search) {
       whereConditions.push(
@@ -112,13 +112,13 @@ export async function GET(request: NextRequest) {
     const transactionsList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(inventoryTransactions)
       .leftJoin(products, eq(inventoryTransactions.productId, products.id))
       .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id));
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (search) {
       countWhereConditions.push(
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions));
+      countQuery = countQuery.where(and(...countWhereConditions)) as typeof countQuery;
     }
     
     const totalCountResult = await countQuery;

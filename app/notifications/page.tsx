@@ -26,7 +26,7 @@ interface Notification {
   title: string;
   message: string;
   type: string;
-  data: any;
+  data: unknown;
   isRead: boolean;
   createdAt: string;
   updatedAt: string;
@@ -208,7 +208,7 @@ export default function NotificationsPage() {
                 <CardContent className="p-12 text-center">
                   <Bell className="h-12 w-12 mx-auto text-gray-400 mb-4" />
                   <h3 className="text-lg font-medium mb-2">No notifications</h3>
-                  <p className="text-gray-500">You don't have any notifications yet.</p>
+                  <p className="text-gray-500">You don&apos;t have any notifications yet.</p>
                 </CardContent>
               </Card>
             ) : (

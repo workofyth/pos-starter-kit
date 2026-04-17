@@ -24,6 +24,23 @@ export async function POST(req: NextRequest) {
       total,
       paidAmount,
       notes
+    }: {
+      cashierId: string;
+      memberId?: string;
+      items: Array<{
+        productId: string;
+        quantity: number | string;
+        unitPrice: string | number;
+        totalPrice: string | number;
+        discountAmount?: number;
+      }>;
+      paymentMethod: string;
+      subtotal: string | number;
+      discountAmount: string | number;
+      taxAmount: string | number;
+      total: string | number;
+      paidAmount: string | number;
+      notes?: string;
     } = await req.json();
 
     // Validate required fields
@@ -87,7 +104,7 @@ export async function POST(req: NextRequest) {
       total: validatedTotal.toString(),
       paidAmount: validatedPaidAmount.toString(),
       changeAmount: (validatedPaidAmount - validatedTotal).toString(),
-      paymentMethod,
+      paymentMethod: paymentMethod as "cash" | "card" | "transfer" | "credit",
       notes: notes || '',
       status: 'completed',
     }).returning({ id: transactions.id });
@@ -108,10 +125,10 @@ export async function POST(req: NextRequest) {
           id: uuidv4(),
           transactionId,
           productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          discountAmount: item.discountAmount || 0,
+          quantity: typeof item.quantity === 'string' ? parseInt(item.quantity, 10) : item.quantity,
+          unitPrice: item.unitPrice.toString(),
+          totalPrice: item.totalPrice.toString(),
+          discountAmount: item.discountAmount ? item.discountAmount.toString() : "0",
         }).returning();
 
         processedItems.push({

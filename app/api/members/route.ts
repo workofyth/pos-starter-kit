@@ -52,12 +52,12 @@ export async function GET(request: NextRequest) {
     const membersList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(members);
     
     if (search) {
-      countQuery = countQuery.where(ilike(members.name, `%${search}%`));
+      countQuery = countQuery.where(ilike(members.name, `%${search}%`)) as typeof countQuery;
     }
     
     const totalCountResult = await countQuery;

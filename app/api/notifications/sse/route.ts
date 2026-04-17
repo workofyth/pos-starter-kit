@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   const stream = new ReadableStream({
     start(controller) {
       // Send initial connection event
-      const sendEvent = (data: any) => {
+      const sendEvent = (data: unknown) => {
         const encodedData = `data: ${JSON.stringify(data)}\n\n`;
         controller.enqueue(new TextEncoder().encode(encodedData));
       };

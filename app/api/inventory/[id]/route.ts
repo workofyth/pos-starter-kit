@@ -162,7 +162,11 @@ export async function PUT(
 }
 
 // Separate function to handle inventory updates
-async function handleInventoryUpdate(id: string, body: any) {
+async function handleInventoryUpdate(id: string, body: {
+  quantity?: number;
+  minStock?: number;
+  notes?: string;
+}) {
   const {
     quantity,
     minStock,
@@ -275,7 +279,11 @@ async function handleInventoryUpdate(id: string, body: any) {
 }
 
 // Separate function to handle split request approval/rejection
-async function handleSplitRequestApproval(id: string, body: any) {
+async function handleSplitRequestApproval(id: string, body: {
+  action: 'approve' | 'reject';
+  approvedBy: string;
+  notes?: string;
+}) {
   const {
     action, // 'approve' or 'reject'
     approvedBy, // User ID of the person approving/rejecting

@@ -41,39 +41,39 @@ services:
       retries: 5
 
   # Next.js Application
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: pos-starter-kit-app
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/pos_db}
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-your-super-secret-key-change-in-production}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
-      - REDIS_URL=redis://redis:6379
-      - POSTGRES_DB=${POSTGRES_DB:-pos_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
-      - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
-    ports:
-      - "3000:3000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - pos-starter-kit-network
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   container_name: pos-starter-kit-app
+  #   restart: unless-stopped
+  #   environment:
+  #     - NODE_ENV=production
+  #     - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/pos_db}
+  #     - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-your-super-secret-key-change-in-production}
+  #     - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
+  #     - REDIS_URL=redis://redis:6379
+  #     - POSTGRES_DB=${POSTGRES_DB:-pos_db}
+  #     - POSTGRES_USER=${POSTGRES_USER:-postgres}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+  #     - POSTGRES_HOST=postgres
+  #     - POSTGRES_PORT=5432
+  #     - UPSTASH_REDIS_REST_URL=${UPSTASH_REDIS_REST_URL}
+  #     - UPSTASH_REDIS_REST_TOKEN=${UPSTASH_REDIS_REST_TOKEN}
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #   networks:
+  #     - pos-starter-kit-network
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--spider", "http://localhost:3000/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
 
   # Development database only
   postgres-dev:
@@ -99,35 +99,35 @@ services:
       retries: 5
 
   # Development environment service
-  dev:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    container_name: pos-starter-kit-dev
-    restart: unless-stopped
-    environment:
-      - NODE_ENV=development
-      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres-dev:5432/pos_db}
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-your-super-secret-key-change-in-production}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
-      - POSTGRES_DB=${POSTGRES_DB:-pos_db}
-      - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
-      - POSTGRES_HOST=postgres-dev
-      - POSTGRES_PORT=5432
-    ports:
-      - "3000:3000"
-      - "5555:5555"  # For Drizzle Studio
-    volumes:
-      - .:/app
-      - /app/node_modules
-    depends_on:
-      postgres-dev:
-        condition: service_healthy
-    networks:
-      - pos-starter-kit-network
-    profiles:
-      - dev
+  # dev:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.dev
+  #   container_name: pos-starter-kit-dev
+  #   restart: unless-stopped
+  #   environment:
+  #     - NODE_ENV=development
+  #     - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres-dev:5432/pos_db}
+  #     - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET:-your-super-secret-key-change-in-production}
+  #     - BETTER_AUTH_URL=${BETTER_AUTH_URL:-http://localhost:3000}
+  #     - POSTGRES_DB=${POSTGRES_DB:-pos_db}
+  #     - POSTGRES_USER=${POSTGRES_USER:-postgres}
+  #     - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
+  #     - POSTGRES_HOST=postgres-dev
+  #     - POSTGRES_PORT=5432
+  #   ports:
+  #     - "3000:3000"
+  #     - "5555:5555"  # For Drizzle Studio
+  #   volumes:
+  #     - .:/app
+  #     - /app/node_modules
+  #   depends_on:
+  #     postgres-dev:
+  #       condition: service_healthy
+  #   networks:
+  #     - pos-starter-kit-network
+  #   profiles:
+  #     - dev
 
 volumes:
   postgres_data:

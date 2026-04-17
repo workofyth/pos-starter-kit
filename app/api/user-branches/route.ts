@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (userId) {
       whereConditions.push(eq(userBranches.userId, userId));
@@ -79,11 +79,11 @@ export async function GET(request: NextRequest) {
     const userBranchesList = await query;
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(userBranches);
 
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (userId) {
       countWhereConditions.push(eq(userBranches.userId, userId));

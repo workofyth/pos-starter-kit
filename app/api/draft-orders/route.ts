@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(members, eq(draftOrders.memberId, members.id));
     
     // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     // Only filter by userId if provided (to allow users to see their own drafts)
     if (userId) {

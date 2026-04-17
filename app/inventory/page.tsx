@@ -24,6 +24,9 @@ import {
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
 import { StockMovementIndicator } from "@/components/stock-movement-indicator";
 
+interface Branch { id: string; name: string; type?: string; }
+interface Product { id: string; name: string; sku: string; minStock?: number; maxStock?: number; }
+
 interface InventoryItem {
   id: string;
   productId: string;
@@ -73,7 +76,7 @@ export default function InventoryPage() {
   const [isSplitDialogOpen, setIsSplitDialogOpen] = useState(false);
   const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [splittingItem, setSplittingItem] = useState<any | null>(null);
+  const [splittingItem, setSplittingItem] = useState<InventoryItem | null>(null);
   const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
   const [adjustmentData, setAdjustmentData] = useState({
     quantity: 0,
@@ -82,8 +85,8 @@ export default function InventoryPage() {
   });
   
   // State for data lists
-  const [branchList, setBranchList] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
+  const [branchList, setBranchList] = useState<Branch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null); // Added state for user role
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false); // Added state for main admin status
   
@@ -152,7 +155,7 @@ export default function InventoryPage() {
           const inventoryResult = await inventoryResponse.json();
           if (inventoryResult.success) {
             // Transform API response to match the InventoryItem interface
-            const formattedInventory = inventoryResult.data.map((item: any) => ({
+            const formattedInventory = inventoryResult.data.map((item: Record<string, unknown>) => ({
               id: item.id,
               productId: item.productId,
               branchId: item.branchId,
@@ -175,8 +178,8 @@ export default function InventoryPage() {
               branchEmail: item.branchEmail
             }));
             // Deduplicate inventory items by ID to prevent duplicate keys
-            const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
-              index === self.findIndex((i: { id: any; }) => i.id === item.id)
+            const uniqueInventory = formattedInventory.filter((item : InventoryItem, index : number, self : InventoryItem[]) =>
+              index === self.findIndex((i: { id: string; }) => i.id === item.id)
             );
             setInventory(uniqueInventory);
             setTotalPages(inventoryResult.pagination.totalPages || 1);
@@ -191,8 +194,8 @@ export default function InventoryPage() {
           const branchesResult = await branchesResponse.json();
           if (branchesResult.success) {
             // Deduplicate branches by ID to prevent duplicate keys
-            const uniqueBranches = branchesResult.data.filter((branch : any, index : any, self : any) =>
-              index === self.findIndex((b: { id: any; }) => b.id === branch.id)
+            const uniqueBranches = branchesResult.data.filter((branch : Branch, index : number, self : Branch[]) =>
+                index === self.findIndex((b: { id: string; }) => b.id === branch.id)
             );
             
             setBranchList(uniqueBranches);
@@ -216,8 +219,8 @@ export default function InventoryPage() {
           const productsResult = await productsResponse.json();
           if (productsResult.success) {
             // Deduplicate products by ID to prevent duplicate keys
-            const uniqueProducts = productsResult.data.filter((product : any, index : any, self : any) =>
-              index === self.findIndex((p: { id: any; }) => p.id === product.id)
+            const uniqueProducts = productsResult.data.filter((product : Product, index : number, self : Product[]) =>
+                index === self.findIndex((p: { id: string; }) => p.id === product.id)
             );
             setProducts(uniqueProducts);
           }
@@ -233,7 +236,7 @@ export default function InventoryPage() {
   }, [inventoryPage, searchTerm, searchSKU, searchCategory, selectedBranch, showLowStock, showOutOfStock, userBranchId, isMainAdmin]);
 
   // Define the real-time update handler before using it in the hook
-  const handleRealTimeUpdate = useCallback((data: any) => {
+  const handleRealTimeUpdate = useCallback((data: { type: string }) => {
     if (data.type === 'inventory_updated' || data.type === 'stock_split_completed' || data.type === 'stock_adjustment') {
       // Reload inventory to reflect the latest changes
       const loadDataInternal = async () => {
@@ -260,7 +263,7 @@ export default function InventoryPage() {
             const inventoryResult = await inventoryResponse.json();
             if (inventoryResult.success) {
               // Transform API response to match the InventoryItem interface
-              const formattedInventory = inventoryResult.data.map((item: any) => ({
+              const formattedInventory = inventoryResult.data.map((item: Record<string, unknown>) => ({
                 id: item.id,
                 productId: item.productId,
                 branchId: item.branchId,
@@ -283,9 +286,9 @@ export default function InventoryPage() {
                 branchEmail: item.branchEmail
               }));
               // Deduplicate inventory items by ID to prevent duplicate keys
-              const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
-                index === self.findIndex((i: { id: any; }) => i.id === item.id)
-              );
+            const uniqueInventory = formattedInventory.filter((item : InventoryItem, index : number, self : InventoryItem[]) =>
+              index === self.findIndex((i: { id: string; }) => i.id === item.id)
+            );
               setInventory(uniqueInventory);
               setTotalPages(inventoryResult.pagination.totalPages || 1);
             }
@@ -361,7 +364,7 @@ export default function InventoryPage() {
   };
 
   // Handle adding new inventory item
-  const handleAddInventory = async (product: any, branchId: string, quantity: number) => {
+  const handleAddInventory = async (product: Product, branchId: string, quantity: number) => {
     try {
       const response = await fetch('/api/inventory', {
         method: 'POST',
@@ -403,7 +406,7 @@ export default function InventoryPage() {
               const inventoryResult = await inventoryResponse.json();
               if (inventoryResult.success) {
                 // Transform API response to match the InventoryItem interface
-                const formattedInventory = inventoryResult.data.map((item: any) => ({
+                const formattedInventory = inventoryResult.data.map((item: Record<string, unknown>) => ({
                   id: item.id,
                   productId: item.productId,
                   branchId: item.branchId,
@@ -426,8 +429,8 @@ export default function InventoryPage() {
                   branchEmail: item.branchEmail
                 }));
                 // Deduplicate inventory items by ID to prevent duplicate keys
-                const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
-                  index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                const uniqueInventory = formattedInventory.filter((item : InventoryItem, index : number, self : InventoryItem[]) =>
+                  index === self.findIndex((i: { id: string; }) => i.id === item.id)
                 );
                 setInventory(uniqueInventory);
                 setTotalPages(inventoryResult.pagination.totalPages || 1);
@@ -548,7 +551,7 @@ export default function InventoryPage() {
               const inventoryResult = await inventoryResponse.json();
               if (inventoryResult.success) {
                 // Transform API response to match the InventoryItem interface
-                const formattedInventory = inventoryResult.data.map((item: any) => ({
+                const formattedInventory = inventoryResult.data.map((item: Record<string, unknown>) => ({
                   id: item.id,
                   productId: item.productId,
                   branchId: item.branchId,
@@ -571,8 +574,8 @@ export default function InventoryPage() {
                   branchEmail: item.branchEmail
                 }));
                 // Deduplicate inventory items by ID to prevent duplicate keys
-                const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
-                  index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                const uniqueInventory = formattedInventory.filter((item : InventoryItem, index : number, self : InventoryItem[]) =>
+                  index === self.findIndex((i: { id: string; }) => i.id === item.id)
                 );
                 setInventory(uniqueInventory);
                 setTotalPages(inventoryResult.pagination.totalPages || 1);
@@ -772,7 +775,7 @@ export default function InventoryPage() {
                 className="w-full p-2 border border-gray-300 rounded"
               >
                 <option value="">All Branches</option>
-                {branchList.map((branch: any) => (
+                {branchList.map((branch: Branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
                   </option>
@@ -831,7 +834,7 @@ export default function InventoryPage() {
                   const inventoryResult = await inventoryResponse.json();
                   if (inventoryResult.success) {
                     // Transform API response to match the InventoryItem interface
-                    const formattedInventory = inventoryResult.data.map((item: any) => ({
+                    const formattedInventory = inventoryResult.data.map((item: Record<string, unknown>) => ({
                       id: item.id,
                       productId: item.productId,
                       branchId: item.branchId,
@@ -854,8 +857,8 @@ export default function InventoryPage() {
                       branchEmail: item.branchEmail
                     }));
                     // Deduplicate inventory items by ID to prevent duplicate keys
-                    const uniqueInventory = formattedInventory.filter((item : any, index : any, self : any) =>
-                      index === self.findIndex((i: { id: any; }) => i.id === item.id)
+                    const uniqueInventory = formattedInventory.filter((item : InventoryItem, index : number, self : InventoryItem[]) =>
+                      index === self.findIndex((i: { id: string; }) => i.id === item.id)
                     );
                     setInventory(uniqueInventory);
                     setTotalPages(inventoryResult.pagination.totalPages || 1);
@@ -953,7 +956,7 @@ export default function InventoryPage() {
                       </TableCell>
                       <TableCell>{item.minStock}</TableCell>
                       <TableCell>
-                        <Badge variant={stockStatus.variant as any}>
+                        <Badge variant={stockStatus.variant as "default" | "destructive" | "outline" | "secondary" | null | undefined}>
                           {stockStatus.status}
                         </Badge>
                       </TableCell>
@@ -1124,8 +1127,8 @@ export default function InventoryPage() {
                 >
                   <option value="">Select target branch...</option>
                   {branchList
-                    .filter((branch: any) => branch.id !== splittingItem.branchId)
-                    .map((branch: any) => (
+                    .filter((branch: Branch) => branch.id !== splittingItem?.branchId)
+                    .map((branch: Branch) => (
                       <option key={branch.id} value={branch.id}>
                         {branch.name}
                       </option>

@@ -44,8 +44,7 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .offset(offset);
     
-    // Apply filters
-    let whereConditions = [];
+    const whereConditions = [];
     
     // Only apply branch filter if user is not admin
     if (branchId && !isAdmin) {
@@ -61,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (status) {
-      whereConditions.push(eq(transactions.status, status as any));
+      whereConditions.push(eq(transactions.status, status as "pending" | "completed" | "cancelled" | "refunded"));
     }
     
     if (whereConditions.length > 0) {
@@ -146,11 +145,12 @@ export async function GET(request: NextRequest) {
     }
     
     // Get total count for pagination
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
-      .from(transactions);
+      .from(transactions)
+      .$dynamic();
     
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     // Only apply branch filter to count query if user is not admin
     if (branchId && !isAdmin) {
@@ -166,7 +166,7 @@ export async function GET(request: NextRequest) {
     }
     
     if (status) {
-      countWhereConditions.push(eq(transactions.status, status as any));
+      countWhereConditions.push(eq(transactions.status, status as "pending" | "completed" | "cancelled" | "refunded"));
     }
     
     if (countWhereConditions.length > 0) {

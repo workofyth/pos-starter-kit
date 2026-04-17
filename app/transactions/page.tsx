@@ -100,7 +100,7 @@ export default function TransactionsPage() {
           }
           
           // For admin users, fetch all transactions; for others, fetch by branch
-          var url = ``;
+          let url = ``;
           if (!isAdmin){
             console.log(cashierBranchId)
             url = `/api/transactions?userId=${session.user.id}${!isAdmin && cashierBranchId ? `&branchId=${cashierBranchId}` : ''}`;
@@ -114,7 +114,20 @@ export default function TransactionsPage() {
             
             if (result.success) {
               // Transform the API response to match our interface
-              const transformedTransactions = result.data.map((t: any) => ({
+              const transformedTransactions = result.data.map((t: {
+                id: string;
+                transactionNumber: string;
+                createdAt: string | number | Date;
+                memberName?: string;
+                detailsCount?: number;
+                subtotal: string;
+                discountAmount: string;
+                taxAmount: string;
+                total: string;
+                paymentMethod: "cash" | "card" | "transfer";
+                status: "completed" | "pending" | "cancelled" | "refunded";
+                cashierName?: string;
+              }) => ({
                 id: t.id,
                 transactionNumber: t.transactionNumber,
                 date: new Date(t.createdAt).toLocaleString(),
@@ -239,7 +252,7 @@ export default function TransactionsPage() {
               <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
               <h3 className="mt-2 text-sm font-medium">No branch assigned</h3>
               <p className="mt-1 text-sm text-gray-500">
-                You don't have access to any branch transactions.
+                You don&apos;t have access to any branch transactions.
               </p>
             </div>
           ) : isLoading ? (

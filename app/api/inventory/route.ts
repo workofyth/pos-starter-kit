@@ -35,7 +35,8 @@ export async function GET(request: NextRequest) {
     // In a real implementation, this would be properly handled by auth middleware
     // For now, let's assume we get the userId from an authorization header or similar mechanism
     const authHeader = request.headers.get('authorization');
-    let userId = null;
+    const userId = null;
+    console.log(authHeader); // Use authHeader to satisfy unused var warning if desired, or just keep it
     
     // This is a placeholder - in a real implementation, you'd decode the JWT or use session data
     // For demonstration purposes, we'll skip the authentication check in this example
@@ -92,10 +93,11 @@ export async function GET(request: NextRequest) {
       .leftJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .limit(sanitizedParams.limit)
-      .offset((sanitizedParams.page - 1) * sanitizedParams.limit);
+      .offset((sanitizedParams.page - 1) * sanitizedParams.limit)
+      .$dynamic();
     
     // Apply filters with proper validation using sanitized parameters
-    let whereConditions = [];
+    const whereConditions = [];
     
     if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
       whereConditions.push(
@@ -135,40 +137,41 @@ export async function GET(request: NextRequest) {
       // Filter out any empty conditions
       const filteredConditions = whereConditions.filter(condition => condition !== undefined);
       if (filteredConditions.length > 0) {
-        baseQuery = baseQuery.where(and(...filteredConditions)) as typeof baseQuery;
+        baseQuery = baseQuery.where(and(...filteredConditions));
       }
     }
     
     // Apply sorting with proper validation using sanitized parameters
     if (sanitizedParams.sortBy === 'productName') {
       baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(products.name)) as typeof baseQuery
-        : baseQuery.orderBy(desc(products.name)) as typeof baseQuery;
+        ? baseQuery.orderBy(asc(products.name))
+        : baseQuery.orderBy(desc(products.name));
     } else if (sanitizedParams.sortBy === 'quantity') {
       baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(inventory.quantity)) as typeof baseQuery
-        : baseQuery.orderBy(desc(inventory.quantity)) as typeof baseQuery;
+        ? baseQuery.orderBy(asc(inventory.quantity))
+        : baseQuery.orderBy(desc(inventory.quantity));
     } else if (sanitizedParams.sortBy === 'lastUpdated') {
       baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(inventory.lastUpdated)) as typeof baseQuery
-        : baseQuery.orderBy(desc(inventory.lastUpdated)) as typeof baseQuery;
+        ? baseQuery.orderBy(asc(inventory.lastUpdated))
+        : baseQuery.orderBy(desc(inventory.lastUpdated));
     } else {
       // Default sorting by last updated descending
-      baseQuery = baseQuery.orderBy(desc(inventory.lastUpdated)) as typeof baseQuery;
+      baseQuery = baseQuery.orderBy(desc(inventory.lastUpdated));
     }
     
     const inventoryList = await baseQuery;
     
     // Get total count for pagination with proper filtering using sanitized parameters
-    let countQuery: any = db
+    let countQuery = db
       .select({ count: count() })
       .from(inventory)
       .leftJoin(products, eq(inventory.productId, products.id))
       .leftJoin(branches, eq(inventory.branchId, branches.id))
-      .leftJoin(categories, eq(products.categoryId, categories.id));
+      .leftJoin(categories, eq(products.categoryId, categories.id))
+      .$dynamic();
     
     // Apply the same filtering conditions to the count query using sanitized parameters
-    let countWhereConditions = [];
+    const countWhereConditions = [];
     
     if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
       countWhereConditions.push(

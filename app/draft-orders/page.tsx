@@ -27,7 +27,7 @@ interface DraftOrder {
   branchId: string;
   cashierId: string;
   memberId: string | null;
-  cartData: any[];
+  cartData: unknown[];
   paymentMethod: string;
   discountRate: string;
   notes: string;

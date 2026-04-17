@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       const requiredFields = ['Name', 'Category Code', 'Purchase Price', 'Selling Price'];
       const validationErrors: string[] = [];
 
-      jsonData.forEach((row: any, index: number) => {
+      jsonData.forEach((row: Record<string, unknown>, index: number) => {
         requiredFields.forEach(field => {
           if (!row[field]) {
             validationErrors.push(`Row ${index + 2}: Missing required field '${field}'`);
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         const sku = `${category.code}${nextNumber.toString().padStart(5, '0')}`;
 
         // Check if SKU or barcode already exists
-        let barcode = row['Barcode'] || `1${Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0')}`;
+        const barcode = row['Barcode'] || `1${Math.floor(Math.random() * 1000000000000).toString().padStart(12, '0')}`;
         
         // Verify uniqueness of barcode and SKU
         const existingProduct = await db
