@@ -1,8 +1,8 @@
 import { getRedis } from '@/lib/redis';
-import { broadcastToBranch } from '@/lib/notification-sse';
+
 
 // For the in-memory implementation, we use the same redis instance
-let subscriber: any | null = null;
+let subscriber: unknown | null = null;
 
 export async function initializeRedisSubscriber() {
   // Only initialize on server-side
@@ -34,7 +34,7 @@ export async function shutdownRedisSubscriber() {
 }
 
 // Function to poll for notifications for a specific branch
-export async function pollBranchNotifications(branchId: string, callback: (message: any) => void) {
+export async function pollBranchNotifications(branchId: string, callback: (message: unknown) => void) {
   // Only poll on server-side
   if (typeof window !== 'undefined') {
     return;
@@ -51,7 +51,7 @@ export async function pollBranchNotifications(branchId: string, callback: (messa
     
     if (result && result.length > 0) {
       try {
-        const data = JSON.parse(result[0]);
+        const data = JSON.parse(result[0] as string);
         if (data.type === 'notification') {
           callback(data.notification);
         }
@@ -65,7 +65,7 @@ export async function pollBranchNotifications(branchId: string, callback: (messa
 }
 
 // Function to poll for pattern-based notifications
-export async function pollPatternNotifications(pattern: string, callback: (channel: string, message: any) => void) {
+export async function pollPatternNotifications(pattern: string, callback: (channel: string, message: unknown) => void) {
   // Only poll on server-side
   if (typeof window !== 'undefined') {
     return;
@@ -81,7 +81,7 @@ export async function pollPatternNotifications(pattern: string, callback: (chann
     
     if (result && result.length > 0) {
       try {
-        const data = JSON.parse(result[0]);
+        const data = JSON.parse(result[0] as string);
         if (data.type === 'notification') {
           callback(pattern, data.notification);
         }

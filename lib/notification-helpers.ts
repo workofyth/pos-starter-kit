@@ -1,6 +1,6 @@
 import { db } from '@/db';
-import { notifications, userBranches, branches } from '@/db/schema/pos';
-import { eq, and, inArray } from 'drizzle-orm';
+import { notifications, branches } from '@/db/schema/pos';
+import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch } from '@/lib/notification-sse';
 
@@ -17,7 +17,7 @@ export async function sendNotificationsToBranchRoles(
     title: string;
     message: string;
     type: string;
-    data?: any;
+    data?: unknown;
     userId?: string | null;
   }
 ) {
@@ -39,7 +39,7 @@ export async function sendMainBranchNotification(
     title: string;
     message: string;
     type: string;
-    data?: any;
+    data?: unknown;
   }
 ) {
   try {
@@ -72,7 +72,7 @@ export async function createNotification(
     title: string;
     message: string;
     type: string;
-    data?: any;
+    data?: unknown;
     userId?: string | null;
   }
 ) {
@@ -147,7 +147,7 @@ export async function createNotificationForUser(
     title: string;
     message: string;
     type: string;
-    data?: any;
+    data?: unknown;
   }
 ) {
   try {

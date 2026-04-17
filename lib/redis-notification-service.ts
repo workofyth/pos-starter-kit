@@ -1,10 +1,10 @@
 // This service handles in-memory real-time notifications
 import { getRedis, initializeRedis } from '@/lib/redis';
-import { broadcastToBranch } from '@/lib/notification-sse';
+
 
 class RedisNotificationService {
-  private subscribers: Map<string, ((message: any) => void)[]> = new Map();
-  private subscriberClient: any | null = null;
+  private subscribers: Map<string, ((message: unknown) => void)[]> = new Map();
+  private subscriberClient: unknown | null = null;
   
   constructor() {
     // Only initialize on server-side
@@ -27,7 +27,7 @@ class RedisNotificationService {
   }
   
   // Subscribe to notifications for a specific branch
-  subscribe(branchId: string, callback: (message: any) => void) {
+  subscribe(branchId: string, callback: (message: unknown) => void) {
     // Only subscribe on server-side
     if (typeof window !== 'undefined') {
       return () => {}; // Return noop cleanup function
@@ -53,7 +53,7 @@ class RedisNotificationService {
   }
   
   // Publish notification to a specific branch
-  async publish(branchId: string, notification: any) {
+  async publish(branchId: string, notification: unknown) {
     // Only publish on server-side
     if (typeof window !== 'undefined') {
       return;
@@ -74,7 +74,7 @@ class RedisNotificationService {
   }
   
   // Notify local subscribers
-  private notifySubscribers(branchId: string, message: any) {
+  private notifySubscribers(branchId: string, message: unknown) {
     const channel = `notifications:${branchId}`;
     const subscribers = this.subscribers.get(channel);
     
