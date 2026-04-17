@@ -6,7 +6,7 @@
     "dev": "next dev --turbopack",
     "dev:next": "next dev --turbopack",
     "dev:socket": "echo 'Socket.IO server removed - using SSE instead'",
-    "build": "next build --turbopack",
+    "build": "next build",
     "start": "NODE_ENV=production node server.js",
     "lint": "eslint",
     "db:generate": "drizzle-kit generate",
