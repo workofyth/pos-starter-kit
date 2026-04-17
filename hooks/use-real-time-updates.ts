@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 
 // Custom hook for real-time data updates using HTTP polling
-export function useRealTimeUpdates(channel: string, onData: (data: any) => void) {
+export function useRealTimeUpdates(channel: string, onData: (data: unknown) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -26,7 +26,7 @@ export function useRealTimeUpdates(channel: string, onData: (data: any) => void)
             const result = await response.json();
             if (result.success) {
               // Process new notifications
-              result.data.forEach((notification: any) => {
+              result.data.forEach((notification: unknown) => {
                 onData(notification);
               });
               

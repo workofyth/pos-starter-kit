@@ -13,7 +13,7 @@ interface RealTimeNotification {
   message: string;
   timestamp: Date;
   read: boolean;
-  data?: any;
+  data?: unknown;
 }
 
 export function RealTimeNotificationBanner() {
