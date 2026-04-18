@@ -188,17 +188,24 @@ export async function POST(request: NextRequest) {
     try {
       const redisClient = await getRedis();
       if (redisClient) {
-        const updateData = {
-          type: 'stock_split_request',
-          productId,
-          sourceBranchId,
-          targetBranchId,
-          quantity,
-          productName,
-          sourceBranchName,
-          targetBranchName,
-          requestedBy: userId
-        };
+          const updateData = {
+            type: 'stock_split_request',
+            title: 'New Stock Split Request',
+            message: `${quantity} units of ${productName} from ${sourceBranchName} to ${targetBranchName}`,
+            productId,
+            sourceBranchId,
+            targetBranchId,
+            quantity,
+            productName,
+            sourceBranchName,
+            targetBranchName,
+            requestedBy: userId,
+            data: {
+              branch: targetBranchName,
+              productId,
+              quantity
+            }
+          };
         await redisClient.publish(`channel:notifications:${sourceBranchId}`, JSON.stringify({ type: 'notification', notification: updateData }));
         await redisClient.publish(`channel:notifications:${targetBranchId}`, JSON.stringify({ type: 'notification', notification: updateData }));
       }
@@ -519,17 +526,24 @@ export async function PUT(request: NextRequest) {
       try {
         const redisClient = await getRedis();
         if (redisClient) {
-          const updateData = {
-            type: 'stock_split_rejected',
-            productId: approvalReq.productId,
-            sourceBranchId: approvalReq.branchId,
-            targetBranchId: approvalReq.referenceId,
-            quantity: approvalReq.quantity,
-            productName: approvalReq.productName || 'Unknown Product',
-            sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
-            targetBranchName: approvalReq.targetBranchName || 'Unknown Branch',
-            reason: notes || approvalReq.notes || 'No reason provided'
-          };
+            const updateData = {
+              type: 'stock_split_rejected',
+              title: 'Stock Split Rejected',
+              message: `Request for ${approvalReq.quantity} units of ${approvalReq.productName} was rejected.`,
+              productId: approvalReq.productId,
+              sourceBranchId: approvalReq.branchId,
+              targetBranchId: approvalReq.referenceId,
+              quantity: approvalReq.quantity,
+              productName: approvalReq.productName || 'Unknown Product',
+              sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
+              targetBranchName: approvalReq.targetBranchName || 'Unknown Branch',
+              reason: notes || approvalReq.notes || 'No reason provided',
+              data: {
+                branch: approvalReq.sourceBranchName,
+                productId: approvalReq.productId,
+                quantity: approvalReq.quantity
+              }
+            };
           await redisClient.publish('notifications:approvals', JSON.stringify(updateData));
         }
       } catch (publishError) {
@@ -540,16 +554,23 @@ export async function PUT(request: NextRequest) {
       try {
         const redisClient = await getRedis();
         if (redisClient) {
-          const updateData = {
-            type: 'stock_split_resent',
-            productId: approvalReq.productId,
-            sourceBranchId: approvalReq.branchId,
-            targetBranchId: approvalReq.referenceId,
-            quantity: approvalReq.quantity,
-            productName: approvalReq.productName || 'Unknown Product',
-            sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
-            targetBranchName: approvalReq.targetBranchName || 'Unknown Branch'
-          };
+            const updateData = {
+              type: 'stock_split_resent',
+              title: 'Stock Split Resent',
+              message: `Request for ${approvalReq.quantity} units of ${approvalReq.productName} has been resent.`,
+              productId: approvalReq.productId,
+              sourceBranchId: approvalReq.branchId,
+              targetBranchId: approvalReq.referenceId,
+              quantity: approvalReq.quantity,
+              productName: approvalReq.productName || 'Unknown Product',
+              sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
+              targetBranchName: approvalReq.targetBranchName || 'Unknown Branch',
+              data: {
+                branch: approvalReq.sourceBranchName,
+                productId: approvalReq.productId,
+                quantity: approvalReq.quantity
+              }
+            };
           await redisClient.publish('notifications:approvals', JSON.stringify(updateData));
         }
       } catch (publishError) {
@@ -647,16 +668,23 @@ export async function PUT(request: NextRequest) {
       try {
         const redisClient = await getRedis();
         if (redisClient) {
-          const updateData = {
-            type: 'stock_split_approved',
-            productId: approvalReq.productId,
-            sourceBranchId: approvalReq.branchId,
-            targetBranchId: approvalReq.referenceId,
-            quantity: approvalReq.quantity,
-            productName: approvalReq.productName || 'Unknown Product',
-            sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
-            targetBranchName: approvalReq.targetBranchName || 'Unknown Branch'
-          };
+            const updateData = {
+              type: 'stock_split_approved',
+              title: 'Stock Split Approved',
+              message: `${approvalReq.quantity} units of ${approvalReq.productName} transfer approved.`,
+              productId: approvalReq.productId,
+              sourceBranchId: approvalReq.branchId,
+              targetBranchId: approvalReq.referenceId,
+              quantity: approvalReq.quantity,
+              productName: approvalReq.productName || 'Unknown Product',
+              sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
+              targetBranchName: approvalReq.targetBranchName || 'Unknown Branch',
+              data: {
+                branch: approvalReq.targetBranchName,
+                productId: approvalReq.productId,
+                quantity: approvalReq.quantity
+              }
+            };
           const notificationPayload = JSON.stringify({ type: 'notification', notification: updateData });
           await redisClient.publish(`channel:notifications:${approvalReq.branchId}`, notificationPayload);
           if (approvalReq.referenceId) {

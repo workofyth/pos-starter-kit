@@ -32,6 +32,7 @@ interface InventoryItem {
   productId: string;
   branchId: string;
   productName: string;
+  brand: string;
   sku: string;
   currentStock: number;
   minStock: number;
@@ -170,8 +171,9 @@ export default function InventoryPage() {
               id: item.id,
               productId: item.productId,
               branchId: item.branchId,
-              productName: item.productName,
-              sku: item.productSku || '',  // Map productSku to sku
+              productName: String(item.productName || ''),
+              brand: String(item.productBrand || 'EJM'),
+              sku: String(item.productSku || ''),  // Map productSku to sku
               currentStock: item.quantity || 0,  // Map quantity to currentStock
               minStock: item.minStock || 5,
               maxStock: item.maxStock || 100,
@@ -950,6 +952,7 @@ export default function InventoryPage() {
                     </TableHead>
                   )}
                   <TableHead>Product</TableHead>
+                  <TableHead>Brand</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Current Stock</TableHead>
@@ -983,6 +986,9 @@ export default function InventoryPage() {
                         </TableCell>
                       )}
                       <TableCell className="font-medium">{item.productName}</TableCell>
+                      <TableCell>
+                        <Badge variant="default">{item.brand || 'EJM'}</Badge>
+                      </TableCell>
                       <TableCell>{item.sku}</TableCell>
                       <TableCell>{item.branch}</TableCell>
                       <TableCell>

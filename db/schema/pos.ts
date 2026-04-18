@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum, bigint, index } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 // Define enums for the POS application
@@ -48,6 +48,16 @@ export const categories = pgTable("categories", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Brands table
+export const brands = pgTable("brands", {
+  id: text("id").primaryKey().notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Products table
 export const products = pgTable("products", {
   id: text("id").primaryKey().notNull(),
@@ -58,10 +68,17 @@ export const products = pgTable("products", {
   image: text("image"), // URL or path to product image
   imageUrl: text("image_url"), // Path to stored image
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
+  brand: text("brand").default("EJM"),
   unit: text("unit").default("pcs").notNull(), // pcs, kg, ltr, etc.
   profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }).default("0.00"), // Profit margin percentage
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    nameIdx: index("products_name_idx").on(table.name),
+    skuIdx: index("products_sku_idx").on(table.sku),
+    barcodeIdx: index("products_barcode_idx").on(table.barcode),
+  }
 });
 
 // Product prices table (to track price changes over time)
@@ -117,6 +134,10 @@ export const inventory = pgTable("inventory", {
   lastUpdated: timestamp("last_updated").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    branchProdIdx: index("inventory_branch_prod_idx").on(table.branchId, table.productId),
+  }
 });
 
 // Inventory transactions (for tracking stock movements)
@@ -264,6 +285,14 @@ export const notifications = pgTable("notifications", {
   data: jsonb("data"), // Additional data related to the notification
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// App Settings table (for global configurations)
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey().notNull(),
+  value: text("value").notNull(),
+  description: text("description"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

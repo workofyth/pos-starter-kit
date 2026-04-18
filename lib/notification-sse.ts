@@ -104,7 +104,7 @@ export async function broadcastToAll(notification: NotificationData) {
   }
   
   const encoder = new TextEncoder();
-  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\\n\\n`;
+  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\n\n`;
 
   connections.forEach((branchConnections, mapBranchId) => {
     const connectionsToDelete: ConnectionWriter[] = [];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -11,13 +11,129 @@ import {
   Package,
   AlertTriangle,
   BarChart3,
-  Globe
+  Globe,
+  Loader2
 } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
+import { UserRole } from "@/lib/role-based-access";
+import { toast } from "sonner";
+
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
+  const { data: session } = useSession();
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [userBranchType, setUserBranchType] = useState<string | null>(null);
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [userBranchName, setUserBranchName] = useState<string>("");
+  const [userBranchAddress, setUserBranchAddress] = useState<string>("");
+  const [isUserLoading, setIsUserLoading] = useState(true);
+  
+  const [groqApiKey, setGroqApiKey] = useState("");
+  const [aiProvider, setAiProvider] = useState("groq");
+  const [taxRate, setTaxRate] = useState("10");
+  const [aiSystemPrompt, setAiSystemPrompt] = useState("");
+  
+  const [isSaving, setIsSaving] = useState(false);
 
-  const tabs = [
+  // Get user's role and branch information
+  useEffect(() => {
+    const fetchUserBranchInfo = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              const uBranch = result.data[0];
+              setUserRole(uBranch.role || 'staff');
+              setUserBranchId(uBranch.branchId || null);
+              setIsMainAdmin(uBranch.isMainAdmin === true);
+              setUserBranchType(uBranch.branch?.type || null);
+              setUserBranchName(uBranch.branch?.name || "");
+              setUserBranchAddress(uBranch.branch?.address || "");
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user branch info:', error);
+        } finally {
+          setIsUserLoading(false);
+        }
+      } else {
+        setIsUserLoading(false);
+      }
+    };
+
+    fetchUserBranchInfo();
+    fetchAiSettings();
+  }, [session]);
+
+  const fetchAiSettings = async () => {
+    try {
+      const response = await fetch('/api/settings');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && Array.isArray(result.data)) {
+          const groq = result.data.find((s: any) => s.key === 'groq_api_key');
+          const provider = result.data.find((s: any) => s.key === 'ai_provider');
+          const tax = result.data.find((s: any) => s.key === 'tax_rate');
+          
+          if (groq) setGroqApiKey(groq.value);
+          if (provider) setAiProvider(provider.value);
+          if (tax) setTaxRate(tax.value);
+          const prompt = result.data.find((s: any) => s.key === 'ai_system_prompt');
+          if (prompt) setAiSystemPrompt(prompt.value);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching AI settings:', error);
+    }
+  };
+
+  const handleSaveIntegration = async () => {
+    setIsSaving(true);
+    try {
+      const settingsToSave = [
+        { key: 'ai_provider', value: 'groq', description: 'Chosen AI Intelligence provider' },
+        { key: 'groq_api_key', value: groqApiKey, description: 'API Key for Groq AI assistant' },
+        { key: 'ai_system_prompt', value: aiSystemPrompt, description: 'AI Chatbot System Prompt (baseContext)' }
+      ];
+
+      for (const setting of settingsToSave) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(setting)
+        });
+      }
+      toast.success("AI Integration settings saved successfully");
+    } catch (error) {
+      toast.error("Failed to save AI configuration");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveGeneral = async () => {
+    setIsSaving(true);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tax_rate', value: taxRate, description: 'Default tax rate for POS transactions' })
+      });
+      toast.success("General settings saved successfully");
+    } catch (error) {
+      toast.error("Failed to save general settings");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isSubBranchUser = !isMainAdmin && userBranchType !== 'main' && userBranchId;
+
+  const allTabs = [
     { id: "general", label: "General", icon: Settings },
     { id: "store", label: "Store", icon: Store },
     { id: "payment", label: "Payment", icon: CreditCard },
@@ -28,6 +144,29 @@ export default function SettingsPage() {
     { id: "integration", label: "Integration", icon: Globe },
   ];
 
+  const tabs = allTabs.filter(tab => {
+    if (tab.id === "users") return false;
+    if (isSubBranchUser && tab.id === "general") return false;
+    return true;
+  });
+
+  useEffect(() => {
+    if (!isUserLoading) {
+      if (isSubBranchUser && activeTab === "general") {
+        setActiveTab("store");
+      }
+    }
+  }, [isSubBranchUser, isUserLoading, activeTab]);
+
+  if (isUserLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Loading settings...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -36,7 +175,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Settings Navigation */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
@@ -63,7 +201,6 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        {/* Settings Content */}
         <div className="lg:col-span-3">
           <Card>
             <CardHeader>
@@ -85,7 +222,7 @@ export default function SettingsPage() {
                       <input 
                         type="text" 
                         className="w-full p-2 border rounded-md" 
-                        defaultValue="My POS Business"
+                        defaultValue={userBranchName || "My POS Business"}
                       />
                     </div>
                     
@@ -94,7 +231,7 @@ export default function SettingsPage() {
                       <textarea 
                         className="w-full p-2 border rounded-md" 
                         rows={3}
-                        defaultValue="Jl. Jend. Sudirman No. 1, Jakarta"
+                        defaultValue={userBranchAddress || "Jl. Jend. Sudirman No. 1, Jakarta"}
                       ></textarea>
                     </div>
                     
@@ -103,24 +240,15 @@ export default function SettingsPage() {
                       <input 
                         type="number" 
                         className="w-full p-2 border rounded-md" 
-                        defaultValue="10"
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(e.target.value)}
                       />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="round-total" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="round-total" className="text-sm font-medium">
-                        Round total to nearest 100
-                      </label>
                     </div>
                   </div>
                   
-                  <Button>Save General Settings</Button>
+                  <Button onClick={handleSaveGeneral} disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Save General Settings"}
+                  </Button>
                 </div>
               )}
 
@@ -146,17 +274,6 @@ export default function SettingsPage() {
                       <select className="w-full p-2 border rounded-md">
                         <option>IDR - Indonesian Rupiah</option>
                         <option>USD - US Dollar</option>
-                        <option>EUR - Euro</option>
-                        <option>GBP - British Pound</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Store Timezone</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Asia/Jakarta</option>
-                        <option>Asia/Makassar</option>
-                        <option>Asia/Jayapura</option>
                       </select>
                     </div>
                   </div>
@@ -167,289 +284,76 @@ export default function SettingsPage() {
 
               {activeTab === "payment" && (
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Payment Configuration</h3>
-                    <p className="text-sm text-gray-500">Payment method settings</p>
-                  </div>
-                  
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span>Cash Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
+                        <input type="checkbox" className="h-4 w-4" defaultChecked />
                       </div>
-                      
                       <div className="flex items-center justify-between">
                         <span>Card Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
+                        <input type="checkbox" className="h-4 w-4" defaultChecked />
                       </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Transfer Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Payment Gateway</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>None (Manual)</option>
-                        <option>Midtrans</option>
-                        <option>Stripe</option>
-                        <option>PayPal</option>
-                      </select>
                     </div>
                   </div>
-                  
                   <Button>Save Payment Settings</Button>
                 </div>
               )}
 
-              {activeTab === "users" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">User Management</h3>
-                    <p className="text-sm text-gray-500">User access and permissions</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Default Role for New Users</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Cashier</option>
-                        <option>Manager</option>
-                        <option>Admin</option>
-                      </select>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="require-pin" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="require-pin" className="text-sm font-medium">
-                        Require PIN for admin actions
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-logout" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-logout" className="text-sm font-medium">
-                        Auto logout after 30 minutes of inactivity
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save User Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "inventory" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Inventory Configuration</h3>
-                    <p className="text-sm text-gray-500">Inventory tracking settings</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Low Stock Threshold</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-2 border rounded-md" 
-                        defaultValue="5"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-alert" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-alert" className="text-sm font-medium">
-                        Enable low stock alerts
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="dead-stock" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="dead-stock" className="text-sm font-medium">
-                        Track dead stock (items not sold in 30 days)
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Inventory Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "alerts" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Alert Configuration</h3>
-                    <p className="text-sm text-gray-500">System notifications and alerts</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span>Low Stock Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Dead Stock Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Expired Item Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Payment Due Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Alert Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "reporting" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Reporting Configuration</h3>
-                    <p className="text-sm text-gray-500">Report generation settings</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Report Timezone</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Asia/Jakarta</option>
-                        <option>Asia/Makassar</option>
-                        <option>Asia/Jayapura</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Default Report Period</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Today</option>
-                        <option>This Week</option>
-                        <option>This Month</option>
-                        <option>This Quarter</option>
-                        <option>This Year</option>
-                      </select>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-export" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-export" className="text-sm font-medium">
-                        Auto-export daily reports
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Reporting Settings</Button>
-                </div>
-              )}
-
               {activeTab === "integration" && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Integration Configuration</h3>
-                    <p className="text-sm text-gray-500">Third-party service integrations</p>
+                    <h3 className="text-lg font-medium">AI Intelligence Center</h3>
+                    <p className="text-sm text-gray-500">Configure your business assistant powerhouse</p>
                   </div>
                   
-                  <div className="space-y-4">
+                  <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
                     <div>
-                      <label className="block text-sm font-medium mb-1">API Key</label>
-                      <input 
-                        type="password" 
-                        className="w-full p-2 border rounded-md" 
-                        placeholder="Enter API key"
+                      <h4 className="text-sm font-bold mb-2">Active Provider: Groq (Llama 3.3)</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">API Groq Key</label>
+                          <input 
+                            type="password" 
+                            className="w-full p-2 border rounded-md bg-background" 
+                            placeholder="Enter Groq API key"
+                            value={groqApiKey}
+                            onChange={(e) => setGroqApiKey(e.target.value)}
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">High-speed Llama 3.3 optimized provider</p>
+                        </div>
+                      </div>
+                    </div>
+                  
+                  <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
+                    <div>
+                      <label className="block text-sm font-bold mb-2">AI System Prompt (baseContext)</label>
+                      <p className="text-[10px] text-muted-foreground mb-2">
+                        Gunakan <code className="bg-muted px-1 rounded">{'{{TAX_RATE}}'}</code> untuk menyisipkan nilai pajak secara dinamis.
+                      </p>
+                      <textarea
+                        className="w-full p-2 border rounded-md bg-background font-mono text-xs"
+                        rows={12}
+                        placeholder="Masukkan system prompt untuk AI Chatbot..."
+                        value={aiSystemPrompt}
+                        onChange={(e) => setAiSystemPrompt(e.target.value)}
                       />
                     </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span>Accounting Software</span>
-                        <select className="p-1 border rounded">
-                          <option>None</option>
-                          <option>Accurate</option>
-                          <option>Aplos</option>
-                        </select>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Inventory Sync</span>
-                        <select className="p-1 border rounded">
-                          <option>Disabled</option>
-                          <option>Enabled</option>
-                        </select>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Cloud Backup</span>
-                        <select className="p-1 border rounded">
-                          <option>Disabled</option>
-                          <option>Enabled</option>
-                        </select>
-                      </div>
-                    </div>
+                  </div>
                   </div>
                   
-                  <Button>Save Integration Settings</Button>
+                  <Button 
+                    className="w-full" 
+                    onClick={handleSaveIntegration}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Syncing AI Configuration...
+                      </>
+                    ) : 'Finalize & Save AI Settings'}
+                  </Button>
                 </div>
               )}
             </CardContent>

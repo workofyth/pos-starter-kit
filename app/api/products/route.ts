@@ -55,6 +55,7 @@ export async function GET(request: NextRequest) {
         image: products.image,
         imageUrl: products.imageUrl,
         unit: products.unit,
+        brand: products.brand,
         profitMargin: products.profitMargin,
         createdAt: products.createdAt,
         updatedAt: products.updatedAt,
@@ -111,13 +112,10 @@ export async function GET(request: NextRequest) {
     
     const productList = await query;
     
-    // Get total count for pagination
-    // Use select distinct to avoid counting multiple inventory rows per product
+    // Get total count for pagination - Optimized: Only join what's necessary
     let countQuery = db
-      .select({ count: sql<number>`count(DISTINCT ${products.id})` })
-      .from(products)
-      .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(inventory, eq(products.id, inventory.productId));
+      .select({ count: count(products.id) })
+      .from(products);
     
     const countWhereConditions = [];
     
@@ -126,21 +124,23 @@ export async function GET(request: NextRequest) {
     }
     
     if (category) {
+      // Only join categories if we are filtering by it
+      countQuery = countQuery.leftJoin(categories, eq(products.categoryId, categories.id)) as any;
       countWhereConditions.push(eq(categories.code, category));
     }
     
     if (branchId) {
+      // Only join inventory if we are filtering by branch
+      countQuery = countQuery.leftJoin(inventory, eq(products.id, inventory.productId)) as any;
       countWhereConditions.push(eq(inventory.branchId, branchId));
     }
     
     if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions)) as typeof countQuery;
+      countQuery = countQuery.where(and(...countWhereConditions)) as any;
     }
     
     const totalCountResult = await countQuery;
-    // Handle the count result which may be in different formats depending on the database driver
-    const countValue = totalCountResult[0].count;
-    const totalCount = typeof countValue === 'number' ? countValue : parseInt(countValue as string);
+    const totalCount = Number(totalCountResult[0].count);
     const totalPages = Math.ceil(totalCount / limit);
     
     return new Response(
@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
       image,
       imageUrl,
       categoryId,
+      brand,
       unit = 'pcs',
       profitMargin = '0.00',
       purchasePrice = '0',

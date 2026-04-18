@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       
       // Send initial connection message
       if (!isClosed) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected', message: 'Connected to notification stream' })}\\n\\n`));
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected', message: 'Connected to notification stream' })}\n\n`));
       }
       
       // Create a typed writer for the connection
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
           // This is where we can periodically check for new notifications if needed
           // For now we'll just send a heartbeat to keep the connection alive
           if (!isClosed) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\\n\\n`));
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'heartbeat', timestamp: Date.now() })}\n\n`));
           } else {
             // If closed, clear the interval to stop trying to send heartbeats
             clearInterval(interval);

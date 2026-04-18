@@ -158,57 +158,99 @@ export default function TransactionsPage() {
     fetchBranches();
   }, [session]);
 
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const fetchTransactions = async () => {
+    if (!session?.user) return;
+    setIsLoading(true);
+    try {
+      // For admin users, fetch all transactions; for others, fetch by branch
+      let url = `/api/transactions?userId=${session.user.id}`;
+      
+      if (!isMainAdmin && cashierBranchId) {
+        url += `&branchId=${cashierBranchId}`;
+      } else if (isMainAdmin && selectedBranchFilter) {
+        url += `&branchId=${selectedBranchFilter}`;
+      }
+
+      const response = await fetch(url);
+      
+      if (response.ok) {
+        const result = await response.json();
+        
+        if (result.success) {
+          const transformedTransactions = result.data.map((t: any) => ({
+            id: t.id,
+            transactionNumber: t.transactionNumber,
+            date: t.createdAt, // Store raw date for filtering
+            customerName: t.memberName || "Walk-in Customer",
+            items: t.detailsCount || 0,
+            subtotal: parseFloat(t.subtotal) || 0,
+            discount: parseFloat(t.discountAmount) || 0,
+            tax: parseFloat(t.taxAmount) || 0,
+            total: parseFloat(t.total) || 0,
+            paymentMethod: t.paymentMethod,
+            status: t.status,
+            cashierName: t.cashierName || "Unknown"
+          }));
+          setTransactions(transformedTransactions);
+        } else {
+          setTransactions([]);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      setTransactions([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Fetch transactions for the cashier's branch or all transactions for admin
   useEffect(() => {
-    if (session?.user) {
-      const fetchTransactions = async () => {
-        setIsLoading(true);
-        try {
-          // For admin users, fetch all transactions; for others, fetch by branch
-          let url = `/api/transactions?userId=${session.user.id}`;
-          
-          if (!isMainAdmin && cashierBranchId) {
-            url += `&branchId=${cashierBranchId}`;
-          } else if (isMainAdmin && selectedBranchFilter) {
-            url += `&branchId=${selectedBranchFilter}`;
-          }
+    fetchTransactions();
+  }, [cashierBranchId, session, isMainAdmin, selectedBranchFilter, refreshTrigger]);
 
-          const response = await fetch(url);
-          
-          if (response.ok) {
-            const result = await response.json();
-            
-            if (result.success) {
-              const transformedTransactions = result.data.map((t: any) => ({
-                id: t.id,
-                transactionNumber: t.transactionNumber,
-                date: t.createdAt, // Store raw date for filtering
-                customerName: t.memberName || "Walk-in Customer",
-                items: t.detailsCount || 0,
-                subtotal: parseFloat(t.subtotal) || 0,
-                discount: parseFloat(t.discountAmount) || 0,
-                tax: parseFloat(t.taxAmount) || 0,
-                total: parseFloat(t.total) || 0,
-                paymentMethod: t.paymentMethod,
-                status: t.status,
-                cashierName: t.cashierName || "Unknown"
-              }));
-              setTransactions(transformedTransactions);
-            } else {
-              setTransactions([]);
+  // Set up real-time connection using Server-Sent Events (SSE) for live updates
+  useEffect(() => {
+    if (!session?.user?.id || !cashierBranchId) return;
+
+    let eventSource: EventSource | null = null;
+    
+    const setupStream = () => {
+      const sseUrl = `/api/notifications/stream/client?branchId=${cashierBranchId}`;
+      eventSource = new EventSource(sseUrl);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'notification') {
+            const notifType = data.notification.type;
+            if (notifType === 'transaction_created' || notifType === 'inventory_update') {
+              console.log('Real-time update triggered by:', notifType);
+              setRefreshTrigger(prev => prev + 1);
             }
           }
-        } catch (error) {
-          console.error("Error fetching transactions:", error);
-          setTransactions([]);
-        } finally {
-          setIsLoading(false);
+        } catch (e) {
+          // Parsing error
         }
       };
 
-      fetchTransactions();
-    }
-  }, [cashierBranchId, session, isMainAdmin, selectedBranchFilter]);
+      eventSource.onerror = () => {
+        if (eventSource) {
+          eventSource.close();
+          // Attempt to reconnect after 5s
+          setTimeout(setupStream, 5000);
+        }
+      };
+    };
+
+    setupStream();
+
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, [session?.user?.id, cashierBranchId]);
 
   const filteredTransactions = transactions.filter(transaction => {
     const matchesSearch = 

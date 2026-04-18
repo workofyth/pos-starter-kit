@@ -13,8 +13,10 @@ import {
   CreditCard,
   Building,
   User,
-  Check, // Add the missing Check icon import
+  Check, 
   Bell,
+  Tag,
+  Bot,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,11 @@ export const allSidebarItems: SidebarItem[] = [
     icon: ShoppingCart,
   },
   {
+    title: "AI Assistant",
+    href: "/chatbot",
+    icon: LayoutDashboard,
+  },
+  {
     title: "Draft Orders",
     href: "/draft-orders",
     icon: ShoppingCart,
@@ -57,6 +64,11 @@ export const allSidebarItems: SidebarItem[] = [
     title: "Categories",
     href: "/categories",
     icon: Package,
+  },
+  {
+    title: "Brands",
+    href: "/brands",
+    icon: Tag,
   },
   {
     title: "Inventory",
