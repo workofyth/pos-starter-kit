@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
         sku: products.sku,
         barcode: products.barcode,
         image: products.image,
+        brand: products.brand,
         imageUrl: products.imageUrl,
         unit: products.unit,
         profitMargin: products.profitMargin,
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(inventory, eq(products.id, inventory.productId))
       .groupBy(
         products.id,
+        products.brand,
         categories.name,
         productPrices.sellingPrice,
         productPrices.purchasePrice,
@@ -72,7 +74,12 @@ export async function GET(request: NextRequest) {
     const whereConditions = [];
     
     if (search) {
-      whereConditions.push(ilike(products.name, `%${search}%`));
+      whereConditions.push(or(
+        ilike(products.name, `%${search}%`),
+        ilike(products.brand, `%${search}%`),
+        ilike(products.sku, `%${search}%`),
+        ilike(products.barcode, `%${search}%`)
+      ));
     }
     
     if (category) {
@@ -117,7 +124,12 @@ export async function GET(request: NextRequest) {
     const countWhereConditions = [];
     
     if (search) {
-      countWhereConditions.push(ilike(products.name, `%${search}%`));
+      countWhereConditions.push(or(
+        ilike(products.name, `%${search}%`),
+        ilike(products.brand, `%${search}%`),
+        ilike(products.sku, `%${search}%`),
+        ilike(products.barcode, `%${search}%`)
+      ));
     }
     
     if (category) {

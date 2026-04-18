@@ -48,6 +48,16 @@ export const categories = pgTable("categories", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Brands table
+export const brands = pgTable("brands", {
+  id: text("id").primaryKey().notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  code: text("code").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Products table
 export const products = pgTable("products", {
   id: text("id").primaryKey().notNull(),
@@ -58,6 +68,7 @@ export const products = pgTable("products", {
   image: text("image"), // URL or path to product image
   imageUrl: text("image_url"), // Path to stored image
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
+  brand: text("brand").default("EJM"),
   unit: text("unit").default("pcs").notNull(), // pcs, kg, ltr, etc.
   profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }).default("0.00"), // Profit margin percentage
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -264,6 +275,14 @@ export const notifications = pgTable("notifications", {
   data: jsonb("data"), // Additional data related to the notification
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// App Settings table (for global configurations)
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey().notNull(),
+  value: text("value").notNull(),
+  description: text("description"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

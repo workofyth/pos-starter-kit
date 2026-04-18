@@ -39,9 +39,9 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         return {
           hasFullAccess: true,
           allowedMainItems: [
-            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Inventory', 
+            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
             'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
-            'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications' // Added Approvals and Notifications
+            'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications' 
           ],
           allowedDocumentItems: ['Data Library', 'Reports', 'Word Assistant'],
           allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
@@ -52,8 +52,8 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         return {
           hasFullAccess: true,
           allowedMainItems: [
-            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Inventory', 
-            'Members', 'Reporting', 'Transactions', 'Approvals', 'Notifications' // Branches and Staff removed for branch admins, Notifications added
+            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
+            'Members', 'Reporting', 'Transactions', 'Approvals', 'Notifications' 
           ],
           allowedDocumentItems: ['Reports'],
           allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
@@ -81,6 +81,9 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
           'Dashboard',        // Dashboard
           'POS',              // POS for transaction processing
           'Draft Orders',     // Draft orders for continuing transactions
+          'Products',         // Products
+          'Categories',       // Categories
+          'Brands',           // Brands
           'Inventory',        // Inventory by branch
           'Transactions',     // Transaction by branch
           'Reporting',        // Report by branch

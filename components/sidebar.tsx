@@ -13,8 +13,9 @@ import {
   CreditCard,
   Building,
   User,
-  Check, // Add the missing Check icon import
+  Check, 
   Bell,
+  Tag,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,11 @@ export const allSidebarItems: SidebarItem[] = [
     title: "Categories",
     href: "/categories",
     icon: Package,
+  },
+  {
+    title: "Brands",
+    href: "/brands",
+    icon: Tag,
   },
   {
     title: "Inventory",

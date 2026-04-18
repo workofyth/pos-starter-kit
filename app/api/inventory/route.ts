@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
         productSku: products.sku,
         productBarcode: products.barcode,
         productDescription: products.description,
+        productBrand: products.brand,
         productImage: products.image,
         productImageUrl: products.imageUrl,
         productCategoryId: products.categoryId,

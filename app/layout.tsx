@@ -4,6 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
 import { RealTimeNotificationBanner } from "@/components/real-time-notification-banner";
 import { RedisInitializer } from "@/components/redis-initializer";
+import { Chatbot } from "@/components/chatbot";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,6 +41,7 @@ export default function RootLayout({
           <RedisInitializer />
           <RealTimeNotificationBanner />
           {children}
+          <Chatbot />
         </ThemeProvider>
       </body>
     </html>

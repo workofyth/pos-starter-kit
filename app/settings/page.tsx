@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
@@ -11,13 +11,101 @@ import {
   Package,
   AlertTriangle,
   BarChart3,
-  Globe
+  Globe,
+  Loader2
 } from "lucide-react";
+import { useSession } from "@/lib/auth-client";
+import { UserRole } from "@/lib/role-based-access";
+import { toast } from "sonner";
+
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("general");
+  const { data: session } = useSession();
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [userBranchId, setUserBranchId] = useState<string | null>(null);
+  const [userBranchType, setUserBranchType] = useState<string | null>(null);
+  const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [userBranchName, setUserBranchName] = useState<string>("");
+  const [userBranchAddress, setUserBranchAddress] = useState<string>("");
+  const [isUserLoading, setIsUserLoading] = useState(true);
+  const [groqApiKey, setGroqApiKey] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  const tabs = [
+  // Get user's role and branch information
+  useEffect(() => {
+    const fetchUserBranchInfo = async () => {
+      if (session?.user?.id) {
+        try {
+          const response = await fetch(`/api/user-branches?userId=${session.user.id}`);
+          if (response.ok) {
+            const result = await response.json();
+            if (result.success && result.data.length > 0) {
+              const uBranch = result.data[0];
+              setUserRole(uBranch.role || 'staff');
+              setUserBranchId(uBranch.branchId || null);
+              setIsMainAdmin(uBranch.isMainAdmin === true);
+              setUserBranchType(uBranch.branch?.type || null);
+              setUserBranchName(uBranch.branch?.name || "");
+              setUserBranchAddress(uBranch.branch?.address || "");
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching user branch info:', error);
+        } finally {
+          setIsUserLoading(false);
+        }
+      } else {
+        setIsUserLoading(false);
+      }
+    };
+
+    fetchUserBranchInfo();
+    fetchGroqKey();
+  }, [session]);
+
+  const fetchGroqKey = async () => {
+    try {
+      const response = await fetch('/api/settings?key=groq_api_key');
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          setGroqApiKey(result.data.value);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching Groq key:', error);
+    }
+  };
+
+  const handleSaveIntegration = async () => {
+    setIsSaving(true);
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          key: 'groq_api_key',
+          value: groqApiKey,
+          description: 'API Key for Groq AI Chatbot'
+        })
+      });
+
+      if (response.ok) {
+        toast.success("Integration settings saved successfully");
+      } else {
+        toast.error("Failed to save integration settings");
+      }
+    } catch (error) {
+      toast.error("An error occurred while saving");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const isSubBranchUser = !isMainAdmin && userBranchType !== 'main' && userBranchId;
+
+  const allTabs = [
     { id: "general", label: "General", icon: Settings },
     { id: "store", label: "Store", icon: Store },
     { id: "payment", label: "Payment", icon: CreditCard },
@@ -27,6 +115,33 @@ export default function SettingsPage() {
     { id: "reporting", label: "Reporting", icon: BarChart3 },
     { id: "integration", label: "Integration", icon: Globe },
   ];
+
+  // Filter tabs:
+  // 1. Always hide "users"
+  // 2. Hide "general" for sub-branch users
+  const tabs = allTabs.filter(tab => {
+    if (tab.id === "users") return false;
+    if (isSubBranchUser && tab.id === "general") return false;
+    return true;
+  });
+
+  // Ensure active default is valid
+  useEffect(() => {
+    if (!isUserLoading) {
+      if (isSubBranchUser && activeTab === "general") {
+        setActiveTab("store");
+      }
+    }
+  }, [isSubBranchUser, isUserLoading, activeTab]);
+
+  if (isUserLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="ml-2">Loading settings...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -85,7 +200,7 @@ export default function SettingsPage() {
                       <input 
                         type="text" 
                         className="w-full p-2 border rounded-md" 
-                        defaultValue="My POS Business"
+                        defaultValue={userBranchName || "My POS Business"}
                       />
                     </div>
                     
@@ -94,7 +209,7 @@ export default function SettingsPage() {
                       <textarea 
                         className="w-full p-2 border rounded-md" 
                         rows={3}
-                        defaultValue="Jl. Jend. Sudirman No. 1, Jakarta"
+                        defaultValue={userBranchAddress || "Jl. Jend. Sudirman No. 1, Jakarta"}
                       ></textarea>
                     </div>
                     
@@ -413,43 +528,30 @@ export default function SettingsPage() {
                   
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium mb-1">API Key</label>
+                      <label className="block text-sm font-medium mb-1">API Groq AI Key</label>
                       <input 
                         type="password" 
                         className="w-full p-2 border rounded-md" 
-                        placeholder="Enter API key"
+                        placeholder="Enter Groq AI API key"
+                        value={groqApiKey}
+                        onChange={(e) => setGroqApiKey(e.target.value)}
                       />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span>Accounting Software</span>
-                        <select className="p-1 border rounded">
-                          <option>None</option>
-                          <option>Accurate</option>
-                          <option>Aplos</option>
-                        </select>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Inventory Sync</span>
-                        <select className="p-1 border rounded">
-                          <option>Disabled</option>
-                          <option>Enabled</option>
-                        </select>
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Cloud Backup</span>
-                        <select className="p-1 border rounded">
-                          <option>Disabled</option>
-                          <option>Enabled</option>
-                        </select>
-                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Used for AI features and data analysis</p>
                     </div>
                   </div>
                   
-                  <Button>Save Integration Settings</Button>
+                  <Button 
+                    className="mt-4" 
+                    onClick={handleSaveIntegration}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : 'Save Integration Settings'}
+                  </Button>
                 </div>
               )}
             </CardContent>

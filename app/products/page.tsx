@@ -41,6 +41,7 @@ interface Product {
   profitMargin: number; // Profit margin percentage
   image?: string; // Optional image URL
   imageUrl?: string; // Path to stored image
+  brand: string;
 }
 
 interface ProductFormData {
@@ -56,10 +57,17 @@ interface ProductFormData {
   description: string;
   image: string;
   imageUrl?: string;
+  brand: string;
   id?: string;
 }
 
 interface Category {
+  id: string;
+  name: string;
+  code: string;
+}
+
+interface Brand {
   id: string;
   name: string;
   code: string;
@@ -97,12 +105,14 @@ export default function ProductsPage() {
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [brandsLoading, setBrandsLoading] = useState(true);
   const [productsLoading, setProductsLoading] = useState(true);
   
   // Combined loading state
-  const loading = categoriesLoading || productsLoading;
+  const loading = categoriesLoading || productsLoading || brandsLoading;
   
   // Get user's role and branch information
   useEffect(() => {
@@ -179,7 +189,8 @@ export default function ProductsPage() {
               minStock: Number(apiProduct.minStock) || 5,
               profitMargin: parseFloat(apiProduct.profitMargin as string) || 0,
               image: apiProduct.image as string,
-              imageUrl: apiProduct.imageUrl as string
+              imageUrl: apiProduct.imageUrl as string,
+              brand: apiProduct.brand as string || 'EJM'
             }));
             setProducts(formattedProducts);
           }
@@ -229,6 +240,27 @@ export default function ProductsPage() {
     fetchCategories();
   }, []);
   
+  // Load brands from API on component mount
+  useEffect(() => {
+    const fetchBrands = async () => {
+      try {
+        const response = await fetch('/api/brands');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            setBrands(result.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching brands:', error);
+      } finally {
+        setBrandsLoading(false);
+      }
+    };
+
+    fetchBrands();
+  }, []);
+  
   
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -252,6 +284,7 @@ export default function ProductsPage() {
     description: "",
     image: "",
     imageUrl: "",
+    brand: "EJM",
     id: Date.now().toString() // Temporary ID for image upload
   });
 
@@ -279,6 +312,7 @@ export default function ProductsPage() {
       description: "", // description might not be in the Product interface
       image: product.image || "",
       imageUrl: product.imageUrl || "",
+      brand: product.brand || "EJM",
       id: product.id
     });
     setIsEditDialogOpen(true);
@@ -326,7 +360,8 @@ export default function ProductsPage() {
             sellingPrice: newProduct.sellingPrice || 0,
             profitMargin: newProduct.profitMargin || 0,
             image: newProduct.image,
-            imageUrl: newProduct.imageUrl
+            imageUrl: newProduct.imageUrl,
+            brand: newProduct.brand
           } : p
         ));
         
@@ -345,6 +380,7 @@ export default function ProductsPage() {
           description: "",
           image: "",
           imageUrl: "",
+          brand: "EJM",
           id: Date.now().toString()
         });
         setIsEditDialogOpen(false);
@@ -518,7 +554,8 @@ export default function ProductsPage() {
           minStock: newProductFromAPI.minStock || 5,
           profitMargin: parseFloat(newProductFromAPI.profitMargin) || 0,
           image: newProductFromAPI.image,
-          imageUrl: newProductFromAPI.imageUrl
+          imageUrl: newProductFromAPI.imageUrl,
+          brand: newProductFromAPI.brand || newProduct.brand || 'EJM'
         }]);
         
         // Reset the form
@@ -535,6 +572,7 @@ export default function ProductsPage() {
           description: "",
           image: "",
           imageUrl: "",
+          brand: "EJM",
           id: Date.now().toString()
         });
         
@@ -577,6 +615,7 @@ export default function ProductsPage() {
                 description: "",
                 image: "",
                 imageUrl: "",
+                brand: "EJM"
               });
             }
           }}>
@@ -653,6 +692,23 @@ export default function ProductsPage() {
                       value={newProduct.unit}
                       onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Brand</label>
+                    <select
+                      className="w-full p-2 border rounded-md"
+                      value={newProduct.brand}
+                      onChange={(e) => setNewProduct({...newProduct, brand: e.target.value})}
+                    >
+                      <option value="">Select a brand</option>
+                      {brands.map(brand => (
+                        <option key={brand.id} value={brand.name}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -886,6 +942,23 @@ export default function ProductsPage() {
                       value={newProduct.unit}
                       onChange={(e) => setNewProduct({...newProduct, unit: e.target.value})}
                     />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-medium">Brand</label>
+                    <select
+                      className="w-full p-2 border rounded-md"
+                      value={newProduct.brand}
+                      onChange={(e) => setNewProduct({...newProduct, brand: e.target.value})}
+                    >
+                      <option value="">Select a brand</option>
+                      {brands.map(brand => (
+                        <option key={brand.id} value={brand.name}>
+                          {brand.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4">
@@ -1132,6 +1205,7 @@ export default function ProductsPage() {
               <TableRow>
                 <TableHead>Image</TableHead>
                 <TableHead>Product</TableHead>
+                <TableHead>Brand</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Barcode</TableHead>
                 <TableHead>Category</TableHead>
@@ -1167,6 +1241,9 @@ export default function ProductsPage() {
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="default">{product.brand || 'EJM'}</Badge>
+                  </TableCell>
                   <TableCell>{product.sku}</TableCell>
                   <TableCell>{product.barcode}</TableCell>
                   <TableCell>
@@ -1186,7 +1263,7 @@ export default function ProductsPage() {
                   <TableCell>Rp {product.sellingPrice.toLocaleString()}</TableCell>
                   {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                     <TableCell>
-                      <Badge variant="outline">
+                      <Badge variant="secondary">
                         {product.profitMargin.toFixed(2)}%
                       </Badge>
                     </TableCell>
