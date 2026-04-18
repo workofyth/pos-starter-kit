@@ -62,12 +62,20 @@ export async function GET(request: NextRequest) {
     // Apply filters
     const whereConditions = [];
     
-    if (branchId) {
+    // Improved logic: If both branchId and userId are provided, 
+    // we want notifications for that specific user OR general notifications for that branch (userId is null)
+    if (branchId && userId) {
+      const { or, isNull } = await import('drizzle-orm');
       whereConditions.push(eq(notifications.branchId, branchId));
-    }
-    
-    if (userId) {
-      whereConditions.push(eq(notifications.userId, userId));
+      whereConditions.push(or(eq(notifications.userId, userId), isNull(notifications.userId)));
+    } else {
+      if (branchId) {
+        whereConditions.push(eq(notifications.branchId, branchId));
+      }
+      
+      if (userId) {
+        whereConditions.push(eq(notifications.userId, userId));
+      }
     }
     
     if (isRead !== null && isRead !== undefined) {
@@ -88,12 +96,18 @@ export async function GET(request: NextRequest) {
     
     const countWhereConditions = [];
     
-    if (branchId) {
+    if (branchId && userId) {
+      const { or, isNull } = await import('drizzle-orm');
       countWhereConditions.push(eq(notifications.branchId, branchId));
-    }
-    
-    if (userId) {
-      countWhereConditions.push(eq(notifications.userId, userId));
+      countWhereConditions.push(or(eq(notifications.userId, userId), isNull(notifications.userId)));
+    } else {
+      if (branchId) {
+        countWhereConditions.push(eq(notifications.branchId, branchId));
+      }
+      
+      if (userId) {
+        countWhereConditions.push(eq(notifications.userId, userId));
+      }
     }
     
     if (isRead !== null && isRead !== undefined) {

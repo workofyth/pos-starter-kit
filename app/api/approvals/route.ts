@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
       const redisClient = await getRedis();
       if (redisClient) {
         const updateData = {
-          type: 'stock_split_requested',
+          type: 'stock_split_request',
           productId,
           sourceBranchId,
           targetBranchId,
@@ -199,7 +199,8 @@ export async function POST(request: NextRequest) {
           targetBranchName,
           requestedBy: userId
         };
-        await redisClient.publish('notifications:approvals', JSON.stringify(updateData));
+        await redisClient.publish(`channel:notifications:${sourceBranchId}`, JSON.stringify({ type: 'notification', notification: updateData }));
+        await redisClient.publish(`channel:notifications:${targetBranchId}`, JSON.stringify({ type: 'notification', notification: updateData }));
       }
     } catch (publishError) {
       console.warn('Failed to publish new request update:', publishError);
@@ -395,11 +396,12 @@ export async function PUT(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id') || '';
-
     const {
       userId,
       action, // 'approve' | 'reject' | 'resend'
-      notes
+      notes,
+      quantity,
+      targetBranchId
     } = await request.json();
 
     if (!id || !userId || !action) {
@@ -561,6 +563,8 @@ export async function PUT(request: NextRequest) {
         status: newStatus,
         approvedBy: action === 'resend' ? null : userId,
         notes: notes || approvalReq.notes,
+        ...(action === 'resend' && quantity ? { quantity: parseInt(quantity) } : {}),
+        ...(action === 'resend' && targetBranchId ? { referenceId: targetBranchId } : {}),
         updatedAt: new Date()
       })
       .where(eq(inventoryTransactions.id, id))
@@ -644,7 +648,7 @@ export async function PUT(request: NextRequest) {
         const redisClient = await getRedis();
         if (redisClient) {
           const updateData = {
-            type: 'stock_split_completed',
+            type: 'stock_split_approved',
             productId: approvalReq.productId,
             sourceBranchId: approvalReq.branchId,
             targetBranchId: approvalReq.referenceId,
@@ -653,13 +657,11 @@ export async function PUT(request: NextRequest) {
             sourceBranchName: approvalReq.sourceBranchName || 'Unknown Branch',
             targetBranchName: approvalReq.targetBranchName || 'Unknown Branch'
           };
-
-          await redisClient.publish(`notifications:${approvalReq.branchId}`, JSON.stringify(updateData));
+          const notificationPayload = JSON.stringify({ type: 'notification', notification: updateData });
+          await redisClient.publish(`channel:notifications:${approvalReq.branchId}`, notificationPayload);
           if (approvalReq.referenceId) {
-            await redisClient.publish(`notifications:${approvalReq.referenceId}`, JSON.stringify(updateData));
+            await redisClient.publish(`channel:notifications:${approvalReq.referenceId}`, notificationPayload);
           }
-          await redisClient.publish('notifications:inventory', JSON.stringify(updateData));
-          await redisClient.publish('notifications:approvals', JSON.stringify(updateData));
         }
       } catch (publishError) {
         console.warn('Failed to publish inventory update:', publishError);
@@ -743,7 +745,7 @@ export async function PUT(request: NextRequest) {
             await sendMainBranchNotification({
               title: 'Stock Split to Main Branch',
               message: `Main branch received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
-              type: 'stock_split',
+              type: 'stock_split_approved',
               data: {
                 productId: approvalReq.productId,
                 sourceBranchId: approvalReq.branchId,
@@ -762,7 +764,7 @@ export async function PUT(request: NextRequest) {
             {
               title: 'Stock Split Received',
               message: `Received ${approvalReq.quantity} units of ${productName} from main branch ${sourceBranchName}`,
-              type: 'stock_split',
+              type: 'stock_split_approved',
               data: {
                 productId: approvalReq.productId,
                 sourceBranchId: approvalReq.branchId,
@@ -781,7 +783,7 @@ export async function PUT(request: NextRequest) {
             {
               title: 'Stock Split Completed',
               message: `Received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
-              type: 'stock_split',
+              type: 'stock_split_approved',
               data: {
                 productId: approvalReq.productId,
                 sourceBranchId: approvalReq.branchId,
@@ -814,7 +816,7 @@ export async function PUT(request: NextRequest) {
               await sendMainBranchNotification({
                 title: 'Stock Split Completed',
                 message: `Received ${approvalReq.quantity} units of ${productName} from ${sourceBranchName}`,
-                type: 'stock_split',
+                type: 'stock_split_approved',
                 data: {
                   productId: approvalReq.productId,
                   sourceBranchId: approvalReq.branchId,

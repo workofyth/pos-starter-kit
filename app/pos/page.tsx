@@ -83,7 +83,12 @@ export default function POSPage() {
         const draftOrderDataStr = localStorage.getItem('draftOrderData');
         if (draftOrderDataStr) {
           const draftOrder = JSON.parse(draftOrderDataStr);
-          setCart(draftOrder.cartData);
+          setCart(draftOrder.cartData.map((item: any) => ({
+            ...item,
+            price: Number(item.price) || 0,
+            subtotal: Number(item.subtotal) || 0,
+            quantity: Number(item.quantity) || 1
+          })));
           setPaymentMethod(draftOrder.paymentMethod || 'cash');
           setDiscountRate(parseFloat(draftOrder.discountRate) || 0);
           setPaidAmount(0); // Reset paid amount
@@ -170,7 +175,7 @@ export default function POSPage() {
           ? { 
               ...item, 
               quantity: item.quantity + 1, 
-              subtotal: (item.quantity + 1) * item.price 
+              subtotal: (item.quantity + 1) * (Number(item.price) || 0) 
             } 
           : item
       );
@@ -179,9 +184,9 @@ export default function POSPage() {
       const newItem: CartItem = {
         id: product.id,
         name: product.name,
-        price: product.sellingPrice,
+        price: Number(product.sellingPrice) || 0,
         quantity: 1,
-        subtotal: product.sellingPrice,
+        subtotal: Number(product.sellingPrice) || 0,
         productId: product.id
       };
       setCart([...cart, newItem]);
@@ -207,7 +212,7 @@ export default function POSPage() {
         ? { 
             ...item, 
             quantity: newQuantity, 
-            subtotal: newQuantity * item.price 
+            subtotal: newQuantity * (Number(item.price) || 0) 
           } 
         : item
     );
@@ -219,31 +224,33 @@ export default function POSPage() {
   };
 
   const calculateSubtotal = () => {
-    return cart.reduce((total, item) => total + item.subtotal, 0);
+    return cart.reduce((total, item) => total + (Number(item.subtotal) || 0), 0) || 0;
   };
 
   const calculateDiscount = () => {
-    const subtotal = calculateSubtotal();
-    return subtotal * (discountRate / 100);
+    const subtotal = calculateSubtotal() || 0;
+    const rate = Number(discountRate) || 0;
+    return (subtotal * (rate / 100)) || 0;
   };
 
   const calculateTax = () => {
-    const subtotal = calculateSubtotal();
-    const discount = calculateDiscount();
+    const subtotal = calculateSubtotal() || 0;
+    const discount = calculateDiscount() || 0;
     // Assuming 10% tax
-    return (subtotal - discount) * 0.1;
+    return ((subtotal - discount) * 0.1) || 0;
   };
 
   const calculateTotal = () => {
-    const subtotal = calculateSubtotal();
-    const discount = calculateDiscount();
-    const tax = calculateTax();
+    const subtotal = calculateSubtotal() || 0;
+    const discount = calculateDiscount() || 0;
+    const tax = calculateTax() || 0;
     return subtotal - discount + tax;
   };
 
   const calculateChange = () => {
-    const total = calculateTotal();
-    return paidAmount >= total ? paidAmount - total : 0;
+    const total = calculateTotal() || 0;
+    const paid = Number(paidAmount) || 0;
+    return paid >= total ? (paid - total) : 0;
   };
 
   const handleProcessTransaction = async () => {
@@ -415,7 +422,7 @@ export default function POSPage() {
                         selectedMember?.id === member.id ? null : member
                       )}
                     >
-                      {member.name} ({member.points} pts)
+                      {member.name} ({Number(member.points) || 0} pts)
                     </Badge>
                   ))}
                   {selectedMember && (
@@ -488,7 +495,7 @@ export default function POSPage() {
                         </div>
                       )}
                       <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
-                      <p className="text-sm text-gray-500">Rp {product.sellingPrice.toLocaleString()}</p>
+                      <p className="text-sm text-gray-500">Rp {(Number(product.sellingPrice) || 0).toLocaleString()}</p>
                       <div className="mt-1 text-center w-full">
                         <p className="text-xs">Stock: {product.stock}</p>
                         <p className="text-xs text-gray-500">{product.sku}</p>
@@ -522,7 +529,7 @@ export default function POSPage() {
                     <div key={item.id} className="flex items-center justify-between border-b pb-2">
                       <div>
                         <h4 className="font-medium">{item.name}</h4>
-                        <p className="text-sm text-gray-500">Rp {item.price.toLocaleString()} x {item.quantity}</p>
+                        <p className="text-sm text-gray-500">Rp {(Number(item.price) || 0).toLocaleString()} x {item.quantity}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -549,7 +556,7 @@ export default function POSPage() {
                         </Button>
                       </div>
                       <div className="font-medium">
-                        Rp {item.subtotal.toLocaleString()}
+                        Rp {(Number(item.subtotal) || 0).toLocaleString()}
                       </div>
                     </div>
                   ))}
@@ -557,22 +564,22 @@ export default function POSPage() {
                   <div className="pt-4 space-y-2">
                     <div className="flex justify-between">
                       <span>Subtotal:</span>
-                      <span>Rp {calculateSubtotal().toLocaleString()}</span>
+                      <span>Rp {(Number(calculateSubtotal()) || 0).toLocaleString()}</span>
                     </div>
                     
                     <div className="flex justify-between">
                       <span>Discount ({discountRate}%):</span>
-                      <span>- Rp {calculateDiscount().toLocaleString()}</span>
+                      <span>- Rp {(Number(calculateDiscount()) || 0).toLocaleString()}</span>
                     </div>
                     
                     <div className="flex justify-between">
                       <span>Tax (10%):</span>
-                      <span>Rp {calculateTax().toLocaleString()}</span>
+                      <span>Rp {(Number(calculateTax()) || 0).toLocaleString()}</span>
                     </div>
                     
                     <div className="flex justify-between font-bold text-lg pt-2 border-t">
                       <span>Total:</span>
-                      <span>Rp {calculateTotal().toLocaleString()}</span>
+                      <span>Rp {(Number(calculateTotal()) || 0).toLocaleString()}</span>
                     </div>
                   </div>
                   
@@ -618,7 +625,7 @@ export default function POSPage() {
                     
                     <div className="flex justify-between text-sm">
                       <span>Change:</span>
-                      <span className="font-medium">Rp {calculateChange().toLocaleString()}</span>
+                      <span className="font-medium">Rp {(Number(calculateChange()) || 0).toLocaleString()}</span>
                     </div>
                     
                     <div className="pt-2 flex flex-col gap-2">
@@ -635,7 +642,7 @@ export default function POSPage() {
                         ) : (
                           <>
                             <CreditCard className="h-4 w-4 mr-2" />
-                            Process Payment (Rp {calculateTotal().toLocaleString()})
+                            Process Payment (Rp {(Number(calculateTotal()) || 0).toLocaleString()})
                           </>
                         )}
                       </Button>

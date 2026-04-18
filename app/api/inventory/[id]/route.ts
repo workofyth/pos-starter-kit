@@ -937,13 +937,12 @@ export async function POST(
       .from(products)
       .where(eq(products.id, inventoryItem[0].productId));
     
-    // Send notification to target branch if source is main branch and target is sub-branch (Rule 1)
+    // Rule 1: Send notification to target branch if source is main branch and target is sub-branch
     if (sourceBranch && targetBranch && sourceBranch.type === 'main' && targetBranch.type === 'sub') {
       try {
-        // Use helper function to send notifications to target branch roles
         await sendNotificationsToBranchRoles(
-          targetBranchId, // Target branch
-          ['admin', 'staff', 'manager'], // Send to all relevant roles at sub branch
+          targetBranchId,
+          ['admin', 'staff', 'manager'],
           {
             title: 'New Stock Request from Main Branch',
             message: `New request to receive ${quantity} units of ${product?.name || 'product'} from main branch ${sourceBranch.name}. Awaiting approval.`,
@@ -962,7 +961,57 @@ export async function POST(
         );
       } catch (notificationError) {
         console.error('Error sending notification:', notificationError);
-        // Don't fail the request if notification fails
+      }
+    }
+    
+    // Rule 2: Send notification to main branch if source is sub-branch and target is main branch
+    else if (sourceBranch && targetBranch && sourceBranch.type === 'sub' && targetBranch.type === 'main') {
+      try {
+        const { sendMainBranchNotification } = await import('@/lib/notification-helpers');
+        await sendMainBranchNotification({
+          title: 'New Stock Split Request from Sub-Branch',
+          message: `Sub-branch ${sourceBranch.name} requested to transfer ${quantity} units of ${product?.name || 'product'} to main branch.`,
+          type: 'stock_split_request',
+          data: {
+            productId: inventoryItem[0].productId,
+            sourceBranchId,
+            quantity,
+            transactionId: approvalRequest.id,
+            productName: product?.name || 'Unknown Product',
+            sourceBranchName: sourceBranch.name,
+            targetBranchName: targetBranch.name,
+            status: 'pending'
+          }
+        });
+      } catch (notificationError) {
+        console.error('Error sending notification to main branch:', notificationError);
+      }
+    }
+    
+    // Rule 3: Send notification to target branch for sub-branch to sub-branch transfer
+    else if (sourceBranch && targetBranch && sourceBranch.type === 'sub' && targetBranch.type === 'sub') {
+      try {
+        await sendNotificationsToBranchRoles(
+          targetBranchId,
+          ['admin', 'staff', 'manager'],
+          {
+            title: 'New Stock Split Request',
+            message: `Sub-branch ${sourceBranch.name} requested to transfer ${quantity} units of ${product?.name || 'product'} to your branch.`,
+            type: 'stock_split_request',
+            data: {
+              productId: inventoryItem[0].productId,
+              sourceBranchId,
+              quantity,
+              transactionId: approvalRequest.id,
+              productName: product?.name || 'Unknown Product',
+              sourceBranchName: sourceBranch.name,
+              targetBranchName: targetBranch.name,
+              status: 'pending'
+            }
+          }
+        );
+      } catch (notificationError) {
+        console.error('Error sending notification to sub-branch:', notificationError);
       }
     }
     
