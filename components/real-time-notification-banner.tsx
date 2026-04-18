@@ -16,9 +16,58 @@ interface RealTimeNotification {
   data?: any;
 }
 
+let audioInstance: HTMLAudioElement | null = null;
+let audioUnlocked = false;
+
+if (typeof window !== 'undefined') {
+  audioInstance = new Audio('/sounds/notification.mp3');
+  audioInstance.preload = 'auto';
+
+  const unlockAudio = () => {
+    if (audioUnlocked || !audioInstance) return;
+    
+    // Set volume to 0 to prevent hearing it during unlock
+    audioInstance.volume = 0;
+    
+    const playPromise = audioInstance.play();
+    if (playPromise !== undefined) {
+      playPromise.then(() => {
+        if (audioInstance) {
+          audioInstance.pause();
+          audioInstance.currentTime = 0;
+          audioInstance.volume = 1; // Restore volume for future notifications
+        }
+        audioUnlocked = true;
+        
+        // Remove event listeners after successful unlock
+        document.removeEventListener('click', unlockAudio);
+        document.removeEventListener('touchstart', unlockAudio);
+        document.removeEventListener('keydown', unlockAudio);
+      }).catch((e) => {
+        // Autoplay policy still preventing it, keep waiting for interactions
+      });
+    }
+  };
+
+  document.addEventListener('click', unlockAudio, { once: true });
+  document.addEventListener('touchstart', unlockAudio, { once: true });
+  document.addEventListener('keydown', unlockAudio, { once: true });
+}
+
 const playNotificationSound = () => {
-  const audio = new Audio('/sounds/notification.mp3');
-  audio.play().catch(error => console.error('Error playing sound:', error));
+  if (!audioInstance) return;
+  
+  if (!audioUnlocked && typeof document !== 'undefined') {
+    // If not unlocked yet, we can try to play it anyway (might work if user interacted recently)
+    // but the error will be caught cleanly.
+  }
+  
+  audioInstance.currentTime = 0;
+  audioInstance.volume = 1;
+  const playPromise = audioInstance.play();
+  if (playPromise !== undefined) {
+    playPromise.catch(error => console.warn('Browser blocked notification sound autoplay:', error));
+  }
 };
 
 export function RealTimeNotificationBanner() {
