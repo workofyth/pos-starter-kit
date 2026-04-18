@@ -113,10 +113,11 @@ export default function ProductsPage() {
           if (response.ok) {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
-              setUserRole(result.data[0].role || 'staff');
-              setUserBranchId(result.data[0].branchId || null);
-              setIsMainAdmin(result.data[0].isMainAdmin || false);
-              setUserBranchType(result.data[0].branch?.type || null);
+              const uBranch = result.data[0];
+              setUserRole(uBranch.role || 'staff');
+              setUserBranchId(uBranch.branchId || null);
+              setIsMainAdmin(uBranch.isMainAdmin === true);
+              setUserBranchType(uBranch.branch?.type || null);
             } else {
               setUserRole('staff');
               setUserBranchId(null);
@@ -1135,10 +1136,16 @@ export default function ProductsPage() {
                 <TableHead>Barcode</TableHead>
                 <TableHead>Category</TableHead>
                 <TableHead>Stock</TableHead>
-                <TableHead>Purchase Price</TableHead>
+                {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                  <TableHead>Purchase Price</TableHead>
+                )}
                 <TableHead>Selling Price</TableHead>
-                <TableHead>Profit Margin</TableHead>
-                <TableHead>Actions</TableHead>
+                {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                  <>
+                    <TableHead>Profit Margin</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1173,13 +1180,18 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>Rp {product.purchasePrice.toLocaleString()}</TableCell>
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <TableCell>Rp {product.purchasePrice.toLocaleString()}</TableCell>
+                  )}
                   <TableCell>Rp {product.sellingPrice.toLocaleString()}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {product.profitMargin.toFixed(2)}%
-                    </Badge>
-                  </TableCell>
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <TableCell>
+                      <Badge variant="outline">
+                        {product.profitMargin.toFixed(2)}%
+                      </Badge>
+                    </TableCell>
+                  )}
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <TableCell>
                     <div className="flex gap-2">
                       {/* Only show edit button for main admin or main branch users */}
@@ -1222,6 +1234,7 @@ export default function ProductsPage() {
                       )}
                     </div>
                   </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

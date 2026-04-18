@@ -24,27 +24,82 @@ import {
   Pie,
   Cell
 } from "recharts";
-
-// Mock data for dashboard
-const salesData = [
-  { name: "Jan", sales: 4000, profit: 2400 },
-  { name: "Feb", sales: 3000, profit: 1398 },
-  { name: "Mar", sales: 2000, profit: 9800 },
-  { name: "Apr", sales: 2780, profit: 3908 },
-  { name: "May", sales: 1890, profit: 4800 },
-  { name: "Jun", sales: 2390, profit: 3800 },
-];
+import { useSession } from "@/lib/auth-client";
+import { useEffect, useState } from "react";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-const pieData = [
-  { name: 'Electronics', value: 400 },
-  { name: 'Clothing', value: 300 },
-  { name: 'Food', value: 300 },
-  { name: 'Books', value: 200 },
-];
-
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const [loading, setLoading] = useState(true);
+  
+  // Real data state
+  const [salesData, setSalesData] = useState<any[]>([]);
+  const [pieData, setPieData] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    netProfit: 0,
+    transactionsCount: 0,
+    inventoryValue: 0,
+    customersCount: 0
+  });
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!session?.user) return;
+      setLoading(true);
+      try {
+        // Resolve user branch context
+        let branchIdToUse = '';
+        const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
+        if (userBranchResponse.ok) {
+          const userBranchResult = await userBranchResponse.json();
+          if (userBranchResult.success && userBranchResult.data.length > 0) {
+            const userRole = userBranchResult.data[0].role;
+            if (userRole !== 'admin') {
+              branchIdToUse = userBranchResult.data[0].branchId;
+            }
+          }
+        }
+
+        const url = branchIdToUse 
+          ? `/api/reporting?branchId=${branchIdToUse}`
+          : `/api/reporting`;
+
+        const response = await fetch(url);
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.success) {
+            setStats(resJson.data.stats);
+            setSalesData(resJson.data.salesData);
+            setPieData(resJson.data.categoryData);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load dashboard data', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDashboardData();
+  }, [session]);
+
+  const formatCurrency = (val: number) => {
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(val);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-[70vh]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-blue-600"></div>
+      </div>
+    );
+  }
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -60,8 +115,8 @@ export default function DashboardPage() {
             <DollarSign className="h-5 w-5 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Rp 40,000</div>
-            <p className="text-xs text-muted-foreground">+20.1% from last month</p>
+            <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
+            <p className="text-xs text-muted-foreground">Total earnings from sales</p>
           </CardContent>
         </Card>
 
@@ -71,8 +126,8 @@ export default function DashboardPage() {
             <ShoppingCart className="h-5 w-5 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+1,234</div>
-            <p className="text-xs text-muted-foreground">+19% from last month</p>
+            <div className="text-2xl font-bold">{stats.transactionsCount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Completed sales orders</p>
           </CardContent>
         </Card>
 
@@ -82,19 +137,19 @@ export default function DashboardPage() {
             <Users className="h-5 w-5 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+573</div>
-            <p className="text-xs text-muted-foreground">+12% from last month</p>
+            <div className="text-2xl font-bold">{stats.customersCount.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">Total registered members</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Now</CardTitle>
-            <Activity className="h-5 w-5 text-orange-500" />
+            <CardTitle className="text-sm font-medium">Inventory Val.</CardTitle>
+            <Package className="h-5 w-5 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">+12</div>
-            <p className="text-xs text-muted-foreground">12 users active</p>
+            <div className="text-2xl font-bold">{formatCurrency(stats.inventoryValue)}</div>
+            <p className="text-xs text-muted-foreground">Estimated stock value</p>
           </CardContent>
         </Card>
       </div>
@@ -111,8 +166,8 @@ export default function DashboardPage() {
               <BarChart data={salesData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
+                <YAxis tickFormatter={(val) => `Rp ${(val / 1000000).toFixed(1)}M`} />
+                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
                 <Bar dataKey="sales" fill="#4f46e5" name="Sales" />
                 <Bar dataKey="profit" fill="#10b981" name="Profit" />
               </BarChart>
@@ -142,7 +197,7 @@ export default function DashboardPage() {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip />
+                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
