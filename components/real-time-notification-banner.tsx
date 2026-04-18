@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, Package, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,64 +16,56 @@ interface RealTimeNotification {
   data?: any;
 }
 
-let audioInstance: HTMLAudioElement | null = null;
-let audioUnlocked = false;
-
-if (typeof window !== 'undefined') {
-  audioInstance = new Audio('/sounds/notification.mp3');
-  audioInstance.preload = 'auto';
-
-  const unlockAudio = () => {
-    if (audioUnlocked || !audioInstance) return;
-    
-    // Set volume to 0 to prevent hearing it during unlock
-    audioInstance.volume = 0;
-    
-    const playPromise = audioInstance.play();
-    if (playPromise !== undefined) {
-      playPromise.then(() => {
-        if (audioInstance) {
-          audioInstance.pause();
-          audioInstance.currentTime = 0;
-          audioInstance.volume = 1; // Restore volume for future notifications
-        }
-        audioUnlocked = true;
-        
-        // Remove event listeners after successful unlock
-        document.removeEventListener('click', unlockAudio);
-        document.removeEventListener('touchstart', unlockAudio);
-        document.removeEventListener('keydown', unlockAudio);
-      }).catch((e) => {
-        // Autoplay policy still preventing it, keep waiting for interactions
-      });
-    }
-  };
-
-  document.addEventListener('click', unlockAudio, { once: true });
-  document.addEventListener('touchstart', unlockAudio, { once: true });
-  document.addEventListener('keydown', unlockAudio, { once: true });
-}
-
-const playNotificationSound = () => {
-  if (!audioInstance) return;
-  
-  if (!audioUnlocked && typeof document !== 'undefined') {
-    // If not unlocked yet, we can try to play it anyway (might work if user interacted recently)
-    // but the error will be caught cleanly.
-  }
-  
-  audioInstance.currentTime = 0;
-  audioInstance.volume = 1;
-  const playPromise = audioInstance.play();
-  if (playPromise !== undefined) {
-    playPromise.catch(error => console.warn('Browser blocked notification sound autoplay:', error));
-  }
-};
-
 export function RealTimeNotificationBanner() {
   const [notifications, setNotifications] = useState<RealTimeNotification[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const { data: session, isPending } = useSession();
+  
+  // Audio playback via React Ref
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioRef.current && !audioUnlocked) {
+        audioRef.current.volume = 0;
+        const playPromise = audioRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.then(() => {
+            if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
+              audioRef.current.volume = 1;
+            }
+            setAudioUnlocked(true);
+            document.removeEventListener('click', unlockAudio);
+            document.removeEventListener('touchstart', unlockAudio);
+          }).catch(() => {
+            // Wait for next interaction
+          });
+        }
+      }
+    };
+    
+    document.addEventListener('click', unlockAudio);
+    document.addEventListener('touchstart', unlockAudio);
+    
+    return () => {
+      document.removeEventListener('click', unlockAudio);
+      document.removeEventListener('touchstart', unlockAudio);
+    };
+  }, [audioUnlocked]);
+
+  const playSound = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.volume = 1;
+      const playPromise = audioRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => console.warn('Browser blocked notification sound autoplay:', e));
+      }
+    }
+  };
   
   // Determine user role and branch from userBranches table
   const [userRole, setUserRole] = useState<string | null>(null);
@@ -173,7 +165,7 @@ export function RealTimeNotificationBanner() {
               
               setNotifications(prev => {
                 const updatedNotifications = [processedNotification, ...prev.slice(0, 4)];
-                playNotificationSound();
+                playSound();
                 setIsVisible(true);
                 
                 setTimeout(() => {
@@ -328,6 +320,7 @@ export function RealTimeNotificationBanner() {
           </div>
         </div>
       ))}
+      <audio ref={audioRef} src="/sounds/notification.mp3" preload="auto" className="hidden" />
     </div>
   );
 }
