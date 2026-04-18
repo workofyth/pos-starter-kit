@@ -89,9 +89,15 @@ export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [userRole, setUserRole] = useState<string | null>(null); // Added state for user role
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false); // Added state for main admin status
+  const [userBranchType, setUserBranchType] = useState<string | null>(null); // Added state for branch type
   
   // State for stock movement tracking
   const [stockMovements, setStockMovements] = useState<Record<string, {initialValue: number, currentValue: number}>>({});
+  
+  // Selection state
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
+  const [isBulkSplitDialogOpen, setIsBulkSplitDialogOpen] = useState(false);
+  const [bulkSplitQuantities, setBulkSplitQuantities] = useState<Record<string, number>>({});
   
   // Get user's branch ID, role, and main admin status
   useEffect(() => {
@@ -103,8 +109,11 @@ export default function InventoryPage() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
               setUserBranchId(result.data[0].branchId);
+              setUserBranchId(result.data[0].branchId);
               setUserRole(result.data[0].role); // Store user's role
-              setIsMainAdmin(result.data[0].isMainAdmin || false); // Store main admin status
+              // Central admins must have isMainAdmin flag true
+              setIsMainAdmin(result.data[0].isMainAdmin === true); 
+              setUserBranchType(result.data[0].branch?.type || null); // Store branch type
             }
           }
         } catch (error) {
@@ -128,6 +137,8 @@ export default function InventoryPage() {
     if (current > min && current < min * 2) return { status: "moderate", variant: "secondary" };
     return { status: "good", variant: "outline" };
   };
+
+  const isSubBranchUser = !isMainAdmin && userBranchType !== 'main';
 
   // Load data on component mount and when dependencies change
   useEffect(() => {
@@ -205,7 +216,7 @@ export default function InventoryPage() {
         // Load inventory summary with branch filtering
         // Main admins can access all branches, other users only their assigned branch
         const summaryBranchId = (!isMainAdmin && userBranchId) ? userBranchId : selectedBranch || '';
-        const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&sku=${searchSKU}&category=${searchCategory}`);
+        const summaryResponse = await fetch(`/api/inventory/summary?branchId=${summaryBranchId}&search=${searchTerm}&sku=${searchSKU}&category=${searchCategory}`);
         if (summaryResponse.ok) {
           const summaryResult = await summaryResponse.json();
           if (summaryResult.success) {
@@ -768,20 +779,23 @@ export default function InventoryPage() {
                 onChange={(e) => setSearchCategory(e.target.value)}
               />
             </div>
-            <div>
-              <select
-                value={selectedBranch}
-                onChange={(e) => setSelectedBranch(e.target.value)}
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                <option value="">All Branches</option>
-                {branchList.map((branch: Branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Only show branch filter for Main Admins (those with global access) */}
+            {isMainAdmin && (
+              <div>
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  className="w-full p-2 border border-gray-300 rounded"
+                >
+                  <option value="">All Branches</option>
+                  {branchList.map((branch: Branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div className="flex items-center space-x-2">
               <input
                 type="checkbox"
@@ -886,9 +900,29 @@ export default function InventoryPage() {
           }} />
         </div>
         <div className="flex space-x-2">
-          <Button onClick={() => setIsAddDialogOpen(true)}>
-            Add New Item
-          </Button>
+          {selectedItems.length > 0 && !isSubBranchUser && (
+            <Button 
+              variant="outline" 
+              className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+              onClick={() => {
+                const initialQtys: Record<string, number> = {};
+                selectedItems.forEach(id => {
+                  const item = inventory.find(i => i.id === id);
+                  if (item) initialQtys[id] = 1;
+                });
+                setBulkSplitQuantities(initialQtys);
+                setIsBulkSplitDialogOpen(true);
+              }}
+            >
+              <TrendingUp className="h-4 w-4 mr-2" />
+              Split Selected ({selectedItems.length})
+            </Button>
+          )}
+          {!isSubBranchUser && (
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              Add New Item
+            </Button>
+          )}
         </div>
       </div>
 
@@ -899,20 +933,55 @@ export default function InventoryPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  {!isSubBranchUser && (
+                    <TableHead className="w-[40px]">
+                      <input 
+                        type="checkbox" 
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedItems(inventory.map(item => item.id));
+                          } else {
+                            setSelectedItems([]);
+                          }
+                        }}
+                        checked={selectedItems.length === inventory.length && inventory.length > 0}
+                        className="h-4 w-4"
+                      />
+                    </TableHead>
+                  )}
                   <TableHead>Product</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>Branch</TableHead>
                   <TableHead>Current Stock</TableHead>
                   <TableHead>Min Stock</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
+                  {!isSubBranchUser && (
+                    <TableHead>Actions</TableHead>
+                  )}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {inventory.map((item) => {
                   const stockStatus = getStockStatus(item.currentStock, item.minStock);
+                  
                   return (
-                    <TableRow key={item.id}>
+                    <TableRow key={item.id} className={selectedItems.includes(item.id) ? "bg-blue-50" : ""}>
+                      {!isSubBranchUser && (
+                        <TableCell>
+                          <input 
+                            type="checkbox" 
+                            checked={selectedItems.includes(item.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedItems([...selectedItems, item.id]);
+                              } else {
+                                setSelectedItems(selectedItems.filter(id => id !== item.id));
+                              }
+                            }}
+                            className="h-4 w-4"
+                          />
+                        </TableCell>
+                      )}
                       <TableCell className="font-medium">{item.productName}</TableCell>
                       <TableCell>{item.sku}</TableCell>
                       <TableCell>{item.branch}</TableCell>
@@ -960,48 +1029,50 @@ export default function InventoryPage() {
                           {stockStatus.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <div className="flex space-x-2">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setEditingStockId(item.id);
-                              setNewStockValue(item.currentStock);
-                            }}
-                          >
-                            <Package className="h-4 w-4 mr-2" />
-                            Edit
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setSplittingItem(item);
-                              setIsSplitDialogOpen(true);
-                            }}
-                          >
-                            <TrendingUp className="h-4 w-4 mr-2" />
-                            Split
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => {
-                              setAdjustingItem(item);
-                              setAdjustmentData({
-                                quantity: 0,
-                                type: 'adjustment',
-                                notes: ''
-                              });
-                              setIsAdjustDialogOpen(true);
-                            }}
-                          >
-                            <Package className="h-4 w-4 mr-2" />
-                            Adjust
-                          </Button>
-                        </div>
-                      </TableCell>
+                      {!isSubBranchUser && (
+                        <TableCell>
+                          <div className="flex space-x-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setEditingStockId(item.id);
+                                setNewStockValue(item.currentStock);
+                              }}
+                            >
+                              <Package className="h-4 w-4 mr-2" />
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSplittingItem(item);
+                                setIsSplitDialogOpen(true);
+                              }}
+                            >
+                              <TrendingUp className="h-4 w-4 mr-2" />
+                              Split
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setAdjustingItem(item);
+                                setAdjustmentData({
+                                  quantity: 0,
+                                  type: 'adjustment',
+                                  notes: ''
+                                });
+                                setIsAdjustDialogOpen(true);
+                              }}
+                            >
+                              <Package className="h-4 w-4 mr-2" />
+                              Adjust
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -1287,6 +1358,134 @@ export default function InventoryPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      {/* Bulk Split Dialog */}
+      <Dialog open={isBulkSplitDialogOpen} onOpenChange={setIsBulkSplitDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Bulk Split Stock ({selectedItems.length} Products)</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div>
+              <label className="text-sm font-medium mb-1 block">Target Branch</label>
+              <select 
+                id="bulkTargetBranch"
+                className="w-full p-2 border rounded-md"
+              >
+                <option value="">Select target branch...</option>
+                {branchList
+                  .filter(b => selectedItems.length > 0 && inventory.find(i => i.id === selectedItems[0])?.branchId !== b.id)
+                  .map(b => <option key={b.id} value={b.id}>{b.name}</option>)
+                }
+              </select>
+            </div>
+
+            <div className="max-h-[300px] overflow-y-auto border rounded-md p-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Available</TableHead>
+                    <TableHead className="w-[120px]">Qty to Split</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {selectedItems.map(id => {
+                    const item = inventory.find(i => i.id === id);
+                    if (!item) return null;
+                    return (
+                      <TableRow key={id}>
+                        <TableCell className="text-sm">{item.productName}</TableCell>
+                        <TableCell className="text-sm">{item.currentStock}</TableCell>
+                        <TableCell>
+                          <Input 
+                            type="number"
+                            min="1"
+                            max={item.currentStock}
+                            value={bulkSplitQuantities[id] || 1}
+                            onChange={(e) => setBulkSplitQuantities({
+                              ...bulkSplitQuantities,
+                              [id]: parseInt(e.target.value) || 0
+                            })}
+                            className="h-8"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div>
+              <label className="text-sm font-medium mb-1 block">Notes (Optional)</label>
+              <textarea 
+                id="bulkSplitNotes"
+                className="w-full p-2 border rounded-md" 
+                placeholder="Add any notes about this bulk split..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsBulkSplitDialogOpen(false)}>Cancel</Button>
+            <Button onClick={async () => {
+              const targetBranchId = (document.getElementById('bulkTargetBranch') as HTMLSelectElement).value;
+              const notes = (document.getElementById('bulkSplitNotes') as HTMLTextAreaElement).value;
+              
+              if (!targetBranchId) {
+                alert('Please select a target branch');
+                return;
+              }
+
+              const itemsToSplit = selectedItems.map(id => {
+                const item = inventory.find(i => i.id === id);
+                return {
+                  productId: item?.productId,
+                  quantity: bulkSplitQuantities[id] || 0
+                };
+              }).filter(item => item.quantity > 0);
+
+              if (itemsToSplit.length === 0) {
+                alert('No items to split');
+                return;
+              }
+
+              try {
+                // Determine source branch (assuming all selected items from same source branch)
+                const sourceBranchId = inventory.find(i => i.id === selectedItems[0])?.branchId;
+
+                const response = await fetch('/api/inventory/split', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    items: itemsToSplit,
+                    sourceBranchId,
+                    targetBranchId,
+                    notes,
+                    userId: session?.user?.id
+                  })
+                });
+
+                if (response.ok) {
+                  alert(`Successfully initiated split for ${itemsToSplit.length} items`);
+                  setIsBulkSplitDialogOpen(false);
+                  setSelectedItems([]);
+                  // Reload data (re-using part of the reload logic from RefreshButton)
+                  window.location.reload(); 
+                } else {
+                  const error = await response.json();
+                  alert(`Error: ${error.message}`);
+                }
+              } catch (err) {
+                alert('An error occurred during bulk split');
+              }
+            }}>
+              Execute Bulk Split
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

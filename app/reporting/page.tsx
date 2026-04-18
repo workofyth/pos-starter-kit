@@ -26,35 +26,82 @@ import {
   Cell
 } from "recharts";
 
-// Mock data for reports
-const salesData = [
-  { name: "Jan", sales: 4000000, profit: 800000 },
-  { name: "Feb", sales: 3000000, profit: 600000 },
-  { name: "Mar", sales: 2000000, profit: 400000 },
-  { name: "Apr", sales: 2780000, profit: 556000 },
-  { name: "May", sales: 1890000, profit: 378000 },
-  { name: "Jun", sales: 2390000, profit: 478000 },
-];
+import { useSession } from "@/lib/auth-client";
+import { useEffect } from "react";
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-const categoryData = [
-  { name: 'Electronics', value: 4000000 },
-  { name: 'Clothing', value: 3000000 },
-  { name: 'Food', value: 2000000 },
-  { name: 'Books', value: 1000000 },
-];
-
-const topProducts = [
-  { name: "Product A", sold: 120, revenue: 6000000 },
-  { name: "Product B", sold: 95, revenue: 7125000 },
-  { name: "Product C", sold: 80, revenue: 2000000 },
-  { name: "Product D", sold: 72, revenue: 1800000 },
-];
-
 export default function ReportingPage() {
+  const { data: session } = useSession();
   const [dateRange, setDateRange] = useState("monthly");
   const [reportType, setReportType] = useState("sales");
+  const [loading, setLoading] = useState(true);
+  
+  // Real data state
+  const [salesData, setSalesData] = useState<any[]>([]);
+  const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
+  const [stats, setStats] = useState({
+    totalRevenue: 0,
+    netProfit: 0,
+    transactionsCount: 0,
+    inventoryValue: 0
+  });
+
+  useEffect(() => {
+    const fetchReportData = async () => {
+      if (!session?.user) return;
+      setLoading(true);
+      try {
+        // Resolve user branch context
+        let branchIdToUse = '';
+        const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
+        if (userBranchResponse.ok) {
+          const userBranchResult = await userBranchResponse.json();
+          if (userBranchResult.success && userBranchResult.data.length > 0) {
+            const userRole = userBranchResult.data[0].role;
+            if (userRole !== 'admin') {
+              branchIdToUse = userBranchResult.data[0].branchId;
+            }
+          }
+        }
+
+        const url = branchIdToUse 
+          ? `/api/reporting?branchId=${branchIdToUse}`
+          : `/api/reporting`;
+
+        const response = await fetch(url);
+        if (response.ok) {
+          const resJson = await response.json();
+          if (resJson.success) {
+            setStats(resJson.data.stats);
+            setSalesData(resJson.data.salesData);
+            setCategoryData(resJson.data.categoryData);
+            setTopProducts(resJson.data.topProducts);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load real reporting data', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchReportData();
+  }, [session]);
+
+  const formatCurrency = (val: number) => {
+    if (val >= 1000000) return `Rp ${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) return `Rp ${(val / 1000).toFixed(1)}K`;
+    return `Rp ${val}`;
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-[70vh]">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -93,8 +140,7 @@ export default function ReportingPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold">Rp 21.5M</p>
-                <p className="text-xs text-green-500">+12.5% from last month</p>
+                <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
               </div>
             </div>
           </CardContent>
@@ -107,9 +153,8 @@ export default function ReportingPage() {
                 <TrendingUp className="h-6 w-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Net Profit</p>
-                <p className="text-2xl font-bold">Rp 4.3M</p>
-                <p className="text-xs text-green-500">+8.3% from last month</p>
+                <p className="text-sm font-medium text-gray-600">Net Profit (Est.)</p>
+                <p className="text-2xl font-bold">{formatCurrency(stats.netProfit)}</p>
               </div>
             </div>
           </CardContent>
@@ -123,8 +168,7 @@ export default function ReportingPage() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Transactions</p>
-                <p className="text-2xl font-bold">1,248</p>
-                <p className="text-xs text-green-500">+5.2% from last month</p>
+                <p className="text-2xl font-bold">{stats.transactionsCount.toLocaleString()}</p>
               </div>
             </div>
           </CardContent>
@@ -137,9 +181,8 @@ export default function ReportingPage() {
                 <Package className="h-6 w-6 text-yellow-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Inventory Value</p>
-                <p className="text-2xl font-bold">Rp 15.7M</p>
-                <p className="text-xs text-gray-500">+2.1% from last month</p>
+                <p className="text-sm font-medium text-gray-600">Inventory Value (Est.)</p>
+                <p className="text-2xl font-bold">{formatCurrency(stats.inventoryValue)}</p>
               </div>
             </div>
           </CardContent>
@@ -157,9 +200,9 @@ export default function ReportingPage() {
               <BarChart data={salesData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" />
-                <YAxis tickFormatter={(value) => `Rp ${(value / 1000000).toFixed(0)}M`} />
+                <YAxis tickFormatter={(value) => formatCurrency(value)} width={80} />
                 <Tooltip 
-                  formatter={(value) => [`Rp ${(Number(value) / 1000000).toFixed(2)}M`, '']}
+                  formatter={(value) => [formatCurrency(Number(value)), '']}
                   labelFormatter={(label) => `Month: ${label}`}
                 />
                 <Bar dataKey="sales" fill="#4f46e5" name="Sales" />
@@ -191,7 +234,7 @@ export default function ReportingPage() {
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => `Rp ${(Number(value) / 1000000).toFixed(2)}M`} />
+                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
@@ -219,8 +262,8 @@ export default function ReportingPage() {
                   <tr key={index} className="border-b hover:bg-gray-50">
                     <td className="py-3 px-4 font-medium">{product.name}</td>
                     <td className="py-3 px-4">{product.sold}</td>
-                    <td className="py-3 px-4">Rp {(product.revenue / 1000).toFixed(0)}K</td>
-                    <td className="py-3 px-4">Rp {((product.revenue / product.sold) / 1000).toFixed(0)}K</td>
+                    <td className="py-3 px-4">{formatCurrency(product.revenue)}</td>
+                    <td className="py-3 px-4">{formatCurrency(product.revenue / (product.sold || 1))}</td>
                   </tr>
                 ))}
               </tbody>

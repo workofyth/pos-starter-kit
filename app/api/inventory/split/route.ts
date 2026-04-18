@@ -1,10 +1,9 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { inventory, products, branches, inventoryTransactions, userBranches, notifications } from '@/db/schema/pos';
-import { eq, and, count, sql, inArray } from 'drizzle-orm';
+import { inventory, products, branches, inventoryTransactions, userBranches } from '@/db/schema/pos';
+import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
-import redis from '@/lib/redis';
 
 // POST - Create approval request for splitting inventory from one branch to another
 export async function POST(request: NextRequest) {
@@ -12,39 +11,44 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     
     const {
-      productId,
+      productId, // Single split fallback
+      quantity,  // Single split fallback
+      items,     // Multiple split: Array of { productId, quantity }
       sourceBranchId,
       targetBranchId,
-      quantity,
       notes = '',
-      userId // Add userId to track who initiated the request
+      userId 
     } = body;
     
     // Validate required fields
-    if (!productId || !sourceBranchId || !targetBranchId || !quantity || !userId) {
+    if (!sourceBranchId || !targetBranchId || !userId) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          message: 'Product ID, Source Branch ID, Target Branch ID, Quantity, and User ID are required' 
+          message: 'Source Branch ID, Target Branch ID, and User ID are required' 
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
-    
+
     // Check if source and target branches are different
     if (sourceBranchId === targetBranchId) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Source and target branches must be different' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ success: false, message: 'Source and target branches must be different' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Prepare items list
+    let splitItems = [];
+    if (items && Array.isArray(items) && items.length > 0) {
+      splitItems = items;
+    } else if (productId && quantity) {
+      splitItems = [{ productId, quantity }];
+    } else {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Products and quantities are required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
     
@@ -60,14 +64,8 @@ export async function POST(request: NextRequest) {
     
     if (userBranchResponse.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'User not found or not assigned to any branch' 
-        }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
+        JSON.stringify({ success: false, message: 'User not found or not assigned to any branch' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
     
@@ -75,237 +73,110 @@ export async function POST(request: NextRequest) {
     const userBranchId = userBranchResponse[0].branchId;
     const isMainAdmin = userBranchResponse[0].isMainAdmin || false;
     
-    // Main admin can initiate splits from any branch
-    if (isMainAdmin) {
-      // Main admin can split from any source branch to any target branch
-    } else {
-      // Non-main admin users have more restrictions
-      // Only staff and cashiers can initiate split requests (unless they're a manager)
+    if (!isMainAdmin) {
+      // Basic role validation: admin, manager, staff can initiate split
       if (userRole !== 'staff' && userRole !== 'admin' && userRole !== 'manager') {
         return new Response(
-          JSON.stringify({ 
-            success: false, 
-            message: 'Only staff, cashier, and manager users can initiate inventory split requests' 
-          }),
-          { 
-            status: 403, 
-            headers: { 'Content-Type': 'application/json' } 
-          }
+          JSON.stringify({ success: false, message: 'Unauthorized to initiate inventory split requests' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
         );
       }
-      
-      // Staff and cashier can only initiate splits from their assigned branch
-      if (userRole !== 'manager' && userBranchId !== sourceBranchId) {
+      // Must be from own branch
+      if (userBranchId !== sourceBranchId) {
         return new Response(
-          JSON.stringify({ 
-            success: false, 
-            message: 'Users can only initiate inventory splits from their assigned branch' 
-          }),
-          { 
-            status: 403, 
-            headers: { 'Content-Type': 'application/json' } 
-          }
-        );
-      }
-      
-      // Manager can initiate splits from their assigned branch
-      if (userRole === 'manager' && userBranchId !== sourceBranchId) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            message: 'Managers can only initiate inventory splits from their assigned branch' 
-          }),
-          { 
-            status: 403, 
-            headers: { 'Content-Type': 'application/json' } 
-          }
+          JSON.stringify({ success: false, message: 'Users can only initiate inventory splits from their assigned branch' }),
+          { status: 403, headers: { 'Content-Type': 'application/json' } }
         );
       }
     }
+
+    const results = [];
     
-    // Check if source inventory exists and has enough stock
-    const sourceInventory = await db
-      .select()
-      .from(inventory)
-      .where(
-        and(
-          eq(inventory.productId, productId),
-          eq(inventory.branchId, sourceBranchId)
+    // Process each item
+    for (const item of splitItems) {
+      const { productId: pId, quantity: qty } = item;
+      
+      // Check if source inventory exists and has enough stock
+      const [sourceInv] = await db
+        .select()
+        .from(inventory)
+        .where(
+          and(
+            eq(inventory.productId, pId),
+            eq(inventory.branchId, sourceBranchId)
+          )
         )
-      )
-      .limit(1);
-    
-    if (sourceInventory.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Source inventory not found for this product and branch' 
-        }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-    
-    if (sourceInventory[0].quantity < quantity) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: `Insufficient stock in source branch. Available: ${sourceInventory[0].quantity}, Requested: ${quantity}` 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
-    }
-    
-    // Create approval request instead of directly processing the split
-    const [approvalRequest] = await db.insert(inventoryTransactions).values({
-      id: `itx_${nanoid(10)}`,
-      productId,
-      branchId: sourceBranchId, // Source branch
-      referenceId: targetBranchId, // Target branch (stored in referenceId)
-      type: 'split', // Special type for split requests
-      quantity,
-      notes: notes || `Request to split ${quantity} units to branch ${targetBranchId}`,
-      status: 'pending', // Pending approval
-      createdBy: userId, // Track who initiated the request
-      approvedBy: null, // Will be set when approved
-      createdAt: new Date(),
-      updatedAt: new Date()
-    }).returning();
-    
-    // Get branch information to determine if we need to send notification
-    const [sourceBranch] = await db
-      .select({ type: branches.type, name: branches.name })
-      .from(branches)
-      .where(eq(branches.id, sourceBranchId));
-    
-    const [targetBranch] = await db
-      .select({ type: branches.type, name: branches.name })
-      .from(branches)
-      .where(eq(branches.id, targetBranchId));
-    
-    // Get product information
-    const [product] = await db
-      .select({ name: products.name })
-      .from(products)
-      .where(eq(products.id, productId));
-    
-    // Rule 1: Send notification to target branch if source is main branch and target is sub-branch
-    if (sourceBranch && targetBranch && sourceBranch.type === 'main' && targetBranch.type === 'sub') {
-      try {
-        await sendNotificationsToBranchRoles(
-          targetBranchId,
-          ['admin', 'staff', 'manager'],
-          {
-            title: 'New Stock Request from Main Branch',
-            message: `New request to receive ${quantity} units of ${product?.name || 'product'} from main branch ${sourceBranch.name}. Awaiting approval.`,
-            type: 'stock_split_request',
-            data: {
-              productId,
-              sourceBranchId,
-              quantity,
-              transactionId: approvalRequest.id,
-              productName: product?.name || 'Unknown Product',
-              sourceBranchName: sourceBranch.name,
-              targetBranchName: targetBranch.name,
-              status: 'pending'
-            }
-          }
+        .limit(1);
+      
+      if (!sourceInv || sourceInv.quantity < qty) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            message: `Insufficient stock for product ${pId}. Available: ${sourceInv?.quantity || 0}` 
+          }),
+          { status: 400, headers: { 'Content-Type': 'application/json' } }
         );
-      } catch (notificationError) {
-        console.error('Error sending notification:', notificationError);
       }
-    }
-    
-    // Rule 2: Send notification to main branch if source is sub-branch and target is main branch
-    else if (sourceBranch && targetBranch && sourceBranch.type === 'sub' && targetBranch.type === 'main') {
-      try {
-        const { sendMainBranchNotification } = await import('@/lib/notification-helpers');
-        await sendMainBranchNotification({
-          title: 'New Stock Split Request from Sub-Branch',
-          message: `Sub-branch ${sourceBranch.name} requested to transfer ${quantity} units of ${product?.name || 'product'} to main branch.`,
-          type: 'stock_split_request',
-          data: {
-            productId,
-            sourceBranchId,
-            quantity,
-            transactionId: approvalRequest.id,
-            productName: product?.name || 'Unknown Product',
-            sourceBranchName: sourceBranch.name,
-            targetBranchName: targetBranch.name,
-            status: 'pending'
-          }
-        });
-      } catch (notificationError) {
-        console.error('Error sending notification to main branch:', notificationError);
-      }
-    }
-    
-    // Rule 3: Send notification to target branch for sub-branch to sub-branch transfer
-    else if (sourceBranch && targetBranch && sourceBranch.type === 'sub' && targetBranch.type === 'sub') {
-      try {
-        await sendNotificationsToBranchRoles(
-          targetBranchId,
-          ['admin', 'staff', 'manager'],
-          {
-            title: 'New Stock Split Request',
-            message: `Sub-branch ${sourceBranch.name} requested to transfer ${quantity} units of ${product?.name || 'product'} to your branch.`,
-            type: 'stock_split_request',
-            data: {
-              productId,
-              sourceBranchId,
-              quantity,
-              transactionId: approvalRequest.id,
-              productName: product?.name || 'Unknown Product',
-              sourceBranchName: sourceBranch.name,
-              targetBranchName: targetBranch.name,
-              status: 'pending'
+      
+      // Create approval request
+      const [approvalRequest] = await db.insert(inventoryTransactions).values({
+        id: `itx_${nanoid(10)}`,
+        productId: pId,
+        branchId: sourceBranchId,
+        referenceId: targetBranchId,
+        type: 'split',
+        quantity: qty,
+        notes: notes || `Request to split ${qty} units to branch ${targetBranchId}`,
+        status: 'pending',
+        createdBy: userId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }).returning();
+      
+      results.push(approvalRequest);
+
+      // Notification Logic
+      const [sourceBranch] = await db.select({ type: branches.type, name: branches.name }).from(branches).where(eq(branches.id, sourceBranchId)).limit(1);
+      const [targetBranch] = await db.select({ type: branches.type, name: branches.name }).from(branches).where(eq(branches.id, targetBranchId)).limit(1);
+      const [product] = await db.select({ name: products.name }).from(products).where(eq(products.id, pId)).limit(1);
+
+      if (sourceBranch && targetBranch) {
+        try {
+          await sendNotificationsToBranchRoles(
+            targetBranchId,
+            ['admin', 'manager', 'staff'],
+            {
+              title: 'New Stock Split Request',
+              message: `A request to transfer ${qty} units of ${product?.name} from ${sourceBranch.name} to ${targetBranch.name} is awaiting approval.`,
+              type: 'stock_split_request',
+              data: {
+                transactionId: approvalRequest.id,
+                sourceBranchId,
+                targetBranchId,
+                productId: pId,
+                quantity: qty
+              }
             }
-          }
-        );
-      } catch (notificationError) {
-        console.error('Error sending notification to sub-branch:', notificationError);
+          );
+        } catch (err) {
+          console.error('Notification failed for split:', err);
+        }
       }
     }
-    // Return success response
+    
     return new Response(
       JSON.stringify({ 
         success: true, 
-        message: 'Split request created successfully',
-        data: {
-          id: approvalRequest.id,
-          productId,
-          sourceBranchId,
-          targetBranchId,
-          quantity,
-          notes: notes || `Request to split ${quantity} units to branch ${targetBranchId}`,
-          status: 'pending',
-          createdBy: userId,
-          createdAt: approvalRequest.createdAt,
-          updatedAt: approvalRequest.updatedAt
-        }
+        message: `${results.length} split request(s) created successfully`,
+        data: results
       }),
-      { 
-        status: 201, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      { status: 201, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error creating split request:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'Internal server error', error: (error as Error).message }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

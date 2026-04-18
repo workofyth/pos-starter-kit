@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
-import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
+import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 export async function GET(request: NextRequest) {
@@ -21,6 +21,30 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
     // Build query with joins
+    // We use subqueries for stock and prices to avoid join multiplication
+    const stockSubquery = db
+      .select({
+        productId: inventory.productId,
+        totalStock: sql<number>`CAST(SUM(${inventory.quantity}) AS INTEGER)`.as('total_stock'),
+        maxMinStock: sql<number>`MAX(${inventory.minStock})`.as('max_min_stock')
+      })
+      .from(inventory)
+      .where(branchId ? eq(inventory.branchId, branchId) : sql`1=1`)
+      .groupBy(inventory.productId)
+      .as('stock_sub');
+
+    const priceSubquery = db
+      .selectDistinctOn([productPrices.productId], {
+        productId: productPrices.productId,
+        sellingPrice: productPrices.sellingPrice,
+        purchasePrice: productPrices.purchasePrice,
+        effectiveDate: productPrices.effectiveDate,
+      })
+      .from(productPrices)
+      .where(branchId ? eq(productPrices.branchId, branchId) : sql`1=1`)
+      .orderBy(productPrices.productId, desc(productPrices.effectiveDate))
+      .as('price_sub');
+
     let query = db
       .select({
         id: products.id,
@@ -36,25 +60,15 @@ export async function GET(request: NextRequest) {
         updatedAt: products.updatedAt,
         categoryId: products.categoryId,
         categoryName: categories.name,
-        sellingPrice: productPrices.sellingPrice,
-        purchasePrice: productPrices.purchasePrice,
-        stock: inventory.quantity,
-        minStock: inventory.minStock,
-        branchId: inventory.branchId // Include branchId in the response
+        sellingPrice: priceSubquery.sellingPrice,
+        purchasePrice: priceSubquery.purchasePrice,
+        stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
+        minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`,
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(productPrices, eq(products.id, productPrices.productId))
-      .leftJoin(inventory, eq(products.id, inventory.productId))
-      .groupBy(
-        products.id,
-        categories.name,
-        productPrices.sellingPrice,
-        productPrices.purchasePrice,
-        inventory.quantity,
-        inventory.minStock,
-        inventory.branchId
-      )
+      .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
+      .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId))
       .limit(limit)
       .offset(offset);
     
@@ -67,10 +81,6 @@ export async function GET(request: NextRequest) {
     
     if (category) {
       whereConditions.push(eq(categories.code, category));
-    }
-    
-    if (branchId) {
-      whereConditions.push(eq(inventory.branchId, branchId));
     }
     
     if (whereConditions.length > 0) {
@@ -88,21 +98,23 @@ export async function GET(request: NextRequest) {
         : query.orderBy(desc(products.createdAt)) as typeof query;
     } else if (sortBy === 'sellingPrice') {
       query = sortOrder === 'asc' 
-        ? query.orderBy(asc(productPrices.sellingPrice)) as typeof query
-        : query.orderBy(desc(productPrices.sellingPrice)) as typeof query;
+        ? query.orderBy(asc(priceSubquery.sellingPrice)) as typeof query
+        : query.orderBy(desc(priceSubquery.sellingPrice)) as typeof query;
     } else if (sortBy === 'stock') {
       query = sortOrder === 'asc' 
-        ? query.orderBy(asc(inventory.quantity)) as typeof query
-        : query.orderBy(desc(inventory.quantity)) as typeof query;
+        ? query.orderBy(asc(stockSubquery.totalStock)) as typeof query
+        : query.orderBy(desc(stockSubquery.totalStock)) as typeof query;
     } else {
       query = query.orderBy(desc(products.createdAt)) as typeof query;
     }
     
+    
     const productList = await query;
     
     // Get total count for pagination
+    // Use select distinct to avoid counting multiple inventory rows per product
     let countQuery = db
-      .select({ count: count() })
+      .select({ count: sql<number>`count(DISTINCT ${products.id})` })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(inventory, eq(products.id, inventory.productId));
