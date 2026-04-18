@@ -226,8 +226,13 @@ class InMemoryRedis {
   }
 }
 
-// Create singleton instance
-const redis = new InMemoryRedis();
+// Create singleton instance using global to maintain instance during HMR in development
+const globalForRedis = global as unknown as { redis: InMemoryRedis };
+const redis = globalForRedis.redis || new InMemoryRedis();
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForRedis.redis = redis;
+}
 
 // Export functions for backward compatibility
 export async function initializeRedis() {

@@ -195,7 +195,7 @@ export default function DraftOrdersPage() {
                         )}
                       </TableCell>
                       <TableCell>{draftOrder.cartData.length} items</TableCell>
-                      <TableCell>Rp {parseFloat(draftOrder.total).toLocaleString()}</TableCell>
+                      <TableCell>Rp {(Number(draftOrder.total) || 0).toLocaleString()}</TableCell>
                       <TableCell>
                         {new Date(draftOrder.createdAt).toLocaleString()}
                       </TableCell>

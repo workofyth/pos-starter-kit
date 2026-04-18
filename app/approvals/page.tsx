@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 
+interface Branch { id: string; name: string; type?: string; }
+
 interface ApprovalRequest {
   id: string;
   productId: string;
@@ -62,6 +64,12 @@ export default function ApprovalsPage() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [branchList, setBranchList] = useState<Branch[]>([]);
+  const [isResendDialogOpen, setIsResendDialogOpen] = useState(false);
+  const [resendData, setResendData] = useState({
+    targetBranchId: '',
+    quantity: 0
+  });
   // Default to 'pending' status to only show pending approval requests by default
   const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
   
@@ -117,7 +125,25 @@ export default function ApprovalsPage() {
       }
     };
 
+    const loadBranches = async () => {
+      try {
+        const response = await fetch('/api/branches');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success) {
+            const uniqueBranches = result.data.filter((branch: Branch, index: number, self: Branch[]) =>
+              index === self.findIndex((b) => b.id === branch.id)
+            );
+            setBranchList(uniqueBranches);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading branches:", error);
+      }
+    };
+
     loadApprovals();
+    loadBranches();
   }, [session, approvalsPage, searchTerm, activeTab]);
 
   // Real-time updates for approvals
@@ -201,33 +227,45 @@ export default function ApprovalsPage() {
     alert(`Request rejected with reason: ${rejectionReason}`);
   };
 
-  // Handle resending a rejected request
-  const handleResendRequest = async (request: ApprovalRequest) => {
-    if (!session?.user?.id) return;
+  // Handle submitting the resend form
+  const submitResendRequest = async () => {
+    if (!session?.user?.id || !selectedRequest) return;
     
+    if (resendData.quantity <= 0) {
+      alert('Quantity must be greater than 0');
+      return;
+    }
+
     try {
-      // First, we need to update the status back to pending to make it resubmittable
-      const response = await fetch(`/api/approvals?id=${request.id}`, {
+      const response = await fetch(`/api/approvals?id=${selectedRequest.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           userId: session.user.id,
-          action: 'resend', // Our custom action for resending
-          notes: `Request resent by ${session.user.name || 'user'}`
+          action: 'resend',
+          notes: `Request resent by ${session.user.name || 'user'}`,
+          quantity: resendData.quantity,
+          targetBranchId: resendData.targetBranchId
         }),
       });
       
       const result = await response.json();
       
       if (response.ok && result.success) {
-        // Update local state to reflect the change
         setApprovals(approvals.map(req => 
-          req.id === request.id ? { ...req, status: 'pending' } : req
+          req.id === selectedRequest.id ? { 
+            ...req, 
+            status: 'pending',
+            quantity: resendData.quantity,
+            targetBranchId: resendData.targetBranchId 
+          } : req
         ));
+        setIsResendDialogOpen(false);
         alert(`Request resent successfully! It's now pending approval again.`);
-        // Refresh the data to show the updated status
+        
+        // Refresh data
         const refreshResponse = await fetch(`/api/approvals?userId=${session.user.id}&page=${approvalsPage}&limit=10&status=${activeTab}&search=${searchTerm}`);
         if (refreshResponse.ok) {
           const refreshResult = await refreshResponse.json();
@@ -249,6 +287,16 @@ export default function ApprovalsPage() {
   const openRejectDialog = (request: ApprovalRequest) => {
     setSelectedRequest(request);
     setIsRejectDialogOpen(true);
+  };
+
+  // Open resend dialog
+  const openResendDialog = (request: ApprovalRequest) => {
+    setSelectedRequest(request);
+    setResendData({
+      targetBranchId: request.targetBranchId,
+      quantity: request.quantity
+    });
+    setIsResendDialogOpen(true);
   };
 
   // Open detail view
@@ -322,19 +370,21 @@ export default function ApprovalsPage() {
             Approved
           </div>
         </button>
-        <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-            activeTab === 'rejected'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-          onClick={() => setActiveTab('rejected')}
-        >
-          <div className="flex items-center gap-2">
-            <XCircle className="h-4 w-4" />
-            Rejected
-          </div>
-        </button>
+        {(!userBranchType || userBranchType === 'main' || isMainAdmin) && (
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+              activeTab === 'rejected'
+                ? 'bg-white text-gray-900 shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            onClick={() => setActiveTab('rejected')}
+          >
+            <div className="flex items-center gap-2">
+              <XCircle className="h-4 w-4" />
+              Rejected
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Search Bar */}
@@ -481,7 +531,7 @@ export default function ApprovalsPage() {
                           <Button 
                             variant="outline" 
                             size="sm"
-                            onClick={() => handleResendRequest(request)}
+                            onClick={() => openResendDialog(request)}
                           >
                             Resend
                           </Button>
@@ -639,7 +689,7 @@ export default function ApprovalsPage() {
                 <div className="flex gap-2 pt-4">
                   <Button 
                     variant="outline" 
-                    onClick={() => handleResendRequest(selectedRequest)}
+                    onClick={() => openResendDialog(selectedRequest)}
                   >
                     <Clock className="h-4 w-4 mr-2" />
                     Resend Request
@@ -696,6 +746,72 @@ export default function ApprovalsPage() {
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 Reject Request
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {/* Resend Dialog */}
+      {isResendDialogOpen && selectedRequest && (
+        <Dialog open={isResendDialogOpen} onOpenChange={setIsResendDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Resend Split Request</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium">Product</label>
+                  <Input value={selectedRequest.productName} readOnly />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">SKU</label>
+                  <Input value={selectedRequest.productSku} readOnly />
+                </div>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Target Branch</label>
+                <select 
+                  className="w-full p-2 border rounded-md"
+                  value={resendData.targetBranchId}
+                  onChange={(e) => setResendData({...resendData, targetBranchId: e.target.value})}
+                >
+                  <option value="">Select target branch...</option>
+                  {branchList
+                    .filter((branch) => branch.id !== selectedRequest.sourceBranchId)
+                    .map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
+              
+              <div>
+                <label className="text-sm font-medium">Quantity to Split</label>
+                <Input 
+                  type="number"
+                  min="1" 
+                  value={resendData.quantity}
+                  onChange={(e) => setResendData({...resendData, quantity: parseInt(e.target.value) || 0})}
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setIsResendDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button 
+                variant="default" 
+                onClick={submitResendRequest}
+                disabled={resendData.quantity <= 0 || !resendData.targetBranchId}
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Resubmit Request
               </Button>
             </div>
           </DialogContent>

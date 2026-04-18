@@ -51,7 +51,7 @@ export async function broadcastToBranch(branchId: string, notification: Notifica
   if (!branchConnections) return;
 
   const encoder = new TextEncoder();
-  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\\n\\n`;
+  const data = `data: ${JSON.stringify({ type: 'notification', notification })}\n\n`;
 
   const connectionsToDelete: ConnectionWriter[] = [];
   
