@@ -6,6 +6,7 @@ import {
   brands, 
   products, 
   inventory, 
+  inventoryTransactions,
   transactions, 
   transactionDetails,
   appSettings,
@@ -142,6 +143,32 @@ export async function POST(request: NextRequest) {
     // Branch Details
     const branchDetails = await db.select({ name: branches.name, type: branches.type, address: branches.address }).from(branches);
 
+    // Split Stock Analysis
+    const splitStats = await db
+      .select({
+        status: inventoryTransactions.status,
+        count: count()
+      })
+      .from(inventoryTransactions)
+      .where(eq(inventoryTransactions.type, 'split' as any))
+      .groupBy(inventoryTransactions.status);
+
+    const pendingSplitsByBranch = await db
+      .select({
+        branchName: branches.name,
+        count: count(),
+        totalQty: sum(inventoryTransactions.quantity)
+      })
+      .from(inventoryTransactions)
+      .innerJoin(branches, eq(inventoryTransactions.branchId, branches.id))
+      .where(sql`${inventoryTransactions.type} = 'split' AND ${inventoryTransactions.status} = 'pending'`)
+      .groupBy(branches.name);
+
+    const [totalPendingQty] = await db
+      .select({ value: sum(inventoryTransactions.quantity) })
+      .from(inventoryTransactions)
+      .where(sql`${inventoryTransactions.type} = 'split' AND ${inventoryTransactions.status} = 'pending'`);
+
     // Top Members (by points/activity)
     const topMembers = await db.select({ name: members.name, points: members.points }).from(members).orderBy(desc(members.points)).limit(5);
 
@@ -157,6 +184,13 @@ STATISTIK UMUM:
 - Supplier: ${supplierCount.value}
 - Karyawan: ${employeeCount.value}
 - Total Revenue: Rp ${Number(totalRevenue.value || 0).toLocaleString()}
+
+STATUS SPLIT STOCK:
+${splitStats.map(s => `- ${s.status}: ${s.count} transaksi`).join('\n') || '- Tidak ada transaksi split'}
+- Total Unit Stok Pending (Global): ${Number(totalPendingQty.value || 0).toLocaleString()} unit
+
+CABANG DENGAN PENDING SPLIT:
+${pendingSplitsByBranch.map(p => `- ${p.branchName}: ${p.count} transaksi (${Number(p.totalQty || 0).toLocaleString()} unit pending)`).join('\n') || '- Tidak ada pending split'}
 
 DETAIL CABANG:
 ${branchDetails.map(b => `- ${b.name} (${b.type}): ${b.address}`).join('\n')}
