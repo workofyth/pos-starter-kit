@@ -8,6 +8,7 @@ import {
   inventory,
   userBranches
 } from '@/db/schema/pos';
+import { broadcastToBranch } from '@/lib/notification-sse';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -261,6 +262,31 @@ export async function POST(req: NextRequest) {
 
       return { transactionId, transactionNumber, processedItems };
     });
+
+    // Broadcast update to the branch for real-time UI refresh
+    try {
+      if (cashierBranchId) {
+        await broadcastToBranch(cashierBranchId, {
+          title: "Transaksi Baru",
+          message: `Transaksi ${result.transactionNumber} berhasil diproses oleh AI/Sistem.`,
+          type: "transaction_created",
+          data: { 
+            transactionId: result.transactionId,
+            transactionNumber: result.transactionNumber,
+            total: validatedTotal
+          }
+        });
+
+        // Also broadcast inventory update
+        await broadcastToBranch(cashierBranchId, {
+          title: "Update Stok",
+          message: "Stok telah diperbarui secara otomatis setelah transaksi.",
+          type: "inventory_update"
+        });
+      }
+    } catch (broadcastError) {
+      console.error('Failed to broadcast transaction update:', broadcastError);
+    }
 
     return new Response(JSON.stringify({
       success: true,

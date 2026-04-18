@@ -50,6 +50,11 @@ const staticData = {
       icon: IconDatabase,
     },
     {
+      title: "AI Assistant",
+      url: "/chatbot",
+      icon: IconFileAi,
+    },
+    {
       title: "Lifecycle",
       url: "#",
       icon: IconListDetails,

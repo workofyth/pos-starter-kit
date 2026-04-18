@@ -275,10 +275,10 @@ export function NotificationMenu() {
 
       setupNotificationStream();
       
-      // Set up periodic refresh of database notifications (every 30 seconds to reduce load while maintaining consistency)
+      // Set up periodic refresh of database notifications (Increased to 5 minutes as a rare fallback, since SSE handles real-time)
       const refreshInterval = setInterval(() => {
         fetchNotifications().catch(err => console.error('Error refreshing notifications:', err));
-      }, 30000); // 30 seconds - balanced frequency for consistency
+      }, 300000); // 5 minutes - rare fallback
 
       // Return cleanup function
       return () => {

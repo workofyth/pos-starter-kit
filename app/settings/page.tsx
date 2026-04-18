@@ -29,7 +29,10 @@ export default function SettingsPage() {
   const [userBranchName, setUserBranchName] = useState<string>("");
   const [userBranchAddress, setUserBranchAddress] = useState<string>("");
   const [isUserLoading, setIsUserLoading] = useState(true);
+  
   const [groqApiKey, setGroqApiKey] = useState("");
+  const [aiProvider, setAiProvider] = useState("groq");
+  
   const [isSaving, setIsSaving] = useState(false);
 
   // Get user's role and branch information
@@ -61,43 +64,48 @@ export default function SettingsPage() {
     };
 
     fetchUserBranchInfo();
-    fetchGroqKey();
+    fetchAiSettings();
   }, [session]);
 
-  const fetchGroqKey = async () => {
+  const fetchAiSettings = async () => {
     try {
-      const response = await fetch('/api/settings?key=groq_api_key');
+      const response = await fetch('/api/settings');
       if (response.ok) {
         const result = await response.json();
-        if (result.success && result.data) {
-          setGroqApiKey(result.data.value);
+        if (result.success && Array.isArray(result.data)) {
+          const groq = result.data.find((s: any) => s.key === 'groq_api_key');
+          const gemini = result.data.find((s: any) => s.key === 'gemini_api_key');
+          const provider = result.data.find((s: any) => s.key === 'ai_provider');
+          
+          if (groq) setGroqApiKey(groq.value);
+          if (provider) setAiProvider(provider.value);
         }
       }
     } catch (error) {
-      console.error('Error fetching Groq key:', error);
+      console.error('Error fetching AI settings:', error);
     }
   };
 
   const handleSaveIntegration = async () => {
     setIsSaving(true);
     try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          key: 'groq_api_key',
-          value: groqApiKey,
-          description: 'API Key for Groq AI Chatbot'
-        })
-      });
+      // Create/Update Settings
+      const settingsToSave = [
+        { key: 'ai_provider', value: 'groq', description: 'Chosen AI Intelligence provider' },
+        { key: 'groq_api_key', value: groqApiKey, description: 'API Key for Groq AI assistant' }
+      ];
 
-      if (response.ok) {
-        toast.success("Integration settings saved successfully");
-      } else {
-        toast.error("Failed to save integration settings");
+      for (const setting of settingsToSave) {
+        await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(setting)
+        });
       }
+
+      toast.success("AI Integration settings saved successfully");
     } catch (error) {
-      toast.error("An error occurred while saving");
+      toast.error("Failed to save AI configuration");
     } finally {
       setIsSaving(false);
     }
@@ -116,16 +124,12 @@ export default function SettingsPage() {
     { id: "integration", label: "Integration", icon: Globe },
   ];
 
-  // Filter tabs:
-  // 1. Always hide "users"
-  // 2. Hide "general" for sub-branch users
   const tabs = allTabs.filter(tab => {
     if (tab.id === "users") return false;
     if (isSubBranchUser && tab.id === "general") return false;
     return true;
   });
 
-  // Ensure active default is valid
   useEffect(() => {
     if (!isUserLoading) {
       if (isSubBranchUser && activeTab === "general") {
@@ -151,7 +155,6 @@ export default function SettingsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Settings Navigation */}
         <div className="lg:col-span-1">
           <Card>
             <CardHeader>
@@ -178,7 +181,6 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        {/* Settings Content */}
         <div className="lg:col-span-3">
           <Card>
             <CardHeader>
@@ -221,18 +223,6 @@ export default function SettingsPage() {
                         defaultValue="10"
                       />
                     </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="round-total" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="round-total" className="text-sm font-medium">
-                        Round total to nearest 100
-                      </label>
-                    </div>
                   </div>
                   
                   <Button>Save General Settings</Button>
@@ -261,17 +251,6 @@ export default function SettingsPage() {
                       <select className="w-full p-2 border rounded-md">
                         <option>IDR - Indonesian Rupiah</option>
                         <option>USD - US Dollar</option>
-                        <option>EUR - Euro</option>
-                        <option>GBP - British Pound</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Store Timezone</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Asia/Jakarta</option>
-                        <option>Asia/Makassar</option>
-                        <option>Asia/Jayapura</option>
                       </select>
                     </div>
                   </div>
@@ -282,275 +261,59 @@ export default function SettingsPage() {
 
               {activeTab === "payment" && (
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Payment Configuration</h3>
-                    <p className="text-sm text-gray-500">Payment method settings</p>
-                  </div>
-                  
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span>Cash Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
+                        <input type="checkbox" className="h-4 w-4" defaultChecked />
                       </div>
-                      
                       <div className="flex items-center justify-between">
                         <span>Card Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
+                        <input type="checkbox" className="h-4 w-4" defaultChecked />
                       </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Transfer Payment</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Payment Gateway</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>None (Manual)</option>
-                        <option>Midtrans</option>
-                        <option>Stripe</option>
-                        <option>PayPal</option>
-                      </select>
                     </div>
                   </div>
-                  
                   <Button>Save Payment Settings</Button>
                 </div>
               )}
 
-              {activeTab === "users" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">User Management</h3>
-                    <p className="text-sm text-gray-500">User access and permissions</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Default Role for New Users</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Cashier</option>
-                        <option>Manager</option>
-                        <option>Admin</option>
-                      </select>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="require-pin" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="require-pin" className="text-sm font-medium">
-                        Require PIN for admin actions
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-logout" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-logout" className="text-sm font-medium">
-                        Auto logout after 30 minutes of inactivity
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save User Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "inventory" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Inventory Configuration</h3>
-                    <p className="text-sm text-gray-500">Inventory tracking settings</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Low Stock Threshold</label>
-                      <input 
-                        type="number" 
-                        className="w-full p-2 border rounded-md" 
-                        defaultValue="5"
-                      />
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-alert" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-alert" className="text-sm font-medium">
-                        Enable low stock alerts
-                      </label>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="dead-stock" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="dead-stock" className="text-sm font-medium">
-                        Track dead stock (items not sold in 30 days)
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Inventory Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "alerts" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Alert Configuration</h3>
-                    <p className="text-sm text-gray-500">System notifications and alerts</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span>Low Stock Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Dead Stock Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Expired Item Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4"
-                        />
-                      </div>
-                      
-                      <div className="flex items-center justify-between">
-                        <span>Payment Due Alerts</span>
-                        <input 
-                          type="checkbox" 
-                          className="h-4 w-4" 
-                          defaultChecked
-                        />
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Alert Settings</Button>
-                </div>
-              )}
-
-              {activeTab === "reporting" && (
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-lg font-medium">Reporting Configuration</h3>
-                    <p className="text-sm text-gray-500">Report generation settings</p>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Report Timezone</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Asia/Jakarta</option>
-                        <option>Asia/Makassar</option>
-                        <option>Asia/Jayapura</option>
-                      </select>
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Default Report Period</label>
-                      <select className="w-full p-2 border rounded-md">
-                        <option>Today</option>
-                        <option>This Week</option>
-                        <option>This Month</option>
-                        <option>This Quarter</option>
-                        <option>This Year</option>
-                      </select>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <input 
-                        type="checkbox" 
-                        id="auto-export" 
-                        className="h-4 w-4"
-                        defaultChecked
-                      />
-                      <label htmlFor="auto-export" className="text-sm font-medium">
-                        Auto-export daily reports
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <Button>Save Reporting Settings</Button>
-                </div>
-              )}
-
               {activeTab === "integration" && (
-                <div className="space-y-4">
+                <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Integration Configuration</h3>
-                    <p className="text-sm text-gray-500">Third-party service integrations</p>
+                    <h3 className="text-lg font-medium">AI Intelligence Center</h3>
+                    <p className="text-sm text-gray-500">Configure your business assistant powerhouse</p>
                   </div>
                   
-                  <div className="space-y-4">
+                  <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
                     <div>
-                      <label className="block text-sm font-medium mb-1">API Groq AI Key</label>
-                      <input 
-                        type="password" 
-                        className="w-full p-2 border rounded-md" 
-                        placeholder="Enter Groq AI API key"
-                        value={groqApiKey}
-                        onChange={(e) => setGroqApiKey(e.target.value)}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Used for AI features and data analysis</p>
+                      <h4 className="text-sm font-bold mb-2">Active Provider: Groq (Llama 3.3)</h4>
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-sm font-medium mb-1">API Groq Key</label>
+                          <input 
+                            type="password" 
+                            className="w-full p-2 border rounded-md bg-background" 
+                            placeholder="Enter Groq API key"
+                            value={groqApiKey}
+                            onChange={(e) => setGroqApiKey(e.target.value)}
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">High-speed Llama 3.3 optimized provider</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                   
                   <Button 
-                    className="mt-4" 
+                    className="w-full" 
                     onClick={handleSaveIntegration}
                     disabled={isSaving}
                   >
                     {isSaving ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
+                        Syncing AI Configuration...
                       </>
-                    ) : 'Save Integration Settings'}
+                    ) : 'Finalize & Save AI Settings'}
                   </Button>
                 </div>
               )}

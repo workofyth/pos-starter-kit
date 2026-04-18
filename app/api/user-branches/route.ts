@@ -18,6 +18,15 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
     
+    // Cache Key
+    const cacheKey = `user-branches:${userId}:${branchId}:${role}:${isActive}:${page}`;
+    const { default: redis } = await import('@/lib/redis');
+    
+    try {
+      const cached = await redis.get(cacheKey);
+      if (cached) return new Response(JSON.stringify(cached), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    } catch (e) {}
+
     // Build query
     let query = db
       .select({
@@ -115,19 +124,26 @@ export async function GET(request: NextRequest) {
       : parseInt(totalCountResult[0].count as string);
     const totalPages = Math.ceil(totalCount / limit);
     
+    const result = {
+      success: true,
+      data: userBranchesList,
+      pagination: {
+        page,
+        limit,
+        totalCount,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1
+      }
+    };
+
+    try {
+      const { default: redis } = await import('@/lib/redis');
+      await redis.setex(cacheKey, 300, result);
+    } catch (e) {}
+
     return new Response(
-      JSON.stringify({
-        success: true,
-        data: userBranchesList,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
-      }),
+      JSON.stringify(result),
       { 
         status: 200, 
         headers: { 'Content-Type': 'application/json' } 

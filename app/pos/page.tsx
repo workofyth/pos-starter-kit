@@ -75,84 +75,85 @@ export default function POSPage() {
   const [cashierBranchId, setCashierBranchId] = useState<string | null>(null); // Store cashier's branch ID
 
   // Load products and members
-  useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        // Check for draft order data in localStorage (when continuing from draft orders page)
-        const draftOrderDataStr = localStorage.getItem('draftOrderData');
-        if (draftOrderDataStr) {
-          const draftOrder = JSON.parse(draftOrderDataStr);
-          setCart(draftOrder.cartData.map((item: any) => ({
-            ...item,
-            price: Number(item.price) || 0,
-            subtotal: Number(item.subtotal) || 0,
-            quantity: Number(item.quantity) || 1
-          })));
-          setPaymentMethod(draftOrder.paymentMethod || 'cash');
-          setDiscountRate(parseFloat(draftOrder.discountRate) || 0);
-          setPaidAmount(0); // Reset paid amount
-          
-          // Remove the draft data from localStorage after loading
-          localStorage.removeItem('draftOrderData');
-        }
-
-        // Get cashier's branch ID from session
-        if (session?.user) {
-          // Fetch user branch assignment
-          const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
-          if (userBranchResponse.ok) {
-            const userBranchResult = await userBranchResponse.json();
-            if (userBranchResult.success && userBranchResult.data.length > 0) {
-              const userBranchId = userBranchResult.data[0].branchId;
-              setCashierBranchId(userBranchId);
-              setCashierId(session.user.id);
-              
-              // Fetch products with stock > 0 for the cashier's branch
-              const productsResponse = await fetch(`/api/products?branchId=${userBranchId}`);
-              if (productsResponse.ok) {
-                const productsResult = await productsResponse.json();
-                if (productsResult.success) {
-                  setProductsList(productsResult.data);
-                }
-              }
-            } else {
-              // If no branch assignment found, load all products (or handle appropriately)
-              const productsResponse = await fetch('/api/products');
-              if (productsResponse.ok) {
-                const productsResult = await productsResponse.json();
-                if (productsResult.success) {
-                  setProductsList(productsResult.data);
-                }
-              }
-            }
-          }
-        } else {
-          // If no session, load all products (or redirect to login)
-          const productsResponse = await fetch('/api/products');
-          if (productsResponse.ok) {
-            const productsResult = await productsResponse.json();
-            if (productsResult.success) {
-              setProductsList(productsResult.data);
-            }
-          }
-        }
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      // Check for draft order data in localStorage (when continuing from draft orders page)
+      const draftOrderDataStr = localStorage.getItem('draftOrderData');
+      if (draftOrderDataStr) {
+        const draftOrder = JSON.parse(draftOrderDataStr);
+        setCart(draftOrder.cartData.map((item: any) => ({
+          ...item,
+          price: Number(item.price) || 0,
+          subtotal: Number(item.subtotal) || 0,
+          quantity: Number(item.quantity) || 1
+        })));
+        setPaymentMethod(draftOrder.paymentMethod || 'cash');
+        setDiscountRate(parseFloat(draftOrder.discountRate) || 0);
+        setPaidAmount(0); // Reset paid amount
         
-        // Fetch members
-        const membersResponse = await fetch('/api/members');
-        if (membersResponse.ok) {
-          const membersResult = await membersResponse.json();
-          if (membersResult.success) {
-            setMembersList(membersResult.data);
+        // Remove the draft data from localStorage after loading
+        localStorage.removeItem('draftOrderData');
+      }
+
+      // Get cashier's branch ID from session
+      if (session?.user) {
+        // Fetch user branch assignment
+        const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
+        if (userBranchResponse.ok) {
+          const userBranchResult = await userBranchResponse.json();
+          if (userBranchResult.success && userBranchResult.data.length > 0) {
+            const userBranchId = userBranchResult.data[0].branchId;
+            setCashierBranchId(userBranchId);
+            setCashierId(session.user.id);
+            
+            // Fetch products with stock > 0 for the cashier's branch
+            const productsResponse = await fetch(`/api/products?branchId=${userBranchId}`);
+            if (productsResponse.ok) {
+              const productsResult = await productsResponse.json();
+              if (productsResult.success) {
+                setProductsList(productsResult.data);
+              }
+            }
+          } else {
+            // If no branch assignment found, load all products (or handle appropriately)
+            const productsResponse = await fetch('/api/products');
+            if (productsResponse.ok) {
+              const productsResult = await productsResponse.json();
+              if (productsResult.success) {
+                setProductsList(productsResult.data);
+              }
+            }
           }
         }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setIsLoading(false);
+      } else {
+        // If no session, load all products (or redirect to login)
+        const productsResponse = await fetch('/api/products');
+        if (productsResponse.ok) {
+          const productsResult = await productsResponse.json();
+          if (productsResult.success) {
+            setProductsList(productsResult.data);
+          }
+        }
       }
-    };
-    
+      
+      // Fetch members
+      const membersResponse = await fetch('/api/members');
+      if (membersResponse.ok) {
+        const membersResult = await membersResponse.json();
+        if (membersResult.success) {
+          setMembersList(membersResult.data);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Load products and members
+  useEffect(() => {
     fetchData();
   }, [session]);
 
@@ -301,6 +302,8 @@ export default function POSPage() {
         setPaidAmount(0);
         setDiscountRate(0);
         setSelectedMember(null);
+        // Refresh data to sync stock
+        fetchData();
       } else {
         alert(`Error: ${result.error}`);
       }
@@ -413,9 +416,9 @@ export default function POSPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
                 <div className="flex flex-wrap gap-2">
-                  {membersList.slice(0, 5).map(member => (
+                  {membersList.slice(0, 5).map((member, idx) => (
                     <Badge
-                      key={member.id}
+                      key={`member-${member.id}-${idx}`}
                       variant={selectedMember?.id === member.id ? "default" : "outline"}
                       className="cursor-pointer"
                       onClick={() => setSelectedMember(
@@ -427,6 +430,7 @@ export default function POSPage() {
                   ))}
                   {selectedMember && (
                     <Button
+                      key="clear-member-btn"
                       variant="outline"
                       size="sm"
                       onClick={() => setSelectedMember(null)}
@@ -472,9 +476,9 @@ export default function POSPage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-96 overflow-y-auto">
-                {productsList.filter(p => p.stock > 0).map((product, index) => (
+                {productsList.filter(p => p.stock > 0).map((product) => (
                   <div 
-                    key={`${product.id}-${product.branchId || 'main'}-${index}`}
+                    key={`product-${product.id}-${product.branchId || 'main'}`}
                     className="cursor-pointer hover:shadow-md transition-shadow border rounded-lg p-3"
                     onClick={() => addToCart(product)}
                   >
@@ -525,8 +529,8 @@ export default function POSPage() {
                 <p className="text-gray-500 text-center py-8">Cart is empty</p>
               ) : (
                 <div className="space-y-4 max-h-96 overflow-y-auto">
-                  {cart.map(item => (
-                    <div key={item.id} className="flex items-center justify-between border-b pb-2">
+                  {cart.map((item, idx) => (
+                    <div key={`cart-item-${item.id}-${idx}`} className="flex items-center justify-between border-b pb-2">
                       <div>
                         <h4 className="font-medium">{item.name}</h4>
                         <p className="text-sm text-gray-500">Rp {(Number(item.price) || 0).toLocaleString()} x {item.quantity}</p>

@@ -39,7 +39,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         return {
           hasFullAccess: true,
           allowedMainItems: [
-            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
+            'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
             'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
             'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications' 
           ],
@@ -52,7 +52,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         return {
           hasFullAccess: true,
           allowedMainItems: [
-            'Dashboard', 'POS', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
+            'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
             'Members', 'Reporting', 'Transactions', 'Approvals', 'Notifications' 
           ],
           allowedDocumentItems: ['Reports'],
@@ -66,7 +66,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
       // Cashiers should be able to process transactions and see their transaction history
       return {
         hasFullAccess: false,
-        allowedMainItems: ['POS', 'Draft Orders', 'Transactions', 'Members', 'Reporting', 'Approvals', 'Notifications'], // Added Approvals and Notifications
+        allowedMainItems: ['POS', 'AI Assistant', 'Draft Orders', 'Transactions', 'Members', 'Reporting', 'Approvals', 'Notifications'], // Added Approvals and Notifications
         allowedDocumentItems: ['Reports'], // Reports related to POS transactions by branch
         allowedSecondaryItems: ['Settings'], // Limited settings for POS configuration by branch
         allowedCloudItems: [], // No cloud access for cashier
@@ -80,6 +80,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         allowedMainItems: [
           'Dashboard',        // Dashboard
           'POS',              // POS for transaction processing
+          'AI Assistant',     // AI Assistant
           'Draft Orders',     // Draft orders for continuing transactions
           'Products',         // Products
           'Categories',       // Categories
@@ -100,7 +101,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
       // Guest or unknown roles have minimal access
       return {
         hasFullAccess: false,
-        allowedMainItems: ['Dashboard', 'Notifications'],
+        allowedMainItems: ['Dashboard', 'AI Assistant', 'Notifications'],
         allowedDocumentItems: ['Reports'],
         allowedSecondaryItems: ['Settings', 'Get Help'],
         allowedCloudItems: [],

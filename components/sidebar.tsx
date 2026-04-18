@@ -16,6 +16,7 @@ import {
   Check, 
   Bell,
   Tag,
+  Bot,
   type LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,11 @@ export const allSidebarItems: SidebarItem[] = [
     title: "POS",
     href: "/pos",
     icon: ShoppingCart,
+  },
+  {
+    title: "AI Assistant",
+    href: "/chatbot",
+    icon: LayoutDashboard,
   },
   {
     title: "Draft Orders",

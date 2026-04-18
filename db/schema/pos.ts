@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, decimal, boolean, jsonb, pgEnum, bigint, index } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 // Define enums for the POS application
@@ -73,6 +73,12 @@ export const products = pgTable("products", {
   profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }).default("0.00"), // Profit margin percentage
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    nameIdx: index("products_name_idx").on(table.name),
+    skuIdx: index("products_sku_idx").on(table.sku),
+    barcodeIdx: index("products_barcode_idx").on(table.barcode),
+  }
 });
 
 // Product prices table (to track price changes over time)
@@ -128,6 +134,10 @@ export const inventory = pgTable("inventory", {
   lastUpdated: timestamp("last_updated").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => {
+  return {
+    branchProdIdx: index("inventory_branch_prod_idx").on(table.branchId, table.productId),
+  }
 });
 
 // Inventory transactions (for tracking stock movements)

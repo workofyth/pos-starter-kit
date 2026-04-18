@@ -13,6 +13,79 @@ interface Message {
   content: string;
 }
 
+function renderMessageContent(content: string) {
+  // Split by line to detect tables
+  const lines = content.split('\n');
+  const result: React.ReactNode[] = [];
+  let currentTable: string[][] = [];
+  let inTable = false;
+
+  const flushTable = (index: number) => {
+    if (currentTable.length === 0) return;
+    
+    // Filter out separator lines like |---|
+    const filteredRows = currentTable.filter(row => !row.every(cell => cell.trim().match(/^-+$/)));
+    
+    if (filteredRows.length > 0) {
+      result.push(
+        <div key={`table-${index}`} className="my-2 border rounded-md overflow-hidden bg-white/50 dark:bg-black/20">
+          <table className="w-full text-xs border-collapse">
+            <thead>
+              <tr className="bg-yellow-50 dark:bg-yellow-900/10 border-b">
+                {filteredRows[0].map((cell, i) => (
+                  <th key={i} className="p-2 text-left font-bold border-r last:border-r-0">{cell.trim()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRows.slice(1).map((row, i) => (
+                <tr key={i} className="border-b last:border-b-0 hover:bg-yellow-50/50">
+                  {row.map((cell, j) => (
+                    <td key={j} className="p-2 border-r last:border-r-0 whitespace-nowrap">
+                      {cell.trim().startsWith('Rp') || !isNaN(Number(cell.trim().replace(/[,.]/g, ''))) ? (
+                        <span className="font-mono">{cell.trim()}</span>
+                      ) : (
+                        cell.trim()
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+    currentTable = [];
+    inTable = false;
+  };
+
+  lines.forEach((line, index) => {
+    const isTableRow = line.trim().startsWith('|') && line.trim().endsWith('|');
+    
+    if (isTableRow) {
+      const cells = line.trim().split('|').filter(c => c !== '');
+      if (cells.length > 0) {
+        currentTable.push(cells);
+        inTable = true;
+      }
+    } else {
+      if (inTable) flushTable(index);
+      
+      // Simple bold and line break handling
+      const formattedLine = line.split('**').map((part, i) => 
+        i % 2 === 1 ? <strong key={i} className="text-yellow-700 dark:text-yellow-400 font-bold">{part}</strong> : part
+      );
+      
+      result.push(<p key={index} className={cn("min-h-[1em]", line.trim() === "" ? "my-1" : "")}>{formattedLine.length > 0 ? formattedLine : " "}</p>);
+    }
+  });
+
+  if (inTable) flushTable(999);
+
+  return result;
+}
+
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
@@ -108,12 +181,12 @@ export function Chatbot() {
                       {msg.role === "assistant" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
                     </div>
                     <div className={cn(
-                      "p-3 rounded-2xl text-sm shadow-sm",
+                      "p-3 rounded-2xl text-sm shadow-sm prose prose-sm max-w-full overflow-x-auto",
                       msg.role === "assistant" 
                         ? "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-yellow-50" 
                         : "bg-yellow-400 text-black font-medium"
                     )}>
-                      {msg.content}
+                      {renderMessageContent(msg.content)}
                     </div>
                   </div>
                 ))}

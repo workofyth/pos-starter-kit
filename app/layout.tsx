@@ -41,7 +41,6 @@ export default function RootLayout({
           <RedisInitializer />
           <RealTimeNotificationBanner />
           {children}
-          <Chatbot />
         </ThemeProvider>
       </body>
     </html>

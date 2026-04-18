@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { notifications, branches } from '@/db/schema/pos';
-import { eq, and, desc, count } from 'drizzle-orm';
+import { eq, and, desc, count, or, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch } from '@/lib/notification-sse';
 import redis from '@/lib/redis';
@@ -65,7 +65,6 @@ export async function GET(request: NextRequest) {
     // Improved logic: If both branchId and userId are provided, 
     // we want notifications for that specific user OR general notifications for that branch (userId is null)
     if (branchId && userId) {
-      const { or, isNull } = await import('drizzle-orm');
       whereConditions.push(eq(notifications.branchId, branchId));
       whereConditions.push(or(eq(notifications.userId, userId), isNull(notifications.userId)));
     } else {
@@ -97,7 +96,6 @@ export async function GET(request: NextRequest) {
     const countWhereConditions = [];
     
     if (branchId && userId) {
-      const { or, isNull } = await import('drizzle-orm');
       countWhereConditions.push(eq(notifications.branchId, branchId));
       countWhereConditions.push(or(eq(notifications.userId, userId), isNull(notifications.userId)));
     } else {
@@ -214,22 +212,10 @@ export async function POST(request: NextRequest) {
       })
       .returning();
     
-    // Invalidate Redis cache for this branch and user
+    // Invalidate main Redis caches for this notification branch/user (Simple invalidation)
     try {
-      const pattern = `notifications:*:${branchId}:*:*:*`;
-      const keys : string[] = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-      
-      // Also invalidate cache for specific user if userId is provided
-      if (userId) {
-        const userPattern = `notifications:${userId}:*:*:*:*`;
-        const userKeys = await redis.keys(userPattern);
-        if (userKeys.length > 0) {
-          await redis.del(...userKeys);
-        }
-      }
+      if (branchId) await redis.del(`notifications::${branchId}:false:1:10`); // Clear first page common cache
+      if (userId) await redis.del(`notifications:${userId}::false:1:10`);
     } catch (cacheError) {
       console.warn('Failed to invalidate Redis cache:', cacheError);
     }
@@ -311,26 +297,9 @@ export async function PUT(request: NextRequest) {
       );
     }
     
-    // Invalidate Redis cache for this notification's branch and user
+    // Invalidate cache
     try {
-      // Get the branchId and userId for the notification to invalidate appropriate caches
-      const notificationBranchId = updatedNotification.branchId;
-      const notificationUserId = updatedNotification.userId;
-      
-      const pattern = `notifications:*:${notificationBranchId}:*:*:*`;
-      const keys = await redis.keys(pattern);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-      
-      // Also invalidate cache for specific user if userId is available
-      if (notificationUserId) {
-        const userPattern = `notifications:${notificationUserId}:*:*:*:*`;
-        const userKeys = await redis.keys(userPattern);
-        if (userKeys.length > 0) {
-          await redis.del(...userKeys);
-        }
-      }
+      if (updatedNotification.branchId) await redis.del(`notifications::${updatedNotification.branchId}:false:1:10`);
     } catch (cacheError) {
       console.warn('Failed to invalidate Redis cache:', cacheError);
     }
