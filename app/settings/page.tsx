@@ -32,6 +32,8 @@ export default function SettingsPage() {
   
   const [groqApiKey, setGroqApiKey] = useState("");
   const [aiProvider, setAiProvider] = useState("groq");
+  const [taxRate, setTaxRate] = useState("10");
+  const [aiSystemPrompt, setAiSystemPrompt] = useState("");
   
   const [isSaving, setIsSaving] = useState(false);
 
@@ -74,11 +76,14 @@ export default function SettingsPage() {
         const result = await response.json();
         if (result.success && Array.isArray(result.data)) {
           const groq = result.data.find((s: any) => s.key === 'groq_api_key');
-          const gemini = result.data.find((s: any) => s.key === 'gemini_api_key');
           const provider = result.data.find((s: any) => s.key === 'ai_provider');
+          const tax = result.data.find((s: any) => s.key === 'tax_rate');
           
           if (groq) setGroqApiKey(groq.value);
           if (provider) setAiProvider(provider.value);
+          if (tax) setTaxRate(tax.value);
+          const prompt = result.data.find((s: any) => s.key === 'ai_system_prompt');
+          if (prompt) setAiSystemPrompt(prompt.value);
         }
       }
     } catch (error) {
@@ -89,10 +94,10 @@ export default function SettingsPage() {
   const handleSaveIntegration = async () => {
     setIsSaving(true);
     try {
-      // Create/Update Settings
       const settingsToSave = [
         { key: 'ai_provider', value: 'groq', description: 'Chosen AI Intelligence provider' },
-        { key: 'groq_api_key', value: groqApiKey, description: 'API Key for Groq AI assistant' }
+        { key: 'groq_api_key', value: groqApiKey, description: 'API Key for Groq AI assistant' },
+        { key: 'ai_system_prompt', value: aiSystemPrompt, description: 'AI Chatbot System Prompt (baseContext)' }
       ];
 
       for (const setting of settingsToSave) {
@@ -102,10 +107,25 @@ export default function SettingsPage() {
           body: JSON.stringify(setting)
         });
       }
-
       toast.success("AI Integration settings saved successfully");
     } catch (error) {
       toast.error("Failed to save AI configuration");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSaveGeneral = async () => {
+    setIsSaving(true);
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'tax_rate', value: taxRate, description: 'Default tax rate for POS transactions' })
+      });
+      toast.success("General settings saved successfully");
+    } catch (error) {
+      toast.error("Failed to save general settings");
     } finally {
       setIsSaving(false);
     }
@@ -220,12 +240,15 @@ export default function SettingsPage() {
                       <input 
                         type="number" 
                         className="w-full p-2 border rounded-md" 
-                        defaultValue="10"
+                        value={taxRate}
+                        onChange={(e) => setTaxRate(e.target.value)}
                       />
                     </div>
                   </div>
                   
-                  <Button>Save General Settings</Button>
+                  <Button onClick={handleSaveGeneral} disabled={isSaving}>
+                    {isSaving ? "Saving..." : "Save General Settings"}
+                  </Button>
                 </div>
               )}
 
@@ -301,6 +324,22 @@ export default function SettingsPage() {
                         </div>
                       </div>
                     </div>
+                  
+                  <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
+                    <div>
+                      <label className="block text-sm font-bold mb-2">AI System Prompt (baseContext)</label>
+                      <p className="text-[10px] text-muted-foreground mb-2">
+                        Gunakan <code className="bg-muted px-1 rounded">{'{{TAX_RATE}}'}</code> untuk menyisipkan nilai pajak secara dinamis.
+                      </p>
+                      <textarea
+                        className="w-full p-2 border rounded-md bg-background font-mono text-xs"
+                        rows={12}
+                        placeholder="Masukkan system prompt untuk AI Chatbot..."
+                        value={aiSystemPrompt}
+                        onChange={(e) => setAiSystemPrompt(e.target.value)}
+                      />
+                    </div>
+                  </div>
                   </div>
                   
                   <Button 

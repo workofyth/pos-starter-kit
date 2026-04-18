@@ -260,13 +260,13 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return { transactionId, transactionNumber, processedItems };
+      return { transactionId, transactionNumber, processedItems, branchId: cashierBranchId };
     });
 
     // Broadcast update to the branch for real-time UI refresh
     try {
-      if (cashierBranchId) {
-        await broadcastToBranch(cashierBranchId, {
+      if (result.branchId) {
+        await broadcastToBranch(result.branchId, {
           title: "Transaksi Baru",
           message: `Transaksi ${result.transactionNumber} berhasil diproses oleh AI/Sistem.`,
           type: "transaction_created",
@@ -278,7 +278,7 @@ export async function POST(req: NextRequest) {
         });
 
         // Also broadcast inventory update
-        await broadcastToBranch(cashierBranchId, {
+        await broadcastToBranch(result.branchId, {
           title: "Update Stok",
           message: "Stok telah diperbarui secara otomatis setelah transaksi.",
           type: "inventory_update"
