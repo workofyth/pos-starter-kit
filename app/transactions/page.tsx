@@ -50,6 +50,8 @@ interface Transaction {
   paymentMethod: "cash" | "card" | "transfer";
   status: "completed" | "pending" | "cancelled" | "refunded";
   cashierName: string;   // Name of the cashier who processed the transaction
+  paidAmount: number;
+  changeAmount: number;
 }
 
 export default function TransactionsPage() {
@@ -191,7 +193,9 @@ export default function TransactionsPage() {
             total: parseFloat(t.total) || 0,
             paymentMethod: t.paymentMethod,
             status: t.status,
-            cashierName: t.cashierName || "Unknown"
+            cashierName: t.cashierName || "Unknown",
+            paidAmount: parseFloat(t.paidAmount) || 0,
+            changeAmount: parseFloat(t.changeAmount) || 0
           }));
           setTransactions(transformedTransactions);
         } else {
@@ -396,6 +400,8 @@ export default function TransactionsPage() {
                   <TableHead>Discount</TableHead>
                   <TableHead>Tax</TableHead>
                   <TableHead>Total</TableHead>
+                  <TableHead>Paid</TableHead>
+                  <TableHead>Change</TableHead>
                   <TableHead>Payment</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Actions</TableHead>
@@ -413,6 +419,10 @@ export default function TransactionsPage() {
                     <TableCell>- Rp {transaction.discount.toLocaleString()}</TableCell>
                     <TableCell>Rp {transaction.tax.toLocaleString()}</TableCell>
                     <TableCell className="font-bold">Rp {transaction.total.toLocaleString()}</TableCell>
+                    <TableCell>Rp {transaction.paidAmount.toLocaleString()}</TableCell>
+                    <TableCell className={transaction.changeAmount > 0 ? "text-green-600 font-medium" : ""}>
+                      Rp {transaction.changeAmount.toLocaleString()}
+                    </TableCell>
                     <TableCell>
                       <span className="mr-1">{getPaymentMethodIcon(transaction.paymentMethod)}</span>
                       {transaction.paymentMethod}
@@ -558,6 +568,14 @@ export default function TransactionsPage() {
                 <div className="flex gap-4 min-w-48 justify-between font-bold text-base border-t pt-2 mt-2">
                   <span>Total:</span>
                   <span>Rp {selectedTransactionInfo.total.toLocaleString()}</span>
+                </div>
+                <div className="flex gap-4 min-w-48 justify-between text-gray-600 mt-1">
+                  <span>Paid Amount:</span>
+                  <span>Rp {selectedTransactionInfo.paidAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex gap-4 min-w-48 justify-between text-green-600 font-medium">
+                  <span>Change:</span>
+                  <span>Rp {selectedTransactionInfo.changeAmount.toLocaleString()}</span>
                 </div>
               </div>
             )}

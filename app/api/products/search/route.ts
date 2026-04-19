@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories } from '@/db/schema/pos';
-import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {

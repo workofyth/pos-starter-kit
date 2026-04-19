@@ -3,7 +3,7 @@ import { db } from '@/db';
 import { inventory, products, branches, inventoryTransactions, userBranches } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
+import { sendNotificationsToBranchRoles, sendMainBranchNotification } from '@/lib/notification-helpers';
 
 // POST - Split inventory from one branch to another (specific inventory item split endpoint)
 export async function POST(
