@@ -22,9 +22,18 @@ import { getRedis } from '@/lib/redis';
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) return new Response(JSON.stringify({ success: false, messages: [] }), { status: 401 });
+  
+  // Get user's branch
+  const [ub] = await db.select({ branchId: userBranches.branchId })
+    .from(userBranches)
+    .where(eq(userBranches.userId, session.user.id))
+    .limit(1);
+  const branchId = ub?.branchId || 'default';
+
   const redis = await getRedis();
   if (!redis) return new Response(JSON.stringify({ success: false, messages: [] }));
-  const historyKey = `chatbot_history:${session.user.id}`;
+  
+  const historyKey = `chatbot_history:branch:${branchId}:user:${session.user.id}`;
   const history = await redis.get(historyKey);
   return new Response(JSON.stringify({ success: true, messages: history ? JSON.parse(history as string) : [] }));
 }
@@ -32,9 +41,17 @@ export async function GET(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) return new Response(JSON.stringify({ success: false }), { status: 401 });
+  
+  // Get user's branch
+  const [ub] = await db.select({ branchId: userBranches.branchId })
+    .from(userBranches)
+    .where(eq(userBranches.userId, session.user.id))
+    .limit(1);
+  const branchId = ub?.branchId || 'default';
+
   const redis = await getRedis();
   if (redis) {
-    const historyKey = `chatbot_history:${session.user.id}`;
+    const historyKey = `chatbot_history:branch:${branchId}:user:${session.user.id}`;
     await redis.del(historyKey);
   }
   return new Response(JSON.stringify({ success: true }));
@@ -46,8 +63,16 @@ export async function POST(request: NextRequest) {
 
   try {
     const { messages: incomingMessages } = await request.json();
+    
+    // Get user's branch
+    const [ub] = await db.select({ branchId: userBranches.branchId })
+      .from(userBranches)
+      .where(eq(userBranches.userId, session.user.id))
+      .limit(1);
+    const branchId = ub?.branchId || 'default';
+
     const redis = await getRedis();
-    const historyKey = `chatbot_history:${session.user.id}`;
+    const historyKey = `chatbot_history:branch:${branchId}:user:${session.user.id}`;
     
     let history: any[] = [];
     if (redis) {
@@ -87,6 +112,7 @@ PEDOMAN FORMAT OUTPUT (WAJIB KONSISTEN):
    - Total Akhir: Rp xxx
 3. DILARANG memproses 'process_payment' sebelum menampilkan rincian di atas dan user menjawab "Bayar".
 4. Setelah transaksi sukses, WAJIB tampilkan: "✅ Transaksi Berhasil! [Nomor Transaksi]".
+   - Jika pembayaran tunai (cash), WAJIB sebutkan "Kembalian: Rp xxx".
 
 ATURAN DATA:
 - ID Produk harus ID asli dari database (misal: prod_...). JANGAN gunakan nama.
