@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
-import { eq, and, or, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // GET a single product by ID
@@ -22,6 +22,46 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       );
     }
     
+    // Get branchId from search params for filtering if available
+    const { searchParams } = new URL(request.url);
+    let branchId = searchParams.get('branchId') || '';
+    if (branchId === 'null' || branchId === 'undefined') branchId = '';
+
+    // Subquery for stock
+    const stockSubquery = db
+      .select({
+        productId: inventory.productId,
+        totalStock: sql<number>`CAST(SUM(${inventory.quantity}) AS INTEGER)`.as('total_stock'),
+        maxMinStock: sql<number>`MAX(${inventory.minStock})`.as('max_min_stock')
+      })
+      .from(inventory)
+      .where(and(
+        eq(inventory.productId, id),
+        branchId ? eq(inventory.branchId, branchId) : sql`1=1`
+      ))
+      .groupBy(inventory.productId)
+      .as('stock_sub');
+
+    // Subquery for price
+    const priceSubquery = db
+      .selectDistinctOn([productPrices.productId], {
+        productId: productPrices.productId,
+        sellingPrice: productPrices.sellingPrice,
+        purchasePrice: productPrices.purchasePrice,
+        effectiveDate: productPrices.effectiveDate,
+      })
+      .from(productPrices)
+      .where(eq(productPrices.productId, id))
+      .orderBy(
+        productPrices.productId,
+        asc(sql`CASE 
+          WHEN ${productPrices.branchId} = ${branchId} THEN 0 
+          WHEN ${productPrices.branchId} IS NULL THEN 1 
+          ELSE 2 END`),
+        desc(productPrices.effectiveDate)
+      )
+      .as('price_sub');
+
     // Get product with related data
     const productData = await db
       .select({
@@ -39,15 +79,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         updatedAt: products.updatedAt,
         categoryId: products.categoryId,
         categoryName: categories.name,
-        sellingPrice: productPrices.sellingPrice,
-        purchasePrice: productPrices.purchasePrice,
-        stock: inventory.quantity,
-        minStock: inventory.minStock
+        sellingPrice: priceSubquery.sellingPrice,
+        purchasePrice: priceSubquery.purchasePrice,
+        stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
+        minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(productPrices, eq(products.id, productPrices.productId))
-      .leftJoin(inventory, eq(products.id, inventory.productId))
+      .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
+      .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId))
       .where(eq(products.id, id))
       .limit(1);
     
@@ -196,17 +236,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
     
-    // First, get a valid branch ID or handle appropriately
-    let branchId: string | null = null;
-    try {
-      // Attempt to get an existing branch
-      const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
-      if (branchList.length > 0) {
-        branchId = branchList[0].id;
-      }
-    } catch (error) {
-      console.log('No branches found or error querying branches');
-    }
+    // Handle branch assignment for updates
+    const targetBranchId = body.branchId || null;
 
     // Validate category exists if categoryId is provided
     let validCategoryId = categoryId;
@@ -258,7 +289,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             .set({
               purchasePrice: purchasePrice !== undefined ? purchasePrice.toString() : existingPrice[0].purchasePrice,
               sellingPrice: sellingPrice !== undefined ? sellingPrice.toString() : existingPrice[0].sellingPrice,
-              branchId: branchId, // Update branchId if available
+              branchId: targetBranchId || existingPrice[0].branchId, 
               effectiveDate: new Date()
             })
             .where(eq(productPrices.productId, id));
@@ -267,7 +298,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           await tx.insert(productPrices).values({
             id: `pp_${nanoid(10)}`,
             productId: id,
-            branchId: branchId, // Use the valid branch ID or null
+            branchId: targetBranchId, 
             purchasePrice: (purchasePrice || '0').toString(),
             sellingPrice: (sellingPrice || '0').toString(),
             effectiveDate: new Date(),

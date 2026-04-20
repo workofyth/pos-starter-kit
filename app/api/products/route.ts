@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
-import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 export async function GET(request: NextRequest) {
@@ -16,7 +16,8 @@ export async function GET(request: NextRequest) {
     // Search parameters
     const search = searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
-    const branchId = searchParams.get('branchId') || ''; // Add branchId parameter
+    let branchId = searchParams.get('branchId') || '';
+    if (branchId === 'null' || branchId === 'undefined') branchId = '';
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
@@ -39,10 +40,19 @@ export async function GET(request: NextRequest) {
         sellingPrice: productPrices.sellingPrice,
         purchasePrice: productPrices.purchasePrice,
         effectiveDate: productPrices.effectiveDate,
+        branchId: productPrices.branchId,
       })
       .from(productPrices)
-      .where(branchId ? eq(productPrices.branchId, branchId) : sql`1=1`)
-      .orderBy(productPrices.productId, desc(productPrices.effectiveDate))
+      .where(sql`1=1`) // Include all prices for fallback
+      .orderBy(
+        productPrices.productId, 
+        // Prioritize: 1. Branch specific, 2. Global (null), 3. Any other branch
+        asc(sql`CASE 
+          WHEN ${productPrices.branchId} = ${branchId} THEN 0 
+          WHEN ${productPrices.branchId} IS NULL THEN 1 
+          ELSE 2 END`),
+        desc(productPrices.effectiveDate)
+      )
       .as('price_sub');
 
     let query = db
@@ -281,16 +291,23 @@ export async function POST(request: NextRequest) {
     // Generate unique ID
     const productId = `prod_${nanoid(10)}`;
     
-    // First, get a valid branch ID or handle appropriately
-    let branchId: string | null = null;
-    try {
-      // Attempt to get an existing branch
-      const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
-      if (branchList.length > 0) {
-        branchId = branchList[0].id;
+    // Branch assignment for price/inventory
+    // If branchId is provided in body, use it. Otherwise, don't randomly pick one.
+    // If no branch is found at all, we'll use null for price (global).
+    let targetBranchId: string | null = body.branchId || null;
+    
+    if (!targetBranchId) {
+      try {
+        // Attempt to get an existing branch if needed for inventory, 
+        // but for price we prefer it to be global (null) if not specified.
+        const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
+        if (branchList.length > 0) {
+          // Only use this for inventory if we REALLY need a branch
+          // We'll keep targetBranchId as null for the price to make it global
+        }
+      } catch (error) {
+        console.log('Error querying branches');
       }
-    } catch (error) {
-      console.log('No branches found or error querying branches, will use null');
     }
 
     // Validate category exists if categoryId is provided
@@ -329,7 +346,7 @@ export async function POST(request: NextRequest) {
         await tx.insert(productPrices).values({
           id: `pp_${nanoid(10)}`,
           productId,
-          branchId: branchId, // Use the valid branch ID or null
+          branchId: targetBranchId, // Use the target branch ID or null (global)
           purchasePrice: purchasePrice.toString(),
           sellingPrice: sellingPrice.toString(),
           effectiveDate: new Date(),
@@ -337,12 +354,18 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      // Insert the inventory entry - if no branch exists, skip inventory creation
-      if (branchId) {
+      // Insert the inventory entry - if no branchId is available, we try to find one
+      let inventoryBranchId = targetBranchId;
+      if (!inventoryBranchId) {
+        const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
+        if (branchList.length > 0) inventoryBranchId = branchList[0].id;
+      }
+
+      if (inventoryBranchId) {
         await tx.insert(inventory).values({
           id: `inv_${nanoid(10)}`,
           productId,
-          branchId: branchId,
+          branchId: inventoryBranchId,
           quantity: stock,
           minStock,
           createdAt: new Date(),
