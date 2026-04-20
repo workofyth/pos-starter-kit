@@ -108,7 +108,7 @@ export default function POSPage() {
             setCashierId(session.user.id);
             
             // Fetch products with stock > 0 for the cashier's branch
-            const productsResponse = await fetch(`/api/products?branchId=${userBranchId}`);
+            const productsResponse = await fetch(`/api/products?branchId=${userBranchId || ''}`);
             if (productsResponse.ok) {
               const productsResult = await productsResponse.json();
               if (productsResult.success) {

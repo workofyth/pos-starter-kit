@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories } from '@/db/schema/pos';
-import { eq, and, or, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, desc, asc, count, sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,7 +12,8 @@ export async function GET(request: NextRequest) {
     const minPrice = searchParams.get('minPrice');
     const maxPrice = searchParams.get('maxPrice');
     const inStock = searchParams.get('inStock');
-    const branchId = searchParams.get('branchId') || ''; // Add branchId parameter
+    let branchId = searchParams.get('branchId') || '';
+    if (branchId === 'null' || branchId === 'undefined') branchId = ''; // Handle stringified null/undefined from JS
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
@@ -30,7 +31,38 @@ export async function GET(request: NextRequest) {
       );
     }
     
-    // Build the query
+    // Build subqueries for stock and prices
+    const stockSubquery = db
+      .select({
+        productId: inventory.productId,
+        totalStock: sql<number>`CAST(SUM(${inventory.quantity}) AS INTEGER)`.as('total_stock'),
+        maxMinStock: sql<number>`MAX(${inventory.minStock})`.as('max_min_stock')
+      })
+      .from(inventory)
+      .where(branchId ? eq(inventory.branchId, branchId) : sql`1=1`)
+      .groupBy(inventory.productId)
+      .as('stock_sub');
+
+    const priceSubquery = db
+      .selectDistinctOn([productPrices.productId], {
+        productId: productPrices.productId,
+        sellingPrice: productPrices.sellingPrice,
+        purchasePrice: productPrices.purchasePrice,
+        effectiveDate: productPrices.effectiveDate,
+      })
+      .from(productPrices)
+      .where(sql`1=1`) // Include all prices for fallback
+      .orderBy(
+        productPrices.productId,
+        asc(sql`CASE 
+          WHEN ${productPrices.branchId} = ${branchId} THEN 0 
+          WHEN ${productPrices.branchId} IS NULL THEN 1 
+          ELSE 2 END`),
+        desc(productPrices.effectiveDate)
+      )
+      .as('price_sub');
+
+    // Build the main query
     let query = db
       .select({
         id: products.id,
@@ -47,26 +79,15 @@ export async function GET(request: NextRequest) {
         updatedAt: products.updatedAt,
         categoryId: products.categoryId,
         categoryName: categories.name,
-        sellingPrice: productPrices.sellingPrice,
-        purchasePrice: productPrices.purchasePrice,
-        stock: inventory.quantity,
-        minStock: inventory.minStock,
-        branchId: inventory.branchId  // Include branchId in the response
+        sellingPrice: priceSubquery.sellingPrice,
+        purchasePrice: priceSubquery.purchasePrice,
+        stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
+        minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`,
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(productPrices, eq(products.id, productPrices.productId))
-      .leftJoin(inventory, eq(products.id, inventory.productId))
-      .groupBy(
-        products.id,
-        products.brand,
-        categories.name,
-        productPrices.sellingPrice,
-        productPrices.purchasePrice,
-        inventory.quantity,
-        inventory.minStock,
-        inventory.branchId
-      )
+      .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
+      .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId))
       .limit(limit)
       .offset(offset);
     
@@ -88,17 +109,17 @@ export async function GET(request: NextRequest) {
     
     if (minPrice || maxPrice) {
       if (minPrice) {
-        whereConditions.push(sql`${productPrices.sellingPrice} >= ${minPrice}`);
+        whereConditions.push(sql`${priceSubquery.sellingPrice} >= ${minPrice}`);
       }
       if (maxPrice) {
-        whereConditions.push(sql`${productPrices.sellingPrice} <= ${maxPrice}`);
+        whereConditions.push(sql`${priceSubquery.sellingPrice} <= ${maxPrice}`);
       }
     }
     
     if (inStock === 'true') {
-      whereConditions.push(sql`${inventory.quantity} > 0`);
+      whereConditions.push(sql`${stockSubquery.totalStock} > 0`);
     } else if (inStock === 'false') {
-      whereConditions.push(sql`${inventory.quantity} <= 0`);
+      whereConditions.push(sql`${stockSubquery.totalStock} <= 0`);
     }
     
     if (branchId) {
@@ -118,8 +139,8 @@ export async function GET(request: NextRequest) {
       .select({ count: count() })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .leftJoin(productPrices, eq(products.id, productPrices.productId))
-      .leftJoin(inventory, eq(products.id, inventory.productId));
+      .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
+      .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId));
     
     const countWhereConditions = [];
     
@@ -138,17 +159,17 @@ export async function GET(request: NextRequest) {
     
     if (minPrice || maxPrice) {
       if (minPrice) {
-        countWhereConditions.push(sql`${productPrices.sellingPrice} >= ${minPrice}`);
+        countWhereConditions.push(sql`${priceSubquery.sellingPrice} >= ${minPrice}`);
       }
       if (maxPrice) {
-        countWhereConditions.push(sql`${productPrices.sellingPrice} <= ${maxPrice}`);
+        countWhereConditions.push(sql`${priceSubquery.sellingPrice} <= ${maxPrice}`);
       }
     }
     
     if (inStock === 'true') {
-      countWhereConditions.push(sql`${inventory.quantity} > 0`);
+      countWhereConditions.push(sql`${stockSubquery.totalStock} > 0`);
     } else if (inStock === 'false') {
-      countWhereConditions.push(sql`${inventory.quantity} <= 0`);
+      countWhereConditions.push(sql`${stockSubquery.totalStock} <= 0`);
     }
     
     if (branchId) {
