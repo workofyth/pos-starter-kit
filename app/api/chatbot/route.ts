@@ -268,7 +268,9 @@ ATURAN DATA:
             if (topic === 'products' || topic === 'all') {
               result.products = await db.select({
                 id: products.id, name: products.name, sku: products.sku,
-                brand: products.brand, price: productPrices.sellingPrice
+                brand: products.brand, 
+                sellingPrice: productPrices.sellingPrice,
+                customerPrice: productPrices.customerPrice
               }).from(products)
                 .leftJoin(productPrices, eq(products.id, productPrices.productId))
                 .limit(50);
@@ -384,7 +386,12 @@ ATURAN DATA:
               .limit(50);
           } 
           else if (name === "search_products") {
-            const res = await db.select({ id: products.id, name: products.name, price: productPrices.sellingPrice })
+            const res = await db.select({ 
+              id: products.id, 
+              name: products.name, 
+              sellingPrice: productPrices.sellingPrice,
+              customerPrice: productPrices.customerPrice
+            })
               .from(products)
               .leftJoin(productPrices, eq(products.id, productPrices.productId))
               .where(or(ilike(products.name, `%${args.query || ''}%`), ilike(products.sku, `%${args.query || ''}%`)))
@@ -407,7 +414,12 @@ ATURAN DATA:
              const resolvedItems: any[] = [];
              let failedItem = "";
              for (const i of subItems) {
-               const found = await db.select({ id: products.id, name: products.name, price: productPrices.sellingPrice })
+               const found = await db.select({ 
+                 id: products.id, 
+                 name: products.name, 
+                 sellingPrice: productPrices.sellingPrice,
+                 customerPrice: productPrices.customerPrice
+               })
                  .from(products)
                  .leftJoin(productPrices, eq(products.id, productPrices.productId))
                  .where(ilike(products.name, `%${i.name || ''}%`))
@@ -420,8 +432,8 @@ ATURAN DATA:
                  productId: found[0].id,       // Use REAL ID from DB
                  name: found[0].name,
                  quantity: i.quantity,
-                 price: Number(found[0].price ?? i.price), // Use REAL price from DB
-                 totalPrice: Number(found[0].price ?? i.price) * i.quantity
+                 price: Number((found[0] as any).customerPrice ?? (found[0] as any).sellingPrice ?? i.price), // Prioritize Customer Price
+                 totalPrice: Number((found[0] as any).customerPrice ?? (found[0] as any).sellingPrice ?? i.price) * i.quantity
                });
              }
 

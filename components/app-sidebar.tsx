@@ -60,6 +60,12 @@ const staticData = {
       icon: IconListDetails,
     },
     {
+      title: "Purchase Orders",
+      url: "/inventory/purchase-orders",
+      icon: IconDatabase,
+      hideForSubBranch: true,
+    },
+    {
       title: "Analytics",
       url: "#",
       icon: IconChartBar,
@@ -162,6 +168,7 @@ const staticData = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
   const [userRole, setUserRole] = React.useState<UserRole>('guest');
+  const [userBranchType, setUserBranchType] = React.useState<string>('sub');
   
   const userData = session?.user ? {
     name: session.user.name || "User",
@@ -185,6 +192,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             if (result.success && result.data.length > 0) {
               console.log(result.data[0].role)
               setUserRole(result.data[0].role || 'staff');
+              // Store branch type to hide specific items for sub-branches
+              setUserBranchType(result.data[0].branch?.type || 'sub');
             } else {
               setUserRole('guest');
             }
@@ -207,10 +216,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const getFilteredNavItems = () => {
     const accessRules = getMenuAccessRules(userRole);
     
-    // Filter main navigation items based on role
-    const filteredNavMain = staticData.navMain.filter(item => 
-      accessRules.hasFullAccess || accessRules.allowedMainItems.includes(item.title)
-    );
+    // Filter main navigation items based on role and branch type
+    const filteredNavMain = staticData.navMain.filter(item => {
+      const isAllowedByRole = accessRules.hasFullAccess || accessRules.allowedMainItems.includes(item.title);
+      // Hide if marked for sub-branch users and user is in a sub-branch
+      const isHiddenForSubBranch = (item as any).hideForSubBranch && userBranchType !== 'main';
+      return isAllowedByRole && !isHiddenForSubBranch;
+    });
     
     // Filter cloud navigation items based on role
     const filteredNavClouds = staticData.navClouds.filter(item => 

@@ -40,7 +40,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
           hasFullAccess: true,
           allowedMainItems: [
             'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
-            'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
+            'Purchase Orders', 'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
             'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications' 
           ],
           allowedDocumentItems: ['Data Library', 'Reports', 'Word Assistant'],
@@ -53,7 +53,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
           hasFullAccess: true,
           allowedMainItems: [
             'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
-            'Members', 'Reporting', 'Transactions', 'Approvals', 'Notifications' 
+            'Purchase Orders', 'Members', 'Reporting', 'Transactions', 'Approvals', 'Notifications' 
           ],
           allowedDocumentItems: ['Reports'],
           allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
@@ -86,6 +86,7 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
           'Categories',       // Categories
           'Brands',           // Brands
           'Inventory',        // Inventory by branch
+          'Purchase Orders',  // Purchase Orders
           'Transactions',     // Transaction by branch
           'Reporting',        // Report by branch
           'Settings',         // Setting by branch

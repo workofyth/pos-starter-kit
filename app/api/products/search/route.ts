@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       .selectDistinctOn([productPrices.productId], {
         productId: productPrices.productId,
         sellingPrice: productPrices.sellingPrice,
+        customerPrice: productPrices.customerPrice,
         purchasePrice: productPrices.purchasePrice,
         effectiveDate: productPrices.effectiveDate,
       })
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest) {
         categoryId: products.categoryId,
         categoryName: categories.name,
         sellingPrice: priceSubquery.sellingPrice,
+        customerPrice: priceSubquery.customerPrice,
         purchasePrice: priceSubquery.purchasePrice,
         stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
         minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`,

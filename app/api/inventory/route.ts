@@ -382,6 +382,8 @@ export async function POST(request: NextRequest) {
             type === 'receive' ? 'receive' :
             type === 'delivery' ? 'delivery' : 'adjustment',
       quantity,
+      stockBefore: existingInventory.length > 0 ? existingInventory[0].quantity : 0,
+      stockAfter: inventoryRecord.quantity,
       notes: notes || '',
       referenceId: null, // No reference ID for manual adjustments
       createdAt: new Date(),

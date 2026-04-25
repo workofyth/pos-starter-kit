@@ -69,11 +69,13 @@ export async function POST(request: NextRequest) {
     }
 
     const transactionId = `trans_${nanoid()}`;
+    const transactionNumber = `SPL-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${nanoid(4).toUpperCase()}`;
 
     const [newTransaction] = await db
       .insert(inventoryTransactions)
       .values({
         id: transactionId,
+        transactionNumber,
         productId,
         branchId: sourceBranchId,
         referenceId: targetBranchId,
@@ -458,6 +460,7 @@ export async function PUT(request: NextRequest) {
         updatedAt: inventoryTransactions.updatedAt,
         createdBy: inventoryTransactions.createdBy,
         approvedBy: inventoryTransactions.approvedBy,
+        transactionNumber: inventoryTransactions.transactionNumber,
         productName: products.name,
         sourceBranchName: branches.name,
         sourceBranchType: branches.type
@@ -475,6 +478,7 @@ export async function PUT(request: NextRequest) {
       quantity: number;
       type: string;
       notes: string | null;
+      transactionNumber: string | null;
       status: string;
       createdAt: Date | null;
       updatedAt: Date | null;
@@ -663,6 +667,33 @@ export async function PUT(request: NextRequest) {
             approvalReq.referenceId ? eq(inventory.branchId, approvalReq.referenceId) : isNull(inventory.branchId)
           ));
       }
+
+      // Update the original split transaction with stockBefore and stockAfter for SOURCE branch
+      await db.update(inventoryTransactions)
+        .set({
+          stockBefore: sourceInventory ? sourceInventory.quantity : 0,
+          stockAfter: (sourceInventory ? sourceInventory.quantity : 0) - approvalReq.quantity,
+        })
+        .where(eq(inventoryTransactions.id, id));
+
+      // Create a complementary transaction for the TARGET branch
+      await db.insert(inventoryTransactions).values({
+        id: `itx_recv_${nanoid(10)}`,
+        transactionNumber: `RECV-${approvalReq.transactionNumber || nanoid(6).toUpperCase()}`,
+        productId: approvalReq.productId,
+        branchId: approvalReq.referenceId!,
+        referenceId: approvalReq.branchId, // Original source is the reference
+        type: 'receive',
+        quantity: approvalReq.quantity,
+        stockBefore: targetInventory ? targetInventory.quantity : 0,
+        stockAfter: (targetInventory ? targetInventory.quantity : 0) + approvalReq.quantity,
+        notes: `Received from ${approvalReq.sourceBranchName || 'Source'}. Ref split: ${approvalReq.transactionNumber || approvalReq.id}`,
+        status: 'completed',
+        createdBy: userId,
+        approvedBy: userId,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
 
       // publish inventory movement updates
       try {

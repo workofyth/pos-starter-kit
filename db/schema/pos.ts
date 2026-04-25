@@ -7,7 +7,7 @@ export const branchTypeEnum = pgEnum("branch_type", ["main", "sub"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "transfer", "credit"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "cancelled", "refunded"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percentage", "fixed_amount"]);
-export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split"]);
+export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split", "pos"]);
 
 // Branches table (for multi-cabang support)
 export const branches = pgTable("branches", {
@@ -89,7 +89,8 @@ export const productPrices = pgTable("product_prices", {
     .references(() => products.id, { onDelete: "cascade" }),
   branchId: text("branch_id").references(() => branches.id, { onDelete: "cascade" }),
   purchasePrice: decimal("purchase_price", { precision: 12, scale: 2 }).notNull(), // Harga beli
-  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }).notNull(), // Harga jual
+  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }).notNull(), // Harga jual (Main to Sub or Wholesale)
+  customerPrice: decimal("customer_price", { precision: 12, scale: 2 }).default("0.00"), // Harga ke end user/customer
   effectiveDate: timestamp("effective_date").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -151,7 +152,10 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
     .references(() => branches.id, { onDelete: "cascade" }),
   type: inventoryTransactionTypeEnum("type").notNull(), // in, out, adjustment
   quantity: integer("quantity").notNull(),
+  stockBefore: integer("stock_before").default(0).notNull(),
+  stockAfter: integer("stock_after").default(0).notNull(),
   referenceId: text("reference_id"), // ID of the related transaction (e.g., sales, purchase order)
+  transactionNumber: text("transaction_number"), // Human-readable ref number (e.g., SPL-2023-001)
   status: text("status").default('pending'),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

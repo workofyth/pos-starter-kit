@@ -35,6 +35,7 @@ interface Product {
   categoryId: string;
   purchasePrice: number;
   sellingPrice: number;
+  customerPrice: number;
   unit?: string;
   stock: number;
   minStock: number;
@@ -53,7 +54,9 @@ interface ProductFormData {
   unit: string;
   purchasePrice: number;
   sellingPrice: number;
+  customerPrice: number;
   profitMargin: number;
+  customerMargin: number;
   description: string;
   image: string;
   imageUrl?: string;
@@ -185,6 +188,7 @@ export default function ProductsPage() {
               categoryId: String(apiProduct.categoryId || ''),
               purchasePrice: parseFloat(apiProduct.purchasePrice as string) || 0,
               sellingPrice: parseFloat(apiProduct.sellingPrice as string) || 0,
+              customerPrice: parseFloat(apiProduct.customerPrice as string) || 0,
               stock: Number(apiProduct.stock) || 0,
               minStock: Number(apiProduct.minStock) || 5,
               profitMargin: parseFloat(apiProduct.profitMargin as string) || 0,
@@ -262,6 +266,7 @@ export default function ProductsPage() {
   }, []);
   
   
+  const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isAdjustStockDialogOpen, setIsAdjustStockDialogOpen] = useState(false);
@@ -280,7 +285,9 @@ export default function ProductsPage() {
     unit: "pcs",
     purchasePrice: 0,
     sellingPrice: 0,
+    customerPrice: 0,
     profitMargin: 0,
+    customerMargin: 0,
     description: "",
     image: "",
     imageUrl: "",
@@ -308,7 +315,9 @@ export default function ProductsPage() {
       unit: product.unit || "pcs",
       purchasePrice: product.purchasePrice,
       sellingPrice: product.sellingPrice,
+      customerPrice: product.customerPrice,
       profitMargin: product.profitMargin,
+      customerMargin: product.sellingPrice > 0 ? ((product.customerPrice - product.sellingPrice) / product.sellingPrice) * 100 : 0,
       description: "", // description might not be in the Product interface
       image: product.image || "",
       imageUrl: product.imageUrl || "",
@@ -321,6 +330,7 @@ export default function ProductsPage() {
   const handleEditProduct = async () => {
     if (!editingProduct) return;
 
+    setIsSaving(true);
     try {
       const productData = {
         name: newProduct.name,
@@ -333,7 +343,8 @@ export default function ProductsPage() {
         image: newProduct.image || null,  // Send null if no image
         imageUrl: newProduct.imageUrl || null,  // Send null if no image
         purchasePrice: newProduct.purchasePrice.toString(),
-        sellingPrice: newProduct.sellingPrice.toString()
+        sellingPrice: newProduct.sellingPrice.toString(),
+        customerPrice: newProduct.customerPrice.toString()
       };
 
       const response = await fetch(`/api/products/${editingProduct.id}`, {
@@ -358,6 +369,7 @@ export default function ProductsPage() {
             categoryId: newProduct.categoryId,
             purchasePrice: newProduct.purchasePrice || 0,
             sellingPrice: newProduct.sellingPrice || 0,
+            customerPrice: newProduct.customerPrice || 0,
             profitMargin: newProduct.profitMargin || 0,
             image: newProduct.image,
             imageUrl: newProduct.imageUrl,
@@ -376,7 +388,9 @@ export default function ProductsPage() {
           unit: "pcs",
           purchasePrice: 0,
           sellingPrice: 0,
+          customerPrice: 0,
           profitMargin: 0,
+          customerMargin: 0,
           description: "",
           image: "",
           imageUrl: "",
@@ -392,6 +406,8 @@ export default function ProductsPage() {
     } catch (error) {
       console.error('Error updating product:', error);
       alert('Error updating product: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -470,11 +486,26 @@ export default function ProductsPage() {
     const margin = parseFloat(value) || 0;
     const purchasePrice = newProduct.purchasePrice || 0;
     const sellingPrice = purchasePrice * (1 + margin/100);
+    const customerMargin = newProduct.customerMargin || 0;
+    const customerPrice = sellingPrice * (1 + customerMargin/100);
     
     setNewProduct({
       ...newProduct,
       profitMargin: margin,
-      sellingPrice: sellingPrice
+      sellingPrice: sellingPrice,
+      customerPrice: customerPrice
+    });
+  };
+  
+  const handleCustomerMarginChange = (value: string) => {
+    const margin = parseFloat(value) || 0;
+    const sellingPrice = newProduct.sellingPrice || 0;
+    const customerPrice = sellingPrice * (1 + margin/100);
+    
+    setNewProduct({
+      ...newProduct,
+      customerMargin: margin,
+      customerPrice: customerPrice
     });
   };
   
@@ -482,11 +513,14 @@ export default function ProductsPage() {
     const purchasePrice = parseFloat(value) || 0;
     const profitMargin = newProduct.profitMargin || 0;
     const sellingPrice = purchasePrice * (1 + profitMargin/100);
+    const customerMargin = newProduct.customerMargin || 0;
+    const customerPrice = sellingPrice * (1 + customerMargin/100);
     
     setNewProduct({
       ...newProduct,
       purchasePrice: purchasePrice,
-      sellingPrice: sellingPrice
+      sellingPrice: sellingPrice,
+      customerPrice: customerPrice
     });
   };
   
@@ -507,6 +541,7 @@ export default function ProductsPage() {
       return;
     }
 
+    setIsSaving(true);
     try {
       // Prepare the product data for API request
       const productData = {
@@ -521,6 +556,7 @@ export default function ProductsPage() {
         imageUrl: newProduct.imageUrl || null,  // Send null if no image
         purchasePrice: newProduct.purchasePrice.toString(),
         sellingPrice: newProduct.sellingPrice.toString(),
+        customerPrice: newProduct.customerPrice.toString(),
         stock: 0, // New products start with 0 stock
         minStock: 5 // Default minimum stock
       };
@@ -550,6 +586,7 @@ export default function ProductsPage() {
           categoryId: newProductFromAPI.categoryId,
           purchasePrice: parseFloat(newProductFromAPI.purchasePrice) || 0,
           sellingPrice: parseFloat(newProductFromAPI.sellingPrice) || 0,
+          customerPrice: parseFloat(newProductFromAPI.customerPrice) || 0,
           stock: newProductFromAPI.stock || 0,
           minStock: newProductFromAPI.minStock || 5,
           profitMargin: parseFloat(newProductFromAPI.profitMargin) || 0,
@@ -568,7 +605,9 @@ export default function ProductsPage() {
           unit: "pcs",
           purchasePrice: 0,
           sellingPrice: 0,
+          customerPrice: 0,
           profitMargin: 0,
+          customerMargin: 0,
           description: "",
           image: "",
           imageUrl: "",
@@ -585,6 +624,8 @@ export default function ProductsPage() {
     } catch (error) {
       console.error('Error adding product:', error);
       alert('Error adding product: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -611,7 +652,9 @@ export default function ProductsPage() {
                 unit: "pcs",
                 purchasePrice: 0,
                 sellingPrice: 0,
+                customerPrice: 0,
                 profitMargin: 0,
+                customerMargin: 0,
                 description: "",
                 image: "",
                 imageUrl: "",
@@ -625,7 +668,7 @@ export default function ProductsPage() {
                 Add Product
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-[1000px]">
               <DialogHeader>
                 <DialogTitle>Add New Product</DialogTitle>
               </DialogHeader>
@@ -711,7 +754,7 @@ export default function ProductsPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   <div>
                     <label className="text-sm font-medium">Purchase Price</label>
                     <Input 
@@ -732,12 +775,31 @@ export default function ProductsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Selling Price</label>
+                    <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
                     <Input 
                       type="number" 
                       placeholder="Enter selling price" 
                       value={newProduct.sellingPrice || ""}
                       onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Customer Margin (%)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter customer margin %" 
+                      step="0.01"
+                      value={newProduct.customerMargin || ""}
+                      onChange={(e) => handleCustomerMarginChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Retail Price (to Customer)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter customer price" 
+                      value={newProduct.customerPrice || ""}
+                      onChange={(e) => setNewProduct({...newProduct, customerPrice: parseFloat(e.target.value) || 0})}
                     />
                   </div>
                 </div>
@@ -869,13 +931,19 @@ export default function ProductsPage() {
                   </div>
                 </div>
               </div>
-              <Button onClick={handleAddProduct}>Add Product</Button>
+              <Button 
+                onClick={handleAddProduct} 
+                disabled={isSaving}
+                className="w-full"
+              >
+                {isSaving ? "Adding Product..." : "Add Product"}
+              </Button>
             </DialogContent>
           </Dialog>
           )}
           
-          <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-            <DialogContent>
+           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+             <DialogContent className="sm:max-w-[1000px]">
               <DialogHeader>
                 <DialogTitle>Edit Product</DialogTitle>
               </DialogHeader>
@@ -961,7 +1029,7 @@ export default function ProductsPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   <div>
                     <label className="text-sm font-medium">Purchase Price</label>
                     <Input 
@@ -982,12 +1050,31 @@ export default function ProductsPage() {
                     />
                   </div>
                   <div>
-                    <label className="text-sm font-medium">Selling Price</label>
+                    <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
                     <Input 
                       type="number" 
                       placeholder="Enter selling price" 
                       value={newProduct.sellingPrice || ""}
                       onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Customer Margin (%)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter customer margin %" 
+                      step="0.01"
+                      value={newProduct.customerMargin || ""}
+                      onChange={(e) => handleCustomerMarginChange(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium">Retail Price (to Customer)</label>
+                    <Input 
+                      type="number" 
+                      placeholder="Enter customer price" 
+                      value={newProduct.customerPrice || ""}
+                      onChange={(e) => setNewProduct({...newProduct, customerPrice: parseFloat(e.target.value) || 0})}
                     />
                   </div>
                 </div>
@@ -1077,7 +1164,13 @@ export default function ProductsPage() {
                   </div>
                 </div>
               </div>
-              <Button onClick={handleEditProduct}>Update Product</Button>
+              <Button 
+                onClick={handleEditProduct} 
+                disabled={isSaving}
+                className="w-full"
+              >
+                {isSaving ? "Updating Product..." : "Update Product"}
+              </Button>
             </DialogContent>
           </Dialog>
           
@@ -1213,12 +1306,16 @@ export default function ProductsPage() {
                 {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <TableHead>Purchase Price</TableHead>
                 )}
-                <TableHead>Selling Price</TableHead>
+                <TableHead>Branch Price</TableHead>
+                <TableHead>Retail Price</TableHead>
                 {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <>
                     <TableHead>Profit Margin</TableHead>
-                    <TableHead>Actions</TableHead>
                   </>
+                )}
+                <TableHead>Retail Margin</TableHead>
+                {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                  <TableHead>Actions</TableHead>
                 )}
               </TableRow>
             </TableHeader>
@@ -1261,6 +1358,7 @@ export default function ProductsPage() {
                     <TableCell>Rp {product.purchasePrice.toLocaleString()}</TableCell>
                   )}
                   <TableCell>Rp {product.sellingPrice.toLocaleString()}</TableCell>
+                  <TableCell>Rp {product.customerPrice.toLocaleString()}</TableCell>
                   {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                     <TableCell>
                       <Badge variant="secondary">
@@ -1268,11 +1366,16 @@ export default function ProductsPage() {
                       </Badge>
                     </TableCell>
                   )}
-                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <TableCell>
-                    <div className="flex gap-2">
-                      {/* Only show edit button for main admin or main branch users */}
-                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <Badge variant="outline">
+                      {product.sellingPrice > 0 
+                        ? (((product.customerPrice - product.sellingPrice) / product.sellingPrice) * 100).toFixed(2) 
+                        : "0.00"}%
+                    </Badge>
+                  </TableCell>
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <TableCell>
+                      <div className="flex gap-2">
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -1280,9 +1383,6 @@ export default function ProductsPage() {
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                      )}
-                      {/* Only show stock adjustment button for main admin or main branch users */}
-                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                         <Button 
                           variant="outline" 
                           size="sm"
@@ -1298,9 +1398,6 @@ export default function ProductsPage() {
                         >
                           <Package className="h-4 w-4" />
                         </Button>
-                      )}
-                      {/* Only show delete button for main admin or main branch users */}
-                      {!(userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                         <Button 
                           variant="outline" 
                           size="sm" 
@@ -1308,9 +1405,8 @@ export default function ProductsPage() {
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
-                      )}
-                    </div>
-                  </TableCell>
+                      </div>
+                    </TableCell>
                   )}
                 </TableRow>
               ))}

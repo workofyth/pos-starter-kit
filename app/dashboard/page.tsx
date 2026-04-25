@@ -211,18 +211,18 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((item) => (
-              <div key={item} className="flex items-center justify-between py-2 border-b">
-                <div>
-                  <p className="font-medium">Transaction #{item}</p>
-                  <p className="text-sm text-gray-500">Customer Name</p>
-                </div>
-                <div className="text-right">
-                  <p className="font-medium">Rp 250,000</p>
-                  <p className="text-sm text-gray-500">Today, 10:30 AM</p>
-                </div>
+            {stats.transactionsCount === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                <Activity className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                No recent activity found
               </div>
-            ))}
+            ) : (
+              // This part would ideally fetch the last 5 transactions from an API
+              // For now we show a placeholder for consistency if count > 0
+              <p className="text-center text-sm text-muted-foreground py-4">
+                Latest transactions are available in the Transactions menu.
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

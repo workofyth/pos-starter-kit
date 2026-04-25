@@ -76,6 +76,12 @@ export const allSidebarItems: SidebarItem[] = [
     icon: Package,
   },
   {
+    title: "Purchase Orders",
+    href: "/inventory/purchase-orders",
+    icon: ShoppingCart,
+    hideForSubBranch: true,
+  },
+  {
     title: "Members",
     href: "/members",
     icon: Users,

@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       .selectDistinctOn([productPrices.productId], {
         productId: productPrices.productId,
         sellingPrice: productPrices.sellingPrice,
+        customerPrice: productPrices.customerPrice,
         purchasePrice: productPrices.purchasePrice,
         effectiveDate: productPrices.effectiveDate,
         branchId: productPrices.branchId,
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest) {
         categoryId: products.categoryId,
         categoryName: categories.name,
         sellingPrice: priceSubquery.sellingPrice,
+        customerPrice: priceSubquery.customerPrice,
         purchasePrice: priceSubquery.purchasePrice,
         stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
         minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`,
@@ -204,6 +206,7 @@ export async function POST(request: NextRequest) {
       profitMargin = '0.00',
       purchasePrice = '0',
       sellingPrice = '0',
+      customerPrice = '0',
       stock = 0,
       minStock = 5
     } = body;
@@ -342,13 +345,14 @@ export async function POST(request: NextRequest) {
       });
       
       // Insert the product price entry
-      if (purchasePrice !== '0' || sellingPrice !== '0') {
+      if (purchasePrice !== '0' || sellingPrice !== '0' || customerPrice !== '0') {
         await tx.insert(productPrices).values({
           id: `pp_${nanoid(10)}`,
           productId,
           branchId: targetBranchId, // Use the target branch ID or null (global)
           purchasePrice: purchasePrice.toString(),
           sellingPrice: sellingPrice.toString(),
+          customerPrice: customerPrice.toString(),
           effectiveDate: new Date(),
           createdAt: new Date()
         });
@@ -391,6 +395,7 @@ export async function POST(request: NextRequest) {
         categoryId: products.categoryId,
         categoryName: categories.name,
         sellingPrice: productPrices.sellingPrice,
+        customerPrice: productPrices.customerPrice,
         purchasePrice: productPrices.purchasePrice,
         stock: inventory.quantity,
         minStock: inventory.minStock

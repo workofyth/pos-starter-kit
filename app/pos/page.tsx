@@ -34,6 +34,7 @@ interface Product {
   categoryId: string;
   purchasePrice: number;
   sellingPrice: number;
+  customerPrice: number;
   stock: number;
   minStock: number;
   image?: string;
@@ -185,9 +186,9 @@ export default function POSPage() {
       const newItem: CartItem = {
         id: product.id,
         name: product.name,
-        price: Number(product.sellingPrice) || 0,
+        price: Number(product.customerPrice || product.sellingPrice) || 0,
         quantity: 1,
-        subtotal: Number(product.sellingPrice) || 0,
+        subtotal: Number(product.customerPrice || product.sellingPrice) || 0,
         productId: product.id
       };
       setCart([...cart, newItem]);
@@ -499,7 +500,7 @@ export default function POSPage() {
                         </div>
                       )}
                       <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
-                      <p className="text-sm text-gray-500">Rp {(Number(product.sellingPrice) || 0).toLocaleString()}</p>
+                      <p className="text-sm text-gray-500">Rp {(Number(product.customerPrice || product.sellingPrice) || 0).toLocaleString()}</p>
                       <div className="mt-1 text-center w-full">
                         <p className="text-xs">Stock: {product.stock}</p>
                         <p className="text-xs text-gray-500">{product.sku}</p>

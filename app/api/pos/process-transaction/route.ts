@@ -6,7 +6,8 @@ import {
   products,
   members,
   inventory,
-  userBranches
+  userBranches,
+  inventoryTransactions
 } from '@/db/schema/pos';
 import { broadcastToBranch } from '@/lib/notification-sse';
 import { eq, and } from 'drizzle-orm';
@@ -244,6 +245,21 @@ export async function POST(req: NextRequest) {
             eq(inventory.productId, item.productId),
             eq(inventory.branchId, cashierBranchId) // Use dynamic branch ID from cashier
           ));
+
+        // Log movement to inventoryTransactions
+        await tx.insert(inventoryTransactions).values({
+          id: uuidv4(),
+          productId: item.productId,
+          branchId: cashierBranchId,
+          type: 'pos',
+          quantity: itemQuantity,
+          stockBefore: currentQuantity,
+          stockAfter: newQuantity,
+          referenceId: transactionNumber,
+          notes: notes ? `POS: ${notes}` : `POS Sale: ${transactionNumber}`,
+          createdBy: cashierId,
+          status: 'completed'
+        });
       }
 
       // Update member points if member is provided
