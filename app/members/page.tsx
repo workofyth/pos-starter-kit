@@ -246,9 +246,10 @@ export default function MembersPage() {
                   <label className="text-sm font-medium">Initial Points</label>
                   <Input 
                     type="number" 
+                    step="0.01"
                     placeholder="Enter initial points" 
                     value={newMember.points}
-                    onChange={(e) => setNewMember({...newMember, points: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setNewMember({...newMember, points: parseFloat(e.target.value) || 0})}
                   />
                 </div>
                 <div>
@@ -303,9 +304,10 @@ export default function MembersPage() {
                   <label className="text-sm font-medium">Points</label>
                   <Input 
                     type="number" 
+                    step="0.01"
                     placeholder="Enter points" 
                     value={newMember.points}
-                    onChange={(e) => setNewMember({...newMember, points: parseInt(e.target.value) || 0})}
+                    onChange={(e) => setNewMember({...newMember, points: parseFloat(e.target.value) || 0})}
                   />
                 </div>
                 <div>
@@ -385,7 +387,7 @@ export default function MembersPage() {
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Avg Points</p>
                 <p className="text-2xl font-bold">
-                  {Math.round(members.reduce((sum, m) => sum + m.points, 0) / members.length) || 0}
+                  {(members.reduce((sum, m) => sum + Number(m.points), 0) / members.length || 0).toFixed(1)}
                 </p>
               </div>
             </div>
@@ -424,7 +426,7 @@ export default function MembersPage() {
                     <td className="py-3 px-4">
                       <Badge variant="secondary" className="flex items-center gap-1">
                         <Award className="h-3 w-3" />
-                        {member.points} pts
+                        {Number(member.points).toLocaleString()} pts
                       </Badge>
                     </td>
                     <td className="py-3 px-4">{new Date(member.createdAt).toLocaleDateString()}</td>

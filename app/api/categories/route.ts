@@ -103,12 +103,12 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    
     const {
       name,
       description,
       code,
-      parentId
+      parentId,
+      point
     } = body;
     
     // Validate required fields
@@ -176,9 +176,10 @@ export async function POST(request: NextRequest) {
         name,
         description: description || null,
         code,
-        parentId: parentId || null
+        parentId: parentId || null,
+        point: point ? parseFloat(point.toString()).toFixed(2) : "0.00"
       })
-      .returning() as { id: string; name: string; description: string | null; code: string; parentId: string | null }[];
+      .returning() as any[];
     
     return new Response(
       JSON.stringify({ 

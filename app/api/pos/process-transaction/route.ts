@@ -7,7 +7,9 @@ import {
   members,
   inventory,
   userBranches,
-  inventoryTransactions
+  inventoryTransactions,
+  categories,
+  exchangePoints
 } from '@/db/schema/pos';
 import { broadcastToBranch } from '@/lib/notification-sse';
 import { eq, and } from 'drizzle-orm';
@@ -35,6 +37,7 @@ export async function POST(req: NextRequest) {
         unitPrice: string | number;
         totalPrice: string | number;
         discountAmount?: number;
+        isExchange?: boolean;
       }>;
       paymentMethod: string;
       subtotal: string | number;
@@ -114,12 +117,41 @@ export async function POST(req: NextRequest) {
     // Process each item in the transaction
       const transactionId = newTransaction.id;
       const processedItems = [];
+      let totalPointsEarned = 0;
+      let totalPointsSpent = 0;
 
       for (const item of items) {
-        const [product] = await tx.select().from(products).where(eq(products.id, item.productId));
+        const [product] = await tx
+          .select({
+            id: products.id,
+            name: products.name,
+            categoryId: products.categoryId,
+            point: categories.point
+          })
+          .from(products)
+          .leftJoin(categories, eq(products.categoryId, categories.id))
+          .where(eq(products.id, item.productId));
         
         if (!product) {
           throw new Error(`Product with ID ${item.productId} not found`);
+        }
+
+        // Calculate points earned for non-exchange items
+        const itemQty = typeof item.quantity === 'string' ? parseInt(item.quantity, 10) : item.quantity;
+        if (!item.isExchange) {
+          const categoryPoint = parseFloat(product.point?.toString() || "0");
+          totalPointsEarned += categoryPoint * itemQty;
+        } else {
+          // Calculate points spent for exchange items
+          const [exchangeConfig] = await tx
+            .select()
+            .from(exchangePoints)
+            .where(eq(exchangePoints.productId, item.productId))
+            .limit(1);
+          
+          if (exchangeConfig) {
+            totalPointsSpent += exchangeConfig.pointExchangeTotal * itemQty;
+          }
         }
 
         // Insert transaction detail
@@ -131,6 +163,7 @@ export async function POST(req: NextRequest) {
           unitPrice: item.unitPrice.toString(),
           totalPrice: item.totalPrice.toString(),
           discountAmount: item.discountAmount ? item.discountAmount.toString() : "0",
+          isExchange: item.isExchange || false,
         }).returning();
 
         processedItems.push({
@@ -266,11 +299,16 @@ export async function POST(req: NextRequest) {
       if (memberId) {
         const [member] = await tx.select().from(members).where(eq(members.id, memberId));
         if (member) {
-          // Calculate points (e.g., 1 point per 1000 IDR spent)
-          const pointsEarned = Math.floor(validatedTotal / 1000);
+          const currentPoints = parseFloat(member.points?.toString() || "0");
+          const newPoints = currentPoints + totalPointsEarned - totalPointsSpent;
+          
+          if (newPoints < 0) {
+            throw new Error(`Insufficient points for member ${member.name}. Required: ${totalPointsSpent}, Available: ${currentPoints + totalPointsEarned}`);
+          }
+
           await tx.update(members)
             .set({ 
-              points: member.points + pointsEarned 
+              points: newPoints.toFixed(2)
             })
             .where(eq(members.id, memberId));
         }

@@ -1306,14 +1306,18 @@ export default function ProductsPage() {
                 {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <TableHead>Purchase Price</TableHead>
                 )}
-                <TableHead>Branch Price</TableHead>
+                {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                  <TableHead>Branch Price</TableHead>
+                )}
                 <TableHead>Retail Price</TableHead>
                 {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <>
                     <TableHead>Profit Margin</TableHead>
                   </>
                 )}
-                <TableHead>Retail Margin</TableHead>
+                {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                  <TableHead>Retail Margin</TableHead>
+                )}
                 {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                   <TableHead>Actions</TableHead>
                 )}
@@ -1357,7 +1361,9 @@ export default function ProductsPage() {
                   {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                     <TableCell>Rp {product.purchasePrice.toLocaleString()}</TableCell>
                   )}
-                  <TableCell>Rp {product.sellingPrice.toLocaleString()}</TableCell>
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <TableCell>Rp {product.sellingPrice.toLocaleString()}</TableCell>
+                  )}
                   <TableCell>Rp {product.customerPrice.toLocaleString()}</TableCell>
                   {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                     <TableCell>
@@ -1366,13 +1372,15 @@ export default function ProductsPage() {
                       </Badge>
                     </TableCell>
                   )}
-                  <TableCell>
-                    <Badge variant="outline">
-                      {product.sellingPrice > 0 
-                        ? (((product.customerPrice - product.sellingPrice) / product.sellingPrice) * 100).toFixed(2) 
-                        : "0.00"}%
-                    </Badge>
-                  </TableCell>
+                  {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
+                    <TableCell>
+                      <Badge variant="outline">
+                        {product.sellingPrice > 0 
+                          ? (((product.customerPrice - product.sellingPrice) / product.sellingPrice) * 100).toFixed(2) 
+                          : "0.00"}%
+                      </Badge>
+                    </TableCell>
+                  )}
                   {! (userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId) && (
                     <TableCell>
                       <div className="flex gap-2">

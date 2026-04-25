@@ -70,6 +70,8 @@ export default function ReportingPage() {
   const [mutLoading, setMutLoading] = useState(false);
 
   const [currentBranchId, setCurrentBranchId] = useState("");
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
+  const [userBranchType, setUserBranchType] = useState<string | null>(null);
 
 
 
@@ -84,10 +86,14 @@ export default function ReportingPage() {
         if (userBranchResponse.ok) {
           const userBranchResult = await userBranchResponse.json();
           if (userBranchResult.success && userBranchResult.data.length > 0) {
-            const userRole = userBranchResult.data[0].role;
-            setCurrentBranchId(userBranchResult.data[0].branchId);
+            const uBranch = userBranchResult.data[0];
+            const userRole = uBranch.role;
+            setCurrentBranchId(uBranch.branchId);
+            setIsMainAdmin(uBranch.isMainAdmin === true);
+            setUserBranchType(uBranch.branch?.type || null);
+            
             if (userRole !== 'admin') {
-              branchIdToUse = userBranchResult.data[0].branchId;
+              branchIdToUse = uBranch.branchId;
             }
           }
         }
@@ -114,6 +120,8 @@ export default function ReportingPage() {
     };
     fetchReportData();
   }, [session]);
+
+  const isSubBranchUser = !isMainAdmin && userBranchType !== 'main';
 
   const fetchOmzetData = async () => {
     if (!session?.user) return;
@@ -360,13 +368,15 @@ export default function ReportingPage() {
         >
           Omset Detail
         </Button>
-        <Button
-          variant={reportType === "overview" ? "default" : "secondary"}
-          onClick={() => setReportType("overview")}
-          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
-        >
-          Analytics Overview
-        </Button>
+        {!isSubBranchUser && (
+          <Button
+            variant={reportType === "overview" ? "default" : "secondary"}
+            onClick={() => setReportType("overview")}
+            className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
+          >
+            Analytics Overview
+          </Button>
+        )}
         <Button
           variant={reportType === "inventory" ? "default" : "secondary"}
           onClick={() => setReportType("inventory")}

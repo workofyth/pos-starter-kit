@@ -114,7 +114,8 @@ export async function PUT(
       name,
       description,
       code,
-      parentId
+      parentId,
+      point
     } = body;
     
     // Check for duplicate code if provided and different from current
@@ -167,6 +168,7 @@ export async function PUT(
         description: description !== undefined ? description : existingCategory[0].description,
         code: code !== undefined ? code : existingCategory[0].code,
         parentId: parentId !== undefined ? parentId : existingCategory[0].parentId,
+        point: point !== undefined ? (point ? parseFloat(point.toString()).toFixed(2) : "0.00") : (existingCategory[0] as any).point,
         updatedAt: new Date()
       })
       .where(eq(categories.id, id))

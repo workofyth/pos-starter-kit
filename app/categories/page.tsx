@@ -31,6 +31,7 @@ interface Category {
   code: string;
   description?: string;
   parentId?: string;
+  point: number;
   createdAt: string;
 }
 
@@ -44,7 +45,8 @@ export default function CategoriesPage() {
   const [newCategory, setNewCategory] = useState({
     name: "",
     code: "",
-    description: ""
+    description: "",
+    point: 0
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -131,7 +133,8 @@ export default function CategoriesPage() {
         setNewCategory({
           name: "",
           code: "",
-          description: ""
+          description: "",
+          point: 0
         });
         setIsAddDialogOpen(false);
       } else {
@@ -158,7 +161,8 @@ export default function CategoriesPage() {
         body: JSON.stringify({
           name: newCategory.name,
           code: newCategory.code,
-          description: newCategory.description
+          description: newCategory.description,
+          point: newCategory.point
         }),
       });
 
@@ -172,7 +176,8 @@ export default function CategoriesPage() {
         setNewCategory({
           name: "",
           code: "",
-          description: ""
+          description: "",
+          point: 0
         });
         setIsEditDialogOpen(false);
       } else {
@@ -215,7 +220,8 @@ export default function CategoriesPage() {
     setNewCategory({
       name: category.name,
       code: category.code,
-      description: category.description || ""
+      description: category.description || "",
+      point: category.point || 0
     });
     setIsEditDialogOpen(true);
   };
@@ -239,7 +245,7 @@ export default function CategoriesPage() {
           {!isSubBranchUser && (
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
             if (open) {
-              setNewCategory({ name: "", code: "", description: "" });
+              setNewCategory({ name: "", code: "", description: "", point: 0 });
             }
             setIsAddDialogOpen(open);
           }}>
@@ -271,6 +277,17 @@ export default function CategoriesPage() {
                     maxLength={3}
                   />
                   <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Point per Purchase</label>
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    placeholder="Enter point value" 
+                    value={newCategory.point}
+                    onChange={(e) => setNewCategory({...newCategory, point: parseFloat(e.target.value) || 0})}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Points awarded for each product in this category</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Description</label>
@@ -321,6 +338,16 @@ export default function CategoriesPage() {
                     maxLength={3}
                   />
                   <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Point per Purchase</label>
+                  <Input 
+                    type="number"
+                    step="0.01"
+                    placeholder="Enter point value" 
+                    value={newCategory.point}
+                    onChange={(e) => setNewCategory({...newCategory, point: parseFloat(e.target.value) || 0})}
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Description</label>
@@ -381,6 +408,7 @@ export default function CategoriesPage() {
               <TableRow>
                 <TableHead>Category</TableHead>
                 <TableHead>Code</TableHead>
+                <TableHead>Point</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Products</TableHead>
@@ -393,6 +421,11 @@ export default function CategoriesPage() {
                   <TableCell className="font-medium">{category.name}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{category.code}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                      {category.point || 0} Pts
+                    </Badge>
                   </TableCell>
                   <TableCell>
                     {category.description || <span className="text-gray-400">No description</span>}

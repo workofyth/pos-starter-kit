@@ -22,8 +22,11 @@ import {
   CreditCard,
   Package,
   User,
-  ShoppingCart
+  ShoppingCart,
+  Gift,
+  CheckCircle2
 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
 
 interface Product {
@@ -59,6 +62,15 @@ interface CartItem {
   subtotal: number;
   productId: string;
   discountAmount?: number;
+  isExchange?: boolean;
+}
+
+interface ExchangeReward {
+  id: string;
+  pointExchangeTotal: number;
+  exchangeItem: string;
+  productId: string | null;
+  productName?: string;
 }
 
 export default function POSPage() {
@@ -72,8 +84,10 @@ export default function POSPage() {
   const [paidAmount, setPaidAmount] = useState(0);
   const [discountRate, setDiscountRate] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [cashierId, setCashierId] = useState("1"); // In a real app, this would be dynamic
+  const [cashierId, setCashierId] = useState("1");
   const [cashierBranchId, setCashierBranchId] = useState<string | null>(null); // Store cashier's branch ID
+  const [exchangeRewards, setExchangeRewards] = useState<ExchangeReward[]>([]);
+  const [isExchangeDialogOpen, setIsExchangeDialogOpen] = useState(false);
 
   // Load products and members
   const fetchData = async () => {
@@ -146,6 +160,15 @@ export default function POSPage() {
           setMembersList(membersResult.data);
         }
       }
+
+      // Fetch exchange rewards
+      const rewardsResponse = await fetch('/api/exchange-points');
+      if (rewardsResponse.ok) {
+        const rewardsResult = await rewardsResponse.json();
+        if (rewardsResult.success) {
+          setExchangeRewards(rewardsResult.data);
+        }
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -193,6 +216,41 @@ export default function POSPage() {
       };
       setCart([...cart, newItem]);
     }
+  };
+
+  const addExchangeToCart = (reward: ExchangeReward) => {
+    if (!selectedMember) {
+      alert("Please select a member first!");
+      return;
+    }
+
+    if (selectedMember.points < reward.pointExchangeTotal) {
+      alert("Insufficient points!");
+      return;
+    }
+
+    // Check if the reward is linked to a product
+    if (reward.productId) {
+      const product = productsList.find(p => p.id === reward.productId);
+      if (product && product.stock <= 0) {
+        alert("Exchange product is out of stock!");
+        return;
+      }
+    }
+
+    const newItem: CartItem = {
+      id: `exchange-${reward.id}-${Date.now()}`,
+      name: `[REWARD] ${reward.exchangeItem}`,
+      price: 0, // Free item
+      quantity: 1,
+      subtotal: 0,
+      productId: reward.productId || "none",
+      isExchange: true
+    };
+    
+    setCart([...cart, newItem]);
+    setIsExchangeDialogOpen(false);
+    alert(`Reward "${reward.exchangeItem}" added to cart!`);
   };
 
   const updateQuantity = (id: string, newQuantity: number) => {
@@ -282,7 +340,8 @@ export default function POSPage() {
             quantity: item.quantity,
             unitPrice: item.price,
             totalPrice: item.subtotal,
-            discountAmount: item.discountAmount || 0
+            discountAmount: item.discountAmount || 0,
+            isExchange: item.isExchange || false
           })),
           paymentMethod,
           subtotal: calculateSubtotal(),
@@ -426,18 +485,54 @@ export default function POSPage() {
                         selectedMember?.id === member.id ? null : member
                       )}
                     >
-                      {member.name} ({Number(member.points) || 0} pts)
+                      {member.name} ({Number(member.points).toLocaleString()} pts)
                     </Badge>
                   ))}
                   {selectedMember && (
-                    <Button
-                      key="clear-member-btn"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedMember(null)}
-                    >
-                      Clear
-                    </Button>
+                    <div className="w-full mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex justify-between items-center">
+                      <div>
+                        <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">Selected: {selectedMember.name}</p>
+                        <p className="text-xs text-blue-600 dark:text-blue-400">Available Points: <span className="font-bold">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
+                      </div>
+                      <Dialog open={isExchangeDialogOpen} onOpenChange={setIsExchangeDialogOpen}>
+                        <DialogTrigger asChild>
+                          <Button size="sm" variant="outline" className="bg-white dark:bg-gray-800 border-blue-200 text-blue-700 hover:bg-blue-50">
+                            <Gift className="h-4 w-4 mr-2" />
+                            Exchange Points
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-md">
+                          <DialogHeader>
+                            <DialogTitle>Exchange Points for Rewards</DialogTitle>
+                          </DialogHeader>
+                          <div className="space-y-4 py-4">
+                            <p className="text-sm text-gray-500">Your current points: <span className="font-bold text-blue-600">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
+                            <div className="max-h-64 overflow-y-auto space-y-2">
+                              {exchangeRewards.map((reward) => (
+                                <div key={reward.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
+                                  <div>
+                                    <h4 className="font-medium">{reward.exchangeItem}</h4>
+                                    <Badge variant="secondary" className="mt-1 bg-purple-50 text-purple-700 border-purple-100">
+                                      {Number(reward.pointExchangeTotal).toLocaleString()} Pts
+                                    </Badge>
+                                  </div>
+                                  <Button 
+                                    size="sm" 
+                                    disabled={selectedMember.points < reward.pointExchangeTotal}
+                                    onClick={() => addExchangeToCart(reward)}
+                                  >
+                                    Claim
+                                  </Button>
+                                </div>
+                              ))}
+                              {exchangeRewards.length === 0 && (
+                                <p className="text-center text-gray-500 py-4">No rewards available</p>
+                              )}
+                            </div>
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
                   )}
                 </div>
               </div>
@@ -531,36 +626,44 @@ export default function POSPage() {
               ) : (
                 <div className="space-y-4 max-h-96 overflow-y-auto">
                   {cart.map((item, idx) => (
-                    <div key={`cart-item-${item.id}-${idx}`} className="flex items-center justify-between border-b pb-2">
-                      <div>
-                        <h4 className="font-medium">{item.name}</h4>
-                        <p className="text-sm text-gray-500">Rp {(Number(item.price) || 0).toLocaleString()} x {item.quantity}</p>
+                    <div key={`cart-item-${item.id}-${idx}`} className="grid grid-cols-[1fr_auto_80px] items-center gap-2 border-b pb-2">
+                      <div className="min-w-0">
+                        <h4 className="font-medium flex items-center gap-1 truncate">
+                          {item.name}
+                          {item.isExchange && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-green-100 text-green-800">Reward</Badge>}
+                        </h4>
+                        <p className="text-sm text-gray-500 truncate">
+                          {item.isExchange ? "Free" : `Rp ${(Number(item.price) || 0).toLocaleString()}`} x {item.quantity}
+                        </p>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="outline"
+                          className="h-8 w-8"
                           onClick={() => updateQuantity(item.id, item.quantity - 1)}
                         >
                           <Minus className="h-4 w-4" />
                         </Button>
-                        <span className="w-8 text-center">{item.quantity}</span>
+                        <span className="w-6 text-center text-sm">{item.quantity}</span>
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="outline"
+                          className="h-8 w-8"
                           onClick={() => updateQuantity(item.id, item.quantity + 1)}
                         >
                           <Plus className="h-4 w-4" />
                         </Button>
                         <Button
-                          size="sm"
+                          size="icon"
                           variant="destructive"
+                          className="h-8 w-8 ml-1"
                           onClick={() => removeFromCart(item.id)}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </div>
-                      <div className="font-medium">
+                      <div className="font-medium text-right text-sm">
                         Rp {(Number(item.subtotal) || 0).toLocaleString()}
                       </div>
                     </div>

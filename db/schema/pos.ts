@@ -44,6 +44,7 @@ export const categories = pgTable("categories", {
   description: text("description"),
   code: text("code").notNull().unique(), // E.g., FB for Freebase, SL for SaltNic, etc.
   parentId: text("parent_id").references((): any => categories.id, { onDelete: "set null" }),
+  point: decimal("point", { precision: 12, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -102,7 +103,7 @@ export const members = pgTable("members", {
   phone: text("phone").notNull(),
   email: text("email").unique(),
   address: text("address"),
-  points: integer("points").default(0).notNull(),
+  points: decimal("points", { precision: 12, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -215,6 +216,7 @@ export const transactionDetails = pgTable("transaction_details", {
   unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 12, scale: 2 }).notNull(),
   discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }).default("0").notNull(),
+  isExchange: boolean("is_exchange").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -297,6 +299,16 @@ export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey().notNull(),
   value: text("value").notNull(),
   description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Master Exchange Member Point table
+export const exchangePoints = pgTable("exchange_points", {
+  id: text("id").primaryKey().notNull(),
+  pointExchangeTotal: integer("point_exchange_total").notNull(),
+  exchangeItem: text("exchange_item").notNull(), // Product name or description
+  productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

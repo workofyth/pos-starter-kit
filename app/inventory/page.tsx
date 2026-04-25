@@ -43,7 +43,9 @@ interface InventoryItem {
 
 export default function InventoryPage() {
   const { data: session } = useSession(); // Add session hook
-  const [userBranchId, setUserBranchId] = useState<string | null>(null); // Store user's branch ID
+   const [userBranchId, setUserBranchId] = useState<string | null>(null); // Store user's branch ID
+  const [userBranchName, setUserBranchName] = useState<string | null>(null); // Store user's branch name
+  const [isPermissionsLoaded, setIsPermissionsLoaded] = useState(false);
   
   // State for inventory data and UI
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -84,6 +86,11 @@ export default function InventoryPage() {
     type: 'adjustment' as 'in' | 'out' | 'adjustment',
     notes: ''
   });
+  const [newItem, setNewItem] = useState({
+    productId: "",
+    branchId: "",
+    quantity: 0
+  });
   
   // State for data lists
   const [branchList, setBranchList] = useState<Branch[]>([]);
@@ -110,12 +117,17 @@ export default function InventoryPage() {
             const result = await response.json();
             if (result.success && result.data.length > 0) {
               setUserBranchId(result.data[0].branchId);
-              setUserBranchId(result.data[0].branchId);
+              setUserBranchName(result.data[0].branch?.name || null);
               setUserRole(result.data[0].role); // Store user's role
               // Central admins must have isMainAdmin flag true
               setIsMainAdmin(result.data[0].isMainAdmin === true); 
               setUserBranchType(result.data[0].branch?.type || null); // Store branch type
+              setIsPermissionsLoaded(true);
+            } else {
+              setIsPermissionsLoaded(true);
             }
+          } else {
+            setIsPermissionsLoaded(true);
           }
         } catch (error) {
           console.error('Error fetching user branch:', error);
@@ -141,9 +153,12 @@ export default function InventoryPage() {
 
   const isSubBranchUser = !isMainAdmin && userBranchType !== 'main';
 
-  // Load data on component mount and when dependencies change
+   // Load data on component mount and when dependencies change
   useEffect(() => {
     const loadData = async () => {
+      // Don't load if permissions aren't ready yet to avoid showing global data to restricted users
+      if (!isPermissionsLoaded) return;
+      
       setLoading(true);
       try {
         // Determine branch filter - main admins can access all branches, other users only their assigned branch
@@ -717,7 +732,11 @@ export default function InventoryPage() {
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <p className="text-gray-600">Manage your product stock across all branches</p>
+        <p className="text-gray-600">
+          {isMainAdmin 
+            ? "Manage your product stock across all branches" 
+            : `Manage your product stock for ${userBranchName || 'your branch'}`}
+        </p>
       </div>
 
       {/* Summary Cards */}
@@ -925,6 +944,11 @@ export default function InventoryPage() {
               Add New Item
             </Button>
           )}
+          {isSubBranchUser && userBranchId && (
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              Add Stock to {userBranchName || 'Branch'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1110,46 +1134,67 @@ export default function InventoryPage() {
       </div>
 
       {/* Add Inventory Dialog */}
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+      <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
+        if (open && !isMainAdmin && userBranchId) {
+          setNewItem(prev => ({ ...prev, branchId: userBranchId }));
+        }
+        setIsAddDialogOpen(open);
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Add New Inventory Item</DialogTitle>
           </DialogHeader>
-          <div className="p-4">
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.target as HTMLFormElement);
-              // Handle form submission here
-            }}>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Product</label>
-                  <select className="w-full p-2 border border-gray-300 rounded">
-                    {products.map((product) => (
-                      <option key={product.id} value={product.id}>
-                        {product.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Branch</label>
-                  <select className="w-full p-2 border border-gray-300 rounded">
-                    {branchList.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
-                        {branch.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Quantity</label>
-                  <Input type="number" name="quantity" />
-                </div>
-                <Button type="submit">Add Item</Button>
-              </div>
-            </form>
+          <div className="grid gap-4 py-4">
+            <div>
+              <label className="text-sm font-medium">Product</label>
+              <select 
+                className="w-full p-2 border rounded-md"
+                value={newItem.productId}
+                onChange={(e) => {
+                  const prodId = e.target.value;
+                  setNewItem({ ...newItem, productId: prodId });
+                }}
+              >
+                <option value="">Select a product</option>
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.sku})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Branch</label>
+              <select 
+                className="w-full p-2 border rounded-md"
+                value={newItem.branchId}
+                onChange={(e) => setNewItem({...newItem, branchId: e.target.value})}
+                disabled={!isMainAdmin}
+              >
+                <option value="">Select branch</option>
+                {branchList.map(b => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </select>
+              {!isMainAdmin && (
+                <p className="text-xs text-gray-500 mt-1">Locked to your assigned branch</p>
+              )}
+            </div>
+            <div>
+              <label className="text-sm font-medium">Initial Quantity</label>
+              <Input 
+                type="number" 
+                value={newItem.quantity}
+                onChange={(e) => setNewItem({...newItem, quantity: parseInt(e.target.value) || 0})}
+              />
+            </div>
           </div>
+          <Button onClick={() => {
+            const prod = products.find(p => p.id === newItem.productId);
+            if (prod && newItem.branchId) {
+              handleAddInventory(prod, newItem.branchId, newItem.quantity);
+            } else {
+              alert('Please select product and branch');
+            }
+          }}>Add Item</Button>
         </DialogContent>
       </Dialog>
 
