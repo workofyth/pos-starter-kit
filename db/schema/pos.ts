@@ -7,7 +7,7 @@ export const branchTypeEnum = pgEnum("branch_type", ["main", "sub"]);
 export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "transfer", "credit"]);
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "cancelled", "refunded"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percentage", "fixed_amount"]);
-export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split"]);
+export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split", "pos"]);
 
 // Branches table (for multi-cabang support)
 export const branches = pgTable("branches", {
@@ -44,6 +44,7 @@ export const categories = pgTable("categories", {
   description: text("description"),
   code: text("code").notNull().unique(), // E.g., FB for Freebase, SL for SaltNic, etc.
   parentId: text("parent_id").references((): any => categories.id, { onDelete: "set null" }),
+  point: decimal("point", { precision: 12, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -89,7 +90,8 @@ export const productPrices = pgTable("product_prices", {
     .references(() => products.id, { onDelete: "cascade" }),
   branchId: text("branch_id").references(() => branches.id, { onDelete: "cascade" }),
   purchasePrice: decimal("purchase_price", { precision: 12, scale: 2 }).notNull(), // Harga beli
-  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }).notNull(), // Harga jual
+  sellingPrice: decimal("selling_price", { precision: 12, scale: 2 }).notNull(), // Harga jual (Main to Sub or Wholesale)
+  customerPrice: decimal("customer_price", { precision: 12, scale: 2 }).default("0.00"), // Harga ke end user/customer
   effectiveDate: timestamp("effective_date").defaultNow().notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -101,7 +103,7 @@ export const members = pgTable("members", {
   phone: text("phone").notNull(),
   email: text("email").unique(),
   address: text("address"),
-  points: integer("points").default(0).notNull(),
+  points: decimal("points", { precision: 12, scale: 2 }).default("0.00").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -151,7 +153,10 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
     .references(() => branches.id, { onDelete: "cascade" }),
   type: inventoryTransactionTypeEnum("type").notNull(), // in, out, adjustment
   quantity: integer("quantity").notNull(),
+  stockBefore: integer("stock_before").default(0).notNull(),
+  stockAfter: integer("stock_after").default(0).notNull(),
   referenceId: text("reference_id"), // ID of the related transaction (e.g., sales, purchase order)
+  transactionNumber: text("transaction_number"), // Human-readable ref number (e.g., SPL-2023-001)
   status: text("status").default('pending'),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -211,6 +216,7 @@ export const transactionDetails = pgTable("transaction_details", {
   unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 12, scale: 2 }).notNull(),
   discountAmount: decimal("discount_amount", { precision: 12, scale: 2 }).default("0").notNull(),
+  isExchange: boolean("is_exchange").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -293,6 +299,16 @@ export const appSettings = pgTable("app_settings", {
   key: text("key").primaryKey().notNull(),
   value: text("value").notNull(),
   description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Master Exchange Member Point table
+export const exchangePoints = pgTable("exchange_points", {
+  id: text("id").primaryKey().notNull(),
+  pointExchangeTotal: integer("point_exchange_total").notNull(),
+  exchangeItem: text("exchange_item").notNull(), // Product name or description
+  productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 

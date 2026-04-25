@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
-import { eq, and, or, isNull, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, sql, asc, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 
 // GET a single product by ID
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .selectDistinctOn([productPrices.productId], {
         productId: productPrices.productId,
         sellingPrice: productPrices.sellingPrice,
+        customerPrice: productPrices.customerPrice,
         purchasePrice: productPrices.purchasePrice,
         effectiveDate: productPrices.effectiveDate,
       })
@@ -80,6 +81,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         categoryId: products.categoryId,
         categoryName: categories.name,
         sellingPrice: priceSubquery.sellingPrice,
+        customerPrice: priceSubquery.customerPrice,
         purchasePrice: priceSubquery.purchasePrice,
         stock: sql<number>`COALESCE(${stockSubquery.totalStock}, 0)`,
         minStock: sql<number>`COALESCE(${stockSubquery.maxMinStock}, 0)`
@@ -181,6 +183,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       profitMargin,
       purchasePrice,
       sellingPrice,
+      customerPrice,
       stock,
       minStock
     } = body;
@@ -237,7 +240,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
     
     // Handle branch assignment for updates
-    const targetBranchId = body.branchId || null;
+    const branchId = body.branchId || null;
 
     // Validate category exists if categoryId is provided
     let validCategoryId = categoryId;
@@ -275,7 +278,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .where(eq(products.id, id));
       
       // Update or create product price if provided
-      if (purchasePrice !== undefined || sellingPrice !== undefined) {
+      if (purchasePrice !== undefined || sellingPrice !== undefined || customerPrice !== undefined) {
         const existingPrice = await tx
           .select()
           .from(productPrices)
@@ -289,7 +292,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             .set({
               purchasePrice: purchasePrice !== undefined ? purchasePrice.toString() : existingPrice[0].purchasePrice,
               sellingPrice: sellingPrice !== undefined ? sellingPrice.toString() : existingPrice[0].sellingPrice,
-              branchId: targetBranchId || existingPrice[0].branchId, 
+              customerPrice: customerPrice !== undefined ? customerPrice.toString() : existingPrice[0].customerPrice,
+              branchId: branchId || existingPrice[0].branchId, 
               effectiveDate: new Date()
             })
             .where(eq(productPrices.productId, id));
@@ -298,9 +302,10 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           await tx.insert(productPrices).values({
             id: `pp_${nanoid(10)}`,
             productId: id,
-            branchId: targetBranchId, 
+            branchId: branchId, 
             purchasePrice: (purchasePrice || '0').toString(),
             sellingPrice: (sellingPrice || '0').toString(),
+            customerPrice: (customerPrice || '0').toString(),
             effectiveDate: new Date(),
             createdAt: new Date()
           });
@@ -368,6 +373,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         categoryId: products.categoryId,
         categoryName: categories.name,
         sellingPrice: productPrices.sellingPrice,
+        customerPrice: productPrices.customerPrice,
         purchasePrice: productPrices.purchasePrice,
         stock: inventory.quantity,
         minStock: inventory.minStock

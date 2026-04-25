@@ -190,9 +190,12 @@ export async function POST(
       );
     }
     
+    const transactionNumber = `SPL-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}${String(new Date().getDate()).padStart(2, '0')}-${nanoid(4).toUpperCase()}`;
+
     // Create approval request instead of directly processing the split
     const [approvalRequest] = await db.insert(inventoryTransactions).values({
       id: `itx_${nanoid(10)}`,
+      transactionNumber,
       productId: inventoryItem.productId,
       branchId: sourceBranchId, // Source branch
       referenceId: targetBranchId, // Target branch (stored in referenceId)
@@ -565,18 +568,20 @@ export async function PUT(
         });
       }
       
-      // 3. Update the transaction record to approved
+      // 3. Update the transaction record to approved with stock levels
       const [updatedTransaction] = await db
         .update(inventoryTransactions)
         .set({
           status: 'approved',
           approvedBy,
+          stockBefore: sourceInventory.quantity,
+          stockAfter: sourceInventory.quantity - inventoryTransaction.quantity,
           notes: notes || `Approved by user ${approvedBy}: ${inventoryTransaction.notes}`,
           updatedAt: new Date()
         })
         .where(eq(inventoryTransactions.id, transactionId))
         .returning();
-      
+
       // 4. Get product information for notification
       const [product] = await db
         .select({ name: products.name })
@@ -593,6 +598,25 @@ export async function PUT(
         .select({ name: branches.name })
         .from(branches)
         .where(eq(branches.id, inventoryTransaction.referenceId!));
+
+      // 3b. Create a complementary 'receive' transaction for the target branch
+      await db.insert(inventoryTransactions).values({
+        id: `itx_recv_${nanoid(10)}`,
+        transactionNumber: `RECV-${updatedTransaction.transactionNumber || nanoid(6).toUpperCase()}`,
+        productId: inventoryTransaction.productId,
+        branchId: inventoryTransaction.referenceId!,
+        referenceId: inventoryTransaction.branchId, // Source is the reference
+        type: 'receive',
+        quantity: inventoryTransaction.quantity,
+        stockBefore: targetInventory ? targetInventory.quantity : 0,
+        stockAfter: (targetInventory ? targetInventory.quantity : 0) + inventoryTransaction.quantity,
+        notes: `Received from ${sourceBranch?.name || 'source branch'}. Ref split: ${updatedTransaction.transactionNumber}`,
+        status: 'completed',
+        createdBy: approvedBy,
+        approvedBy: approvedBy,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
       
       // 6. Send notification about approval
       try {

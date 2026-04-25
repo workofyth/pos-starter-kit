@@ -25,7 +25,8 @@ import {
   Building2,
   Clock,
   CheckCircle,
-  XCircle
+  XCircle,
+  Printer
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
 
@@ -303,6 +304,89 @@ export default function ApprovalsPage() {
   const openDetailView = (request: ApprovalRequest) => {
     setSelectedRequest(request);
     setIsDetailViewOpen(true);
+  };
+
+  const handlePrint = (request: ApprovalRequest) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const html = `
+      <html>
+        <head>
+          <title>Transfer Note - ${request.id}</title>
+          <style>
+            body { font-family: sans-serif; padding: 40px; color: #333; }
+            .header { border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; }
+            .title { font-size: 24px; font-bold: true; }
+            .content { line-height: 1.6; }
+            .grid { display: grid; grid-template-cols: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+            .label { font-weight: bold; font-size: 12px; color: #666; text-transform: uppercase; }
+            .value { font-size: 16px; margin-bottom: 10px; }
+            .footer { margin-top: 50px; border-top: 1px solid #ddd; padding-top: 20px; font-size: 12px; }
+            .sign-area { display: flex; justify-content: space-between; margin-top: 100px; }
+            .sign-box { border-top: 1px solid #333; width: 200px; text-align: center; padding-top: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div class="title">STOCK TRANSFER NOTE</div>
+            <div>Ref: ${request.id}</div>
+          </div>
+          <div class="content">
+            <div class="grid">
+              <div>
+                <div class="label">Product Name</div>
+                <div class="value">${request.productName}</div>
+                <div class="label">SKU</div>
+                <div class="value">${request.productSku}</div>
+              </div>
+              <div>
+                <div class="label">Quantity</div>
+                <div class="value" style="font-size: 24px; font-weight: bold;">${request.quantity} PCS</div>
+                <div class="label">Date</div>
+                <div class="value">${new Date(request.createdAt).toLocaleString()}</div>
+              </div>
+            </div>
+            
+            <div class="grid" style="background: #f9f9f9; padding: 15px; border-radius: 8px;">
+               <div>
+                  <div class="label">From (Source)</div>
+                  <div class="value">${request.sourceBranchName}</div>
+               </div>
+               <div>
+                  <div class="label">To (Destination)</div>
+                  <div class="value">${request.targetBranchName}</div>
+               </div>
+            </div>
+
+            <div style="margin-top: 20px;">
+              <div class="label">Notes</div>
+              <div class="value">${request.notes || '-'}</div>
+            </div>
+
+            <div style="margin-top: 20px;">
+              <div class="label">Status</div>
+              <div class="value" style="text-transform: uppercase; font-weight: bold;">${request.status}</div>
+            </div>
+
+            <div class="sign-area">
+              <div class="sign-box">Requested By<br/><br/><br/>(${request.createdBy})</div>
+              <div class="sign-box">Approved By<br/><br/><br/>(${request.approvedBy || '__________'})</div>
+              <div class="sign-box">Received By<br/><br/><br/>(__________)</div>
+            </div>
+          </div>
+          <div class="footer">
+            Printed on ${new Date().toLocaleString()} | POS Starter Kit - Stock Management System
+          </div>
+          <script>
+            window.onload = () => { window.print(); window.close(); };
+          </script>
+        </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
   };
 
   // Filter approvals based on search term
@@ -667,26 +751,34 @@ export default function ApprovalsPage() {
                 </div>
               </div>
               
-              {selectedRequest.status === 'pending' && (
-                <div className="flex gap-2 pt-4">
-                  <Button 
-                    variant="default" 
-                    onClick={() => handleApprovalAction(selectedRequest.id, 'approve')}
-                  >
-                    <CheckCircle className="h-4 w-4 mr-2" />
-                    Approve
-                  </Button>
-                  <Button 
-                    variant="destructive" 
-                    onClick={() => openRejectDialog(selectedRequest)}
-                  >
-                    <XCircle className="h-4 w-4 mr-2" />
-                    Reject
-                  </Button>
-                </div>
-              )}
-              {selectedRequest.status === 'rejected' && (
-                <div className="flex gap-2 pt-4">
+              <div className="flex flex-wrap gap-2 pt-4 border-t">
+                <Button 
+                  variant="outline" 
+                  onClick={() => handlePrint(selectedRequest)}
+                >
+                  <Printer className="h-4 w-4 mr-2" />
+                  Print Transfer Note
+                </Button>
+
+                {selectedRequest.status === 'pending' && (
+                  <>
+                    <Button 
+                      variant="default" 
+                      onClick={() => handleApprovalAction(selectedRequest.id, 'approve')}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      onClick={() => openRejectDialog(selectedRequest)}
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+                {selectedRequest.status === 'rejected' && (
                   <Button 
                     variant="outline" 
                     onClick={() => openResendDialog(selectedRequest)}
@@ -694,8 +786,8 @@ export default function ApprovalsPage() {
                     <Clock className="h-4 w-4 mr-2" />
                     Resend Request
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </DialogContent>
         </Dialog>

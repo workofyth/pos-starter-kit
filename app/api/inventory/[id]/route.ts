@@ -259,6 +259,8 @@ async function handleInventoryUpdate(id: string, body: {
       branchId: existingInventory[0].branchId,
       type: transactionType,
       quantity: Math.abs(quantityDifference),
+      stockBefore: existingInventory[0].quantity,
+      stockAfter: quantity,
       notes: notes || `Stock level adjusted from ${existingInventory[0].quantity} to ${quantity}`,
       createdAt: new Date(),
       createdBy: null // Would be set to actual user ID in production
@@ -497,19 +499,15 @@ async function handleSplitRequestApproval(id: string, body: {
       .set({
         status: 'approved',
         approvedBy,
+        stockBefore: sourceInventory[0]?.quantity || 0,
+        stockAfter: (sourceInventory[0]?.quantity || 0) - inventoryTransaction[0].quantity,
         notes: notes || `Approved by user ${approvedBy}: ${inventoryTransaction[0].notes}`,
         updatedAt: new Date()
       })
       .where(eq(inventoryTransactions.id, id))
       .returning();
-    
-    // 4. Get product information for notification
-    const [product] = await db
-      .select({ name: products.name })
-      .from(products)
-      .where(eq(products.id, inventoryTransaction[0].productId));
-    
-    // 5. Get branch information for notification
+
+    // 4. Get branch information for logging and notifications
     const [sourceBranch] = await db
       .select({ name: branches.name })
       .from(branches)
@@ -519,6 +517,30 @@ async function handleSplitRequestApproval(id: string, body: {
       .select({ name: branches.name })
       .from(branches)
       .where(eq(branches.id, inventoryTransaction[0].referenceId!));
+
+    // Create a complementary transaction for the TARGET branch
+    await db.insert(inventoryTransactions).values({
+      id: `itx_recv_${nanoid(10)}`,
+      productId: inventoryTransaction[0].productId,
+      branchId: inventoryTransaction[0].referenceId!,
+      referenceId: inventoryTransaction[0].branchId, // Original source is the reference
+      type: 'receive',
+      quantity: inventoryTransaction[0].quantity,
+      stockBefore: targetInventory ? targetInventory.quantity : 0,
+      stockAfter: (targetInventory ? targetInventory.quantity : 0) + inventoryTransaction[0].quantity,
+      notes: `Received from ${sourceBranch ? sourceBranch.name : 'Source'}. Ref split: ${inventoryTransaction[0].id}`,
+      status: 'completed',
+      createdBy: approvedBy,
+      approvedBy: approvedBy,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    });
+    
+    // 5. Get product information for notification
+    const [product] = await db
+      .select({ name: products.name })
+      .from(products)
+      .where(eq(products.id, inventoryTransaction[0].productId));
     
     // 6. Send notification about approval
     try {
