@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { 
+import {
   LayoutDashboard,
   ShoppingCart,
   Package,
@@ -13,7 +13,7 @@ import {
   CreditCard,
   Building,
   User,
-  Check, 
+  Check,
   Bell,
   Tag,
   Bot,
@@ -133,11 +133,37 @@ export const allSidebarItems: SidebarItem[] = [
 
 export function Sidebar() {
   const { pathname, filteredItems } = useNavigationItems();
+  const [logoUrl, setLogoUrl] = useState<string>("/assets/images/products/default_logo_png.png");
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings?key=logo_url');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data?.value) {
+            setLogoUrl(result.data.value);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching logo setting:', error);
+      }
+    };
+
+    fetchSettings();
+    const handleStorageChange = () => fetchSettings();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   return (
-    <aside className="hidden md:block w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 h-full">
-      <div className="p-4">
-        <h1 className="text-xl font-bold">POS System</h1>
+    <aside className="hidden md:block w-64 bg-slate-900 text-slate-50 border-r border-slate-800 h-full">
+      <div className="flex flex-col items-center justify-center border-b border-gray-100 dark:border-gray-700/50">
+        <img
+          src={logoUrl}
+          alt="Logo"
+          className="w-24 h-24 rounded-xl object-contain brightness-0 invert"
+        />
       </div>
       <nav className="mt-6">
         <ul className="space-y-1 px-2">
@@ -151,10 +177,10 @@ export function Sidebar() {
                   <Button
                     variant="ghost"
                     className={cn(
-                      "w-full justify-start space-x-2 px-4 py-3 rounded-lg",
-                      isActive 
-                        ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200" 
-                        : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                      "w-full justify-start space-x-2 px-4 py-3 rounded-lg transition-all",
+                      isActive
+                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-50"
                     )}
                   >
                     <Icon className="h-5 w-5" />
@@ -168,4 +194,4 @@ export function Sidebar() {
       </nav>
     </aside>
   );
-}
+}

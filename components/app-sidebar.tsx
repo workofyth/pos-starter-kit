@@ -169,6 +169,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { data: session } = useSession()
   const [userRole, setUserRole] = React.useState<UserRole>('guest');
   const [userBranchType, setUserBranchType] = React.useState<string>('sub');
+  const [logoUrl, setLogoUrl] = React.useState<string>("/codeguide-logo.png");
   
   const userData = session?.user ? {
     name: session.user.name || "User",
@@ -209,7 +210,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     };
     
+    
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings?key=logo_url');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data?.value) {
+            setLogoUrl(result.data.value);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching logo setting:', error);
+      }
+    };
+
     fetchUserRole();
+    fetchSettings();
+
+    // Listen for storage changes to update logo immediately if changed in settings
+    const handleStorageChange = () => fetchSettings();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [session]);
 
   // Filter navigation items based on user role according to menu_filter_by_userrole.md
@@ -259,7 +281,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="data-[slot=sidebar-menu-button]:!p-1.5"
             >
               <Link href="/">
-                <Image src="/codeguide-logo.png" alt="CodeGuide" width={32} height={32} className="rounded-lg" />
+                <Image src={logoUrl} alt="CodeGuide" width={32} height={32} className="rounded-lg object-contain" />
                 <span className="text-base font-semibold font-parkinsans">CodeGuide</span>
               </Link>
             </SidebarMenuButton>

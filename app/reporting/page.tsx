@@ -321,7 +321,7 @@ export default function ReportingPage() {
 
         <div className="flex gap-2 print:hidden">
           <select
-            className="border rounded-md px-3 py-2 bg-white"
+            className="border rounded-md px-3 py-2 bg-background text-foreground"
             value={dateRange}
             onChange={(e) => setDateRange(e.target.value)}
           >
