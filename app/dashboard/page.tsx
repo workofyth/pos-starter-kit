@@ -43,10 +43,15 @@ export default function DashboardPage() {
     inventoryValue: 0,
     customersCount: 0
   });
+  const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [topProducts, setTopProducts] = useState<any[]>([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
-      if (!session?.user) return;
+      if (!session?.user) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         // Resolve user branch context
@@ -73,6 +78,8 @@ export default function DashboardPage() {
             setStats(resJson.data.stats);
             setSalesData(resJson.data.salesData);
             setPieData(resJson.data.categoryData);
+            setRecentTransactions(resJson.data.recentTransactions || []);
+            setTopProducts(resJson.data.topProducts || []);
           }
         }
       } catch (err) {
@@ -109,49 +116,30 @@ export default function DashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <DollarSign className="h-5 w-5 text-green-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</div>
-            <p className="text-xs text-muted-foreground">Total earnings from sales</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Transactions</CardTitle>
-            <ShoppingCart className="h-5 w-5 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.transactionsCount.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Completed sales orders</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Customers</CardTitle>
-            <Users className="h-5 w-5 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.customersCount.toLocaleString()}</div>
-            <p className="text-xs text-muted-foreground">Total registered members</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inventory Val.</CardTitle>
-            <Package className="h-5 w-5 text-orange-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(stats.inventoryValue)}</div>
-            <p className="text-xs text-muted-foreground">Estimated stock value</p>
-          </CardContent>
-        </Card>
+        {[
+          { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), color: "blue", icon: DollarSign, desc: "Total earnings from sales" },
+          { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), color: "green", icon: TrendingUp, desc: "Estimated gross profit" },
+          { label: "Transactions", val: stats.transactionsCount.toLocaleString(), color: "purple", icon: ShoppingCart, desc: "Completed sales orders" },
+          { label: "Inventory Val.", val: formatCurrency(stats.inventoryValue), color: "orange", icon: Package, desc: "Estimated stock value" }
+        ].map((s, i) => (
+          <Card key={i} className="overflow-hidden border-none shadow-md bg-white dark:bg-gray-900 group hover:shadow-lg transition-all">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className={`p-3 rounded-2xl bg-${s.color}-100 dark:bg-${s.color}-900/30 text-${s.color}-600 dark:text-${s.color}-400 group-hover:scale-110 transition-transform`}>
+                  <s.icon className="h-6 w-6" />
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
+                  <p className="text-2xl font-bold">{s.val}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Activity className="h-3 w-3 opacity-50" />
+                <span>{s.desc}</span>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Charts */}
@@ -204,28 +192,80 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {stats.transactionsCount === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                <Activity className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                No recent activity found
-              </div>
-            ) : (
-              // This part would ideally fetch the last 5 transactions from an API
-              // For now we show a placeholder for consistency if count > 0
-              <p className="text-center text-sm text-muted-foreground py-4">
-                Latest transactions are available in the Transactions menu.
-              </p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+      {/* Bottom Grid: Recent Transactions & Top Products */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Recent Activity */}
+        <Card className="lg:col-span-2 border-none shadow-md bg-white dark:bg-gray-900">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle>Recent Transactions</CardTitle>
+            <Button variant="ghost" size="sm" className="text-blue-600">View All</Button>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {recentTransactions.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  <Activity className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                  No recent activity found
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-xs text-muted-foreground border-b uppercase tracking-wider">
+                        <th className="pb-3 font-semibold">Customer</th>
+                        <th className="pb-3 font-semibold">Date</th>
+                        <th className="pb-3 font-semibold text-right">Amount</th>
+                        <th className="pb-3 font-semibold text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {recentTransactions.map((t, i) => (
+                        <tr key={i} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                          <td className="py-4 font-medium">{t.customerName}</td>
+                          <td className="py-4 text-sm text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</td>
+                          <td className="py-4 text-right font-bold text-green-600">{formatCurrency(t.total)}</td>
+                          <td className="py-4 text-right">
+                             <span className="px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold">PAID</span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top Products */}
+        <Card className="border-none shadow-md bg-white dark:bg-gray-900">
+          <CardHeader>
+            <CardTitle>Top Selling Products</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-6">
+              {topProducts.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">No data available</div>
+              ) : (
+                topProducts.map((p, i) => (
+                  <div key={i} className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-blue-600">
+                      {i + 1}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.sold} units sold</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-sm">{formatCurrency(p.revenue)}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

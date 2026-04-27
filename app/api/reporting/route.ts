@@ -27,8 +27,14 @@ export async function GET(request: NextRequest) {
     }
     
     const completedTransactions = await db
-      .select()
+      .select({
+        id: transactions.id,
+        total: transactions.total,
+        createdAt: transactions.createdAt,
+        customerName: members.name
+      })
       .from(transactions)
+      .leftJoin(members, eq(transactions.memberId, members.id))
       .where(and(...transConditions));
 
     const totalRevenue = completedTransactions.reduce((acc, t) => acc + parseFloat(String(t.total) || '0'), 0);
@@ -161,7 +167,16 @@ export async function GET(request: NextRequest) {
             },
             salesData,
             categoryData,
-            topProducts
+            topProducts,
+            recentTransactions: completedTransactions
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 5)
+                .map(t => ({
+                    id: t.id,
+                    total: t.total,
+                    createdAt: t.createdAt,
+                    customerName: t.customerName || 'Walk-in Customer'
+                }))
         }
     }), { status: 200, headers: {'Content-Type': 'application/json'} });
 

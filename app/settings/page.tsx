@@ -51,6 +51,7 @@ export default function SettingsPage() {
   const [reportInterval, setReportInterval] = useState("daily");
   const [storeId, setStoreId] = useState("STORE-001");
   const [currency, setCurrency] = useState("IDR");
+  const [ownerEmail, setOwnerEmail] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   
   const [isSaving, setIsSaving] = useState(false);
@@ -150,6 +151,9 @@ export default function SettingsPage() {
 
           const curr = result.data.find((s: any) => s.key === 'default_currency');
           if (curr) setCurrency(curr.value);
+
+          const owner = result.data.find((s: any) => s.key === 'owner_email');
+          if (owner) setOwnerEmail(owner.value);
         }
       }
     } catch (error) {
@@ -301,7 +305,8 @@ export default function SettingsPage() {
     try {
       const settingsToSave = [
         { key: 'low_stock_threshold', value: lowStockThreshold, description: 'Threshold for low stock alerts' },
-        { key: 'enable_email_reports', value: enableEmailReports.toString(), description: 'Enable daily email reports' }
+        { key: 'enable_email_reports', value: enableEmailReports.toString(), description: 'Enable daily email reports' },
+        { key: 'owner_email', value: ownerEmail, description: 'Email address of the business owner for reports' }
       ];
 
       for (const setting of settingsToSave) {
@@ -822,6 +827,20 @@ export default function SettingsPage() {
                           onChange={(e) => setEnableEmailReports(e.target.checked)}
                         />
                       </div>
+
+                      {enableEmailReports && (
+                        <div className="pt-2 animate-in fade-in slide-in-from-top-1">
+                          <label className="block text-xs font-medium mb-1">Owner Email Recipient</label>
+                          <input 
+                            type="email" 
+                            className="w-full max-w-md p-2 text-sm border rounded-md bg-background" 
+                            value={ownerEmail}
+                            onChange={(e) => setOwnerEmail(e.target.value)}
+                            placeholder="owner@example.com"
+                          />
+                          <p className="text-[10px] text-muted-foreground mt-1">Laporan harian akan dikirimkan ke alamat email ini.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   

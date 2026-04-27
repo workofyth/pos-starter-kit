@@ -77,7 +77,10 @@ export default function ReportingPage() {
 
   useEffect(() => {
     const fetchReportData = async () => {
-      if (!session?.user) return;
+      if (!session?.user) {
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       try {
         // Resolve user branch context
@@ -395,61 +398,26 @@ export default function ReportingPage() {
 
       {reportType === "overview" && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <div className="bg-blue-100 p-3 rounded-full">
-                  <DollarSign className="h-6 w-6 text-blue-600" />
+          {[
+            { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), color: "blue", icon: DollarSign },
+            { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), color: "green", icon: TrendingUp },
+            { label: "Transactions", val: stats.transactionsCount.toLocaleString(), color: "purple", icon: ShoppingCart },
+            { label: "Inventory Value (Est.)", val: formatCurrency(stats.inventoryValue), color: "yellow", icon: Package }
+          ].map((s, i) => (
+            <Card key={i} className="border-none shadow-md bg-white dark:bg-gray-900 group transition-all">
+              <CardContent className="p-4">
+                <div className="flex items-center">
+                  <div className={`bg-${s.color}-100 dark:bg-${s.color}-900/30 p-3 rounded-2xl text-${s.color}-600 dark:text-${s.color}-400 group-hover:scale-110 transition-transform`}>
+                    <s.icon className="h-6 w-6" />
+                  </div>
+                  <div className="ml-4">
+                    <p className="text-sm font-medium text-muted-foreground">{s.label}</p>
+                    <p className="text-2xl font-bold">{s.val}</p>
+                  </div>
                 </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Total Revenue</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.totalRevenue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <div className="bg-green-100 p-3 rounded-full">
-                  <TrendingUp className="h-6 w-6 text-green-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Net Profit (Est.)</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.netProfit)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <div className="bg-purple-100 p-3 rounded-full">
-                  <ShoppingCart className="h-6 w-6 text-purple-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Transactions</p>
-                  <p className="text-2xl font-bold">{stats.transactionsCount.toLocaleString()}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center">
-                <div className="bg-yellow-100 p-3 rounded-full">
-                  <Package className="h-6 w-6 text-yellow-600" />
-                </div>
-                <div className="ml-4">
-                  <p className="text-sm font-medium text-gray-600">Inventory Value (Est.)</p>
-                  <p className="text-2xl font-bold">{formatCurrency(stats.inventoryValue)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 
