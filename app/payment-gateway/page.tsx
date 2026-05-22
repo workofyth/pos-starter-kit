@@ -4,10 +4,10 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { CreditCard, CheckCircle2, ShieldCheck, ArrowLeft, Loader2, QrCode, Wallet, Building2 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
 
-export default function PaymentGatewayPage() {
+function PaymentGatewayContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const plan = searchParams.get("plan") || "monthly";
@@ -262,5 +262,17 @@ export default function PaymentGatewayPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function PaymentGatewayPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <PaymentGatewayContent />
+    </Suspense>
   );
 }
