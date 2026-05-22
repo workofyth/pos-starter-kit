@@ -33,6 +33,7 @@ export function Header() {
   const [userRole, setUserRole] = useState<UserRole | null>(null);
   const [branchType, setBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [logoUrl, setLogoUrl] = useState<string>("/assets/images/products/default_logo_png.png");
   const { pathname, filteredItems } = useNavigationItems();
 
   // Fetch user role and branch information
@@ -70,7 +71,25 @@ export function Header() {
       }
     };
 
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings?key=logo_url');
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.data?.value) {
+            setLogoUrl(result.data.value);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching logo setting:', error);
+      }
+    };
+
     fetchUserBranchInfo();
+    fetchSettings();
+    const handleStorageChange = () => fetchSettings();
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [session]);
 
   const MobileNav = () => (
@@ -93,9 +112,14 @@ export function Header() {
           </svg>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-64 p-0">
-        <SheetHeader className="p-4 border-b">
-          <SheetTitle className="text-xl font-bold">POS System</SheetTitle>
+      <SheetContent side="left" className="w-64 p-0 bg-slate-900 border-slate-800 text-slate-50">
+        <SheetHeader className="p-8 border-b border-slate-800 flex flex-col items-center justify-center">
+          <img 
+            src={logoUrl} 
+            alt="Logo" 
+            className="w-20 h-20 rounded-xl object-contain brightness-0 invert mb-2" 
+          />
+          <SheetTitle className="text-xl font-bold tracking-tight text-slate-50">POS System</SheetTitle>
         </SheetHeader>
         <nav className="mt-4">
           <ul className="space-y-1 px-2">
@@ -112,8 +136,8 @@ export function Header() {
                         className={cn(
                           "w-full justify-start space-x-2 px-4 py-3 rounded-lg",
                           isActive 
-                            ? "bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200" 
-                            : "hover:bg-gray-100 dark:hover:bg-gray-700"
+                            ? "bg-primary text-primary-foreground" 
+                            : "text-slate-400 hover:bg-slate-800 hover:text-slate-50"
                         )}
                       >
                         <Icon className="h-5 w-5" />

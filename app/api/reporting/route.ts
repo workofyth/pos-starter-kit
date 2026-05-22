@@ -7,12 +7,23 @@ import {
   categories,
   inventory,
   productPrices,
-  members
+  members,
+  branches
 } from '@/db/schema/pos';
 import { eq, desc, and, inArray, sql } from 'drizzle-orm';
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+       return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId') || null;
 
@@ -20,15 +31,28 @@ export async function GET(request: NextRequest) {
     const transBranchCond = branchId ? eq(transactions.branchId, branchId) : undefined;
     const invBranchCond = branchId ? eq(inventory.branchId, branchId) : undefined;
 
+    // Define store filter: ensure data belongs to branches owned by this store
+    const storeBranchesQuery = db.select({ id: branches.id }).from(branches).where(eq(branches.storeId, session.user.storeId));
+
     // 1. Fetch completed transactions for revenue & sales chart
-    const transConditions = [eq(transactions.status, 'completed')];
+    const transConditions = [
+       eq(transactions.status, 'completed'),
+       inArray(transactions.branchId, storeBranchesQuery)
+    ];
+
     if (transBranchCond) {
       transConditions.push(transBranchCond);
     }
     
     const completedTransactions = await db
-      .select()
+      .select({
+        id: transactions.id,
+        total: transactions.total,
+        createdAt: transactions.createdAt,
+        customerName: members.name
+      })
       .from(transactions)
+      .leftJoin(members, eq(transactions.memberId, members.id))
       .where(and(...transConditions));
 
     const totalRevenue = completedTransactions.reduce((acc, t) => acc + parseFloat(String(t.total) || '0'), 0);
@@ -46,7 +70,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Fetch full detail traces to compute Category Revenue & Top Products
-    const detailConditions = [eq(transactions.status, 'completed')];
+    const detailConditions = [
+      eq(transactions.status, 'completed'),
+      inArray(transactions.branchId, storeBranchesQuery)
+    ];
     if (transBranchCond) {
       detailConditions.push(transBranchCond);
     }
@@ -123,19 +150,18 @@ export async function GET(request: NextRequest) {
         revenue: productSalesMap[k].revenue
     })).sort((a,b) => b.revenue - a.revenue).slice(0, 5); // top 5
 
-    // 3. Inventory Value Estimation
-    let invQuery = db.select({
+    const invConditions = [inArray(inventory.branchId, storeBranchesQuery)];
+    if (invBranchCond) {
+        invConditions.push(invBranchCond);
+    }
+
+    const inventoryData = await db.select({
       qty: inventory.quantity,
       price: productPrices.purchasePrice
     })
     .from(inventory)
-    .leftJoin(productPrices, eq(inventory.productId, productPrices.productId));
-
-    if (invBranchCond) {
-        invQuery = invQuery.where(invBranchCond) as any;
-    }
-
-    const inventoryData = await invQuery;
+    .leftJoin(productPrices, eq(inventory.productId, productPrices.productId))
+    .where(and(...invConditions));
     
     // We distinct products prices, but if a product has no tracked price we guess its value.
     let inventoryValue = 0;
@@ -146,7 +172,9 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Customers Count (Members)
-    const membersCountResult = await db.select({ count: sql<number>`count(*)` }).from(members);
+    const membersCountResult = await db.select({ count: sql<number>`count(*)` })
+      .from(members)
+      .where(eq(members.storeId, session.user.storeId));
     const customersCount = Number(membersCountResult[0].count);
 
     return new Response(JSON.stringify({
@@ -161,7 +189,16 @@ export async function GET(request: NextRequest) {
             },
             salesData,
             categoryData,
-            topProducts
+            topProducts,
+            recentTransactions: completedTransactions
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 5)
+                .map(t => ({
+                    id: t.id,
+                    total: t.total,
+                    createdAt: t.createdAt,
+                    customerName: t.customerName || 'Walk-in Customer'
+                }))
         }
     }), { status: 200, headers: {'Content-Type': 'application/json'} });
 

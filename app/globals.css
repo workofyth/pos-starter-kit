@@ -79,6 +79,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
   --card: oklch(0.208 0.042 265.755);
@@ -118,5 +119,23 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* Fix native select options in dark mode */
+  .dark select {
+    @apply bg-background text-foreground;
+  }
+  
+  .dark option {
+    @apply bg-background text-foreground;
+  }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .animate-spin-slow {
+    animation: spin-slow 8s linear infinite;
   }
 }

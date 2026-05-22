@@ -16,7 +16,8 @@ import {
   transactions, 
   transactionDetails, 
   purchaseOrders, 
-  purchaseOrderDetails 
+  purchaseOrderDetails,
+  storeSettings
 } from './schema/pos';
 
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -57,6 +58,7 @@ export const db = drizzle(pool, {
     transactionDetails,
     purchaseOrders,
     purchaseOrderDetails,
+    storeSettings,
   },
   logger: process.env.NODE_ENV !== "production",
 });

@@ -9,15 +9,29 @@ import {
 } from '@/db/schema/pos';
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 // GET - Fetch all purchase orders
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
     const status = searchParams.get('status');
 
-    let query = db
+    const conditions = [eq(purchaseOrders.storeId, session.user.storeId)];
+    if (branchId) conditions.push(eq(purchaseOrders.branchId, branchId));
+    if (status) conditions.push(eq(purchaseOrders.status, status));
+
+    const results = await db
       .select({
         id: purchaseOrders.id,
         orderNumber: purchaseOrders.orderNumber,
@@ -34,18 +48,8 @@ export async function GET(request: NextRequest) {
       .from(purchaseOrders)
       .leftJoin(suppliers, eq(purchaseOrders.supplierId, suppliers.id))
       .leftJoin(branches, eq(purchaseOrders.branchId, branches.id))
+      .where(and(...conditions))
       .orderBy(desc(purchaseOrders.createdAt));
-
-    const conditions = [];
-    if (branchId) conditions.push(eq(purchaseOrders.branchId, branchId));
-    if (status) conditions.push(eq(purchaseOrders.status, status));
-
-    if (conditions.length > 0) {
-      // @ts-ignore
-      query = query.where(and(...conditions));
-    }
-
-    const results = await query;
 
     return new Response(
       JSON.stringify({ success: true, data: results }),
@@ -63,6 +67,14 @@ export async function GET(request: NextRequest) {
 // POST - Create a new purchase order
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
+    }
+
     const data = await request.json();
     const { 
       supplierId, 
@@ -83,15 +95,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate supplier and branch belong to store
+    const supplierExists = await db.select().from(suppliers).where(and(eq(suppliers.id, supplierId), eq(suppliers.storeId, session.user.storeId))).limit(1);
+    const branchExists = await db.select().from(branches).where(and(eq(branches.id, branchId), eq(branches.storeId, session.user.storeId))).limit(1);
+    
+    if (supplierExists.length === 0 || branchExists.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: 'Invalid supplier or branch' }), { status: 403 });
+    }
+
     const poId = `po_${nanoid(10)}`;
     const orderNumber = `PO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, '0')}-${nanoid(5).toUpperCase()}`;
 
-    // Use a transaction to ensure both PO and details are created
     const result = await db.transaction(async (tx) => {
       const [newPO] = await tx
         .insert(purchaseOrders)
         .values({
           id: poId,
+          storeId: session.user.storeId,
           orderNumber,
           supplierId,
           branchId,
@@ -109,6 +129,7 @@ export async function POST(request: NextRequest) {
 
       const detailValues = items.map((item: any) => ({
         id: `pod_${nanoid(10)}`,
+        storeId: session.user.storeId,
         purchaseOrderId: poId,
         productId: item.productId,
         quantity: item.quantity,

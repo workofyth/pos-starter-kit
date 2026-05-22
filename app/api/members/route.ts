@@ -3,9 +3,19 @@ import { db } from '@/db';
 import { members } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
     
     // Pagination parameters
@@ -19,18 +29,17 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
     // Build query
+    const whereConditions = [eq(members.storeId, session.user.storeId)];
+    if (search) {
+      whereConditions.push(ilike(members.name, `%${search}%`));
+    }
+
     let query = db
       .select()
       .from(members)
+      .where(and(...whereConditions))
       .limit(limit)
       .offset(offset);
-    
-    // Apply search filter
-    if (search) {
-      query = query.where(
-        ilike(members.name, `%${search}%`) 
-      ) as typeof query;
-    }
     
     // Apply sorting
     if (sortBy === 'name') {
@@ -51,19 +60,13 @@ export async function GET(request: NextRequest) {
     
     const membersList = await query;
     
-    // Get total count for pagination
-    let countQuery = db
+    // Get total count
+    const totalCountResult = await db
       .select({ count: count() })
-      .from(members);
+      .from(members)
+      .where(and(...whereConditions));
     
-    if (search) {
-      countQuery = countQuery.where(ilike(members.name, `%${search}%`)) as typeof countQuery;
-    }
-    
-    const totalCountResult = await countQuery;
-    const totalCount = typeof totalCountResult[0].count === 'number' 
-      ? totalCountResult[0].count 
-      : parseInt(totalCountResult[0].count as string);
+    const totalCount = Number(totalCountResult[0].count);
     const totalPages = Math.ceil(totalCount / limit);
     
     return new Response(
@@ -71,140 +74,73 @@ export async function GET(request: NextRequest) {
         success: true,
         data: membersList,
         pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages,
+          page, limit, totalCount, totalPages,
           hasNext: page < totalPages,
           hasPrev: page > 1
         }
       }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error fetching members:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
+    }
+
     const body = await request.json();
+    const { name, phone, email, address, points = 0 } = body;
     
-    const {
-      name,
-      phone,
-      email,
-      address,
-      points = 0
-    } = body;
-    
-    // Validate required fields
     if (!name || !phone) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Name and phone are required' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+      return new Response(JSON.stringify({ success: false, message: 'Name and phone are required' }), { status: 400 });
     }
     
-    // Check for duplicate email if provided
+    // Check for duplicate email within the same store
     if (email) {
-      const existingMember = await db
-        .select()
-        .from(members)
-        .where(eq(members.email, email));
+      const existingMember = await db.select().from(members)
+        .where(and(eq(members.email, email), eq(members.storeId, session.user.storeId)));
       
       if (existingMember.length > 0) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            message: 'Member with this email already exists' 
-          }),
-          { 
-            status: 409, 
-            headers: { 'Content-Type': 'application/json' } 
-          }
-        );
+        return new Response(JSON.stringify({ success: false, message: 'Member with this email already exists in your store' }), { status: 409 });
       }
     }
     
-    // Check for duplicate phone
-    const existingMemberByPhone = await db
-      .select()
-      .from(members)
-      .where(eq(members.phone, phone));
+    // Check for duplicate phone within the same store
+    const existingMemberByPhone = await db.select().from(members)
+      .where(and(eq(members.phone, phone), eq(members.storeId, session.user.storeId)));
     
     if (existingMemberByPhone.length > 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Member with this phone number already exists' 
-        }),
-        { 
-          status: 409, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+      return new Response(JSON.stringify({ success: false, message: 'Member with this phone number already exists in your store' }), { status: 409 });
     }
     
-    // Generate unique ID
     const memberId = `mem_${nanoid(10)}`;
-    
-    // Insert the member
-    const [newMember] = await db
-      .insert(members)
-      .values({
+    const [newMember] = await db.insert(members).values({
         id: memberId,
-        name,
-        phone,
-        email: email || null,
-        address: address || null,
-        points
-      })
-      .returning();
+        storeId: session.user.storeId,
+        name, phone, email: email || null, address: address || null, points
+      }).returning();
     
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Member created successfully',
-        data: newMember
-      }),
-      { 
-        status: 201, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: true, message: 'Member created successfully', data: newMember }),
+      { status: 201, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error creating member:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

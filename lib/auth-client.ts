@@ -1,4 +1,6 @@
 import { createAuthClient } from "better-auth/react";
+import { inferAdditionalFields } from "better-auth/client/plugins";
+import type { auth } from "./auth";
 import { useMemo } from "react";
 
 const getBaseURL = () => {
@@ -15,6 +17,9 @@ const getBaseURL = () => {
 
 export const authClient = createAuthClient({
     baseURL: getBaseURL(),
+    plugins: [
+        inferAdditionalFields<typeof auth>()
+    ]
 });
 
 export const {

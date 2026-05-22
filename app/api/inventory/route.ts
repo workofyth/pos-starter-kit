@@ -1,20 +1,22 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { inventory, products, branches, inventoryTransactions, categories, userBranches } from '@/db/schema/pos';
-import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, ilike, desc, asc, count, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
+    }
+
     const { searchParams } = new URL(request.url);
-    
-    // Get user ID from authorization
-    // For this implementation, we'll need to extract the userId from the session
-    // Since the actual authentication method isn't shown in this file, I'll implement
-    // the logic assuming we can get the userId from a header or session
-    
-    // For now, extract the user data from the session or auth token
-    // This would typically be done using the session middleware
     
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1');
@@ -31,39 +33,46 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'productName';
     const sortOrder = searchParams.get('sortOrder') || 'asc';
     
-    // Extract user ID from session (this is a simplified example)
-    // In a real implementation, this would be properly handled by auth middleware
-    // For now, let's assume we get the userId from an authorization header or similar mechanism
-    const authHeader = request.headers.get('authorization');
-    const userId = null;
-    console.log(authHeader); // Use authHeader to satisfy unused var warning if desired, or just keep it
+    // Build filter conditions
+    const whereConditions = [eq(inventory.storeId, session.user.storeId)];
     
-    // This is a placeholder - in a real implementation, you'd decode the JWT or use session data
-    // For demonstration purposes, we'll skip the authentication check in this example
-    // and instead implement it as a parameter that could be passed from middleware
+    if (search) {
+      whereConditions.push(ilike(products.name, `%${search}%`));
+    }
     
-    // For now, we'll implement the validation logic conceptually
-    // In practice, you'd validate that the requesting user can access the specified branch
-    // If the user is not a main admin, they can only access their assigned branch
-    // If requestedBranchId is specified and it's not the user's assigned branch and they're not main admin,
-    // we should reject the request
+    if (sku) {
+      whereConditions.push(ilike(products.sku, `%${sku}%`));
+    }
     
-    // Validate and sanitize query parameters
-    const sanitizedParams = {
-      page: Math.max(1, page),
-      limit: Math.min(100, Math.max(1, limit)), // Cap limit at 100 for performance
-      search: search ? search.trim() : '',
-      sku: sku ? sku.trim() : '',
-      category: category ? category.trim() : '',
-      requestedBranchId: requestedBranchId ? requestedBranchId.trim() : '',
-      lowStock: lowStock === 'true',
-      outOfStock: outOfStock === 'true',
-      sortBy: ['productName', 'quantity', 'lastUpdated'].includes(sortBy) ? sortBy : 'productName',
-      sortOrder: ['asc', 'desc'].includes(sortOrder) ? sortOrder : 'asc'
-    };
+    if (category) {
+      whereConditions.push(ilike(categories.name, `%${category}%`));
+    }
     
-    // Simplified query structure for better performance and clarity
-    let baseQuery = db
+    if (requestedBranchId) {
+      whereConditions.push(eq(inventory.branchId, requestedBranchId));
+    }
+    
+    if (lowStock === 'true') {
+      whereConditions.push(sql`${inventory.quantity} <= ${inventory.minStock} AND ${inventory.quantity} > 0`);
+    }
+    
+    if (outOfStock === 'true') {
+      whereConditions.push(eq(inventory.quantity, 0));
+    }
+    
+    // Determine sorting
+    let orderByColumn;
+    if (sortBy === 'productName') {
+      orderByColumn = sortOrder === 'asc' ? asc(products.name) : desc(products.name);
+    } else if (sortBy === 'quantity') {
+      orderByColumn = sortOrder === 'asc' ? asc(inventory.quantity) : desc(inventory.quantity);
+    } else if (sortBy === 'lastUpdated') {
+      orderByColumn = sortOrder === 'asc' ? asc(inventory.lastUpdated) : desc(inventory.lastUpdated);
+    } else {
+      orderByColumn = desc(inventory.lastUpdated);
+    }
+    
+    const inventoryList = await db
       .select({
         id: inventory.id,
         productId: inventory.productId,
@@ -93,326 +102,133 @@ export async function GET(request: NextRequest) {
       .leftJoin(products, eq(inventory.productId, products.id))
       .leftJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .limit(sanitizedParams.limit)
-      .offset((sanitizedParams.page - 1) * sanitizedParams.limit)
-      .$dynamic();
+      .where(and(...whereConditions))
+      .orderBy(orderByColumn)
+      .limit(limit)
+      .offset(offset);
     
-    // Apply filters with proper validation using sanitized parameters
-    const whereConditions = [];
-    
-    if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
-      whereConditions.push(
-        ilike(products.name, `%${sanitizedParams.search.trim()}%`)
-      );
-    }
-    
-    if (sanitizedParams.sku && sanitizedParams.sku.trim() !== '') {
-      whereConditions.push(
-        ilike(products.sku, `%${sanitizedParams.sku.trim()}%`)
-      );
-    }
-    
-    if (sanitizedParams.category && sanitizedParams.category.trim() !== '') {
-      whereConditions.push(
-        ilike(categories.name, `%${sanitizedParams.category.trim()}%`)
-      );
-    }
-    
-    // Branch filtering - apply only when requestedBranchId is provided and not empty
-    if (sanitizedParams.requestedBranchId && sanitizedParams.requestedBranchId.trim() !== '') {
-      whereConditions.push(eq(inventory.branchId, sanitizedParams.requestedBranchId.trim()));
-    }
-    
-    if (sanitizedParams.lowStock === true) {
-      whereConditions.push(
-        sql`${inventory.quantity} <= ${inventory.minStock} AND ${inventory.quantity} > 0`
-      );
-    }
-    
-    if (sanitizedParams.outOfStock === true) {
-      whereConditions.push(eq(inventory.quantity, 0));
-    }
-    
-    // Apply where conditions if any exist and are not empty
-    if (whereConditions.length > 0) {
-      // Filter out any empty conditions
-      const filteredConditions = whereConditions.filter(condition => condition !== undefined);
-      if (filteredConditions.length > 0) {
-        baseQuery = baseQuery.where(and(...filteredConditions));
-      }
-    }
-    
-    // Apply sorting with proper validation using sanitized parameters
-    if (sanitizedParams.sortBy === 'productName') {
-      baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(products.name))
-        : baseQuery.orderBy(desc(products.name));
-    } else if (sanitizedParams.sortBy === 'quantity') {
-      baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(inventory.quantity))
-        : baseQuery.orderBy(desc(inventory.quantity));
-    } else if (sanitizedParams.sortBy === 'lastUpdated') {
-      baseQuery = sanitizedParams.sortOrder === 'asc' 
-        ? baseQuery.orderBy(asc(inventory.lastUpdated))
-        : baseQuery.orderBy(desc(inventory.lastUpdated));
-    } else {
-      // Default sorting by last updated descending
-      baseQuery = baseQuery.orderBy(desc(inventory.lastUpdated));
-    }
-    
-    const inventoryList = await baseQuery;
-    
-    // Get total count for pagination with proper filtering using sanitized parameters
-    let countQuery = db
+    // Get total count
+    const totalCountResult = await db
       .select({ count: count() })
       .from(inventory)
       .leftJoin(products, eq(inventory.productId, products.id))
-      .leftJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(categories, eq(products.categoryId, categories.id))
-      .$dynamic();
+      .where(and(...whereConditions));
     
-    // Apply the same filtering conditions to the count query using sanitized parameters
-    const countWhereConditions = [];
-    
-    if (sanitizedParams.search && sanitizedParams.search.trim() !== '') {
-      countWhereConditions.push(
-        ilike(products.name, `%${sanitizedParams.search.trim()}%`)
-      );
-    }
-    
-    if (sanitizedParams.sku && sanitizedParams.sku.trim() !== '') {
-      countWhereConditions.push(
-        ilike(products.sku, `%${sanitizedParams.sku.trim()}%`)
-      );
-    }
-    
-    if (sanitizedParams.category && sanitizedParams.category.trim() !== '') {
-      countWhereConditions.push(
-        ilike(categories.name, `%${sanitizedParams.category.trim()}%`)
-      );
-    }
-    
-    // Apply branch filter to count query using sanitized parameters
-    if (sanitizedParams.requestedBranchId && sanitizedParams.requestedBranchId.trim() !== '') {
-      countWhereConditions.push(eq(inventory.branchId, sanitizedParams.requestedBranchId.trim()));
-    }
-    
-    if (sanitizedParams.lowStock === true) {
-      countWhereConditions.push(
-        sql`${inventory.quantity} <= ${inventory.minStock} AND ${inventory.quantity} > 0`
-      );
-    }
-    
-    if (sanitizedParams.outOfStock === true) {
-      countWhereConditions.push(eq(inventory.quantity, 0));
-    }
-    
-    // Apply where conditions to count query if any exist and are not empty
-    if (countWhereConditions.length > 0) {
-      // Filter out any empty conditions
-      const filteredConditions = countWhereConditions.filter(condition => condition !== undefined);
-      if (filteredConditions.length > 0) {
-        countQuery = countQuery.where(and(...filteredConditions)) as typeof countQuery;
-      }
-    }
-    
-    const totalCountResult = await countQuery;
-    const totalCount = typeof totalCountResult[0].count === 'number' 
-      ? totalCountResult[0].count 
-      : parseInt(totalCountResult[0].count as string);
-    const totalPages = Math.ceil(totalCount / sanitizedParams.limit);
+    const totalCount = Number(totalCountResult[0].count);
+    const totalPages = Math.ceil(totalCount / limit);
     
     return new Response(
       JSON.stringify({
         success: true,
         data: inventoryList,
         pagination: {
-          page: sanitizedParams.page,
-          limit: sanitizedParams.limit,
-          totalCount,
-          totalPages,
-          hasNext: sanitizedParams.page < totalPages,
-          hasPrev: sanitizedParams.page > 1
+          page, limit, totalCount, totalPages,
+          hasNext: page < totalPages,
+          hasPrev: page > 1
         }
       }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error fetching inventory:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }
 
-// POST - Update stock quantity
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
+    }
+
     const body = await request.json();
+    const { productId, branchId, quantity, notes = '', type = 'adjustment' } = body;
     
-    const {
-      productId,
-      branchId,
-      quantity,
-      notes = '',
-      type = 'adjustment' // in, out, adjustment, receive, delivery
-    } = body;
-    
-    // Validate required fields
     if (!productId || !branchId || quantity === undefined) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Product ID, Branch ID, and Quantity are required' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+      return new Response(JSON.stringify({ success: false, message: 'Product ID, Branch ID, and Quantity are required' }), { status: 400 });
     }
     
-    // Validate type is one of the allowed values
-    const validTypes = ['in', 'out', 'adjustment', 'receive', 'delivery'];
-    if (type && !validTypes.includes(type)) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Invalid type. Must be one of: in, out, adjustment, receive, delivery' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
-    }
+    // Ensure the branch belongs to the store
+    const branchExists = await db.select({ id: branches.id }).from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, session.user.storeId)))
+      .limit(1);
     
-    // Validate branchId is not empty
-    if (!branchId || branchId.trim() === '') {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID is required and cannot be empty' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+    if (branchExists.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: 'Branch does not exist in your store' }), { status: 403 });
+    }
+
+    // Ensure product belongs to the store
+    const productExists = await db.select({ id: products.id }).from(products)
+      .where(and(eq(products.id, productId), eq(products.storeId, session.user.storeId)))
+      .limit(1);
+
+    if (productExists.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: 'Product does not exist in your store' }), { status: 403 });
     }
     
     // Check if inventory record exists
-    const existingInventory = await db
-      .select()
-      .from(inventory)
-      .where(
-        and(
-          eq(inventory.productId, productId),
-          eq(inventory.branchId, branchId)
-        )
-      )
+    const existingInventory = await db.select().from(inventory)
+      .where(and(eq(inventory.productId, productId), eq(inventory.branchId, branchId), eq(inventory.storeId, session.user.storeId)))
       .limit(1);
     
     let inventoryRecord;
     
     if (existingInventory.length > 0) {
-      // Update existing inventory
-      const newQuantity = type === 'out' 
-        ? existingInventory[0].quantity - quantity 
-        : type === 'in' 
-          ? existingInventory[0].quantity + quantity 
-          : quantity; // adjustment sets quantity directly
+      const newQuantity = type === 'out' ? existingInventory[0].quantity - quantity : type === 'in' ? existingInventory[0].quantity + quantity : quantity;
       
-      const [updatedInventory] = await db
-        .update(inventory)
-        .set({
-          quantity: newQuantity,
-          lastUpdated: new Date(),
-          updatedAt: new Date()
-        })
-        .where(
-          and(
-            eq(inventory.productId, productId),
-            eq(inventory.branchId, branchId)
-          )
-        )
+      const [updatedInventory] = await db.update(inventory)
+        .set({ quantity: newQuantity, lastUpdated: new Date(), updatedAt: new Date() })
+        .where(and(eq(inventory.productId, productId), eq(inventory.branchId, branchId), eq(inventory.storeId, session.user.storeId)))
         .returning();
       
       inventoryRecord = updatedInventory;
     } else {
-      // Create new inventory record
       const initialQuantity = type === 'out' ? -quantity : type === 'in' ? quantity : quantity;
       
-      const [newInventory] = await db
-        .insert(inventory)
-        .values({
+      const [newInventory] = await db.insert(inventory).values({
           id: `inv_${nanoid(10)}`,
+          storeId: session.user.storeId,
           productId,
           branchId,
           quantity: initialQuantity,
-          minStock: 5, // Default minimum stock
-          lastUpdated: new Date(),
-          createdAt: new Date(),
-          updatedAt: new Date()
-        })
-        .returning();
+          minStock: 5,
+          lastUpdated: new Date()
+        }).returning();
       
       inventoryRecord = newInventory;
     }
     
-    // Create inventory transaction record
     await db.insert(inventoryTransactions).values({
       id: `itx_${nanoid(10)}`,
+      storeId: session.user.storeId,
       productId,
       branchId,
-      type: type === 'in' ? 'in' : 
-            type === 'out' ? 'out' : 
-            type === 'adjustment' ? 'adjustment' :
-            type === 'receive' ? 'receive' :
-            type === 'delivery' ? 'delivery' : 'adjustment',
+      type: type as any,
       quantity,
       stockBefore: existingInventory.length > 0 ? existingInventory[0].quantity : 0,
       stockAfter: inventoryRecord.quantity,
       notes: notes || '',
-      referenceId: null, // No reference ID for manual adjustments
       createdAt: new Date(),
-      createdBy: null // Would be set to actual user ID in production
+      createdBy: session.user.id
     });
     
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Inventory updated successfully',
-        data: inventoryRecord
-      }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: true, message: 'Inventory updated successfully', data: inventoryRecord }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error updating inventory:', error);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: false, message: 'Internal server error' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
 }

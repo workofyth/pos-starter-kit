@@ -18,6 +18,46 @@ export const auth = betterAuth({
             verification: verification,
         }
     }),
+    user: {
+        additionalFields: {
+            plan: {
+                type: "string",
+                required: true,
+                defaultValue: "free",
+            },
+            subscriptionStatus: {
+                type: "string",
+                required: true,
+                defaultValue: "none",
+            },
+            trialStartDate: {
+                type: "date",
+                required: false,
+            },
+            subscriptionEndDate: {
+                type: "date",
+                required: false,
+            },
+            paymentDeadline: {
+                type: "date",
+                required: false,
+            },
+            hasUsedTrial: {
+                type: "boolean",
+                required: true,
+                defaultValue: false,
+            },
+            isOnboarded: {
+                type: "boolean",
+                required: true,
+                defaultValue: false,
+            },
+            storeId: {
+                type: "string",
+                required: false,
+            },
+        },
+    },
     emailAndPassword: {
         enabled: true,
     },
