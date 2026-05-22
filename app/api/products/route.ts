@@ -1,11 +1,22 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
-import { eq, and, or, isNull, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, desc, asc, count, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
+    }
+
+    const storeId = session.user.storeId;
     const { searchParams } = new URL(request.url);
     
     // Pagination parameters
@@ -21,7 +32,10 @@ export async function GET(request: NextRequest) {
     const sortBy = searchParams.get('sortBy') || 'createdAt';
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
-    // Build query with joins
+    // Build filter conditions
+    const whereConditions = [eq(products.storeId, storeId)];
+    if (search) whereConditions.push(ilike(products.name, `%${search}%`));
+    
     // We use subqueries for stock and prices to avoid join multiplication
     const stockSubquery = db
       .select({
@@ -30,7 +44,10 @@ export async function GET(request: NextRequest) {
         maxMinStock: sql<number>`MAX(${inventory.minStock})`.as('max_min_stock')
       })
       .from(inventory)
-      .where(branchId ? eq(inventory.branchId, branchId) : sql`1=1`)
+      .where(and(
+        branchId ? eq(inventory.branchId, branchId) : sql`1=1`,
+        inArray(inventory.branchId, db.select({ id: branches.id }).from(branches).where(eq(branches.storeId, storeId)))
+      ))
       .groupBy(inventory.productId)
       .as('stock_sub');
 
@@ -44,10 +61,9 @@ export async function GET(request: NextRequest) {
         branchId: productPrices.branchId,
       })
       .from(productPrices)
-      .where(sql`1=1`) // Include all prices for fallback
+      .where(sql`1=1`)
       .orderBy(
         productPrices.productId, 
-        // Prioritize: 1. Branch specific, 2. Global (null), 3. Any other branch
         asc(sql`CASE 
           WHEN ${productPrices.branchId} = ${branchId} THEN 0 
           WHEN ${productPrices.branchId} IS NULL THEN 1 
@@ -56,7 +72,27 @@ export async function GET(request: NextRequest) {
       )
       .as('price_sub');
 
-    let query = db
+    // Category filter logic
+    let categoryCondition = sql`1=1`;
+    if (category) {
+      categoryCondition = eq(categories.code, category);
+    }
+
+    // Determine sorting
+    let orderByColumn;
+    if (sortBy === 'name') {
+      orderByColumn = sortOrder === 'asc' ? asc(products.name) : desc(products.name);
+    } else if (sortBy === 'createdAt') {
+      orderByColumn = sortOrder === 'asc' ? asc(products.createdAt) : desc(products.createdAt);
+    } else if (sortBy === 'sellingPrice') {
+      orderByColumn = sortOrder === 'asc' ? asc(priceSubquery.sellingPrice) : desc(priceSubquery.sellingPrice);
+    } else if (sortBy === 'stock') {
+      orderByColumn = sortOrder === 'asc' ? asc(stockSubquery.totalStock) : desc(stockSubquery.totalStock);
+    } else {
+      orderByColumn = desc(products.createdAt);
+    }
+
+    const productList = await db
       .select({
         id: products.id,
         name: products.name,
@@ -82,76 +118,28 @@ export async function GET(request: NextRequest) {
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
       .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId))
+      .where(and(...whereConditions, categoryCondition))
+      .orderBy(orderByColumn)
       .limit(limit)
       .offset(offset);
     
-    // Apply search filters
-    const whereConditions = [];
+    // Total count query
+    const countConditions = [eq(products.storeId, storeId)];
+    if (search) countConditions.push(ilike(products.name, `%${search}%`));
     
-    if (search) {
-      whereConditions.push(ilike(products.name, `%${search}%`));
-    }
-    
-    if (category) {
-      whereConditions.push(eq(categories.code, category));
-    }
-    
-    if (whereConditions.length > 0) {
-      query = query.where(and(...whereConditions)) as typeof query;
-    }
-    
-    // Apply sorting
-    if (sortBy === 'name') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(products.name)) as typeof query
-        : query.orderBy(desc(products.name)) as typeof query;
-    } else if (sortBy === 'createdAt') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(products.createdAt)) as typeof query
-        : query.orderBy(desc(products.createdAt)) as typeof query;
-    } else if (sortBy === 'sellingPrice') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(priceSubquery.sellingPrice)) as typeof query
-        : query.orderBy(desc(priceSubquery.sellingPrice)) as typeof query;
-    } else if (sortBy === 'stock') {
-      query = sortOrder === 'asc' 
-        ? query.orderBy(asc(stockSubquery.totalStock)) as typeof query
-        : query.orderBy(desc(stockSubquery.totalStock)) as typeof query;
-    } else {
-      query = query.orderBy(desc(products.createdAt)) as typeof query;
-    }
-    
-    
-    const productList = await query;
-    
-    // Get total count for pagination - Optimized: Only join what's necessary
-    let countQuery = db
-      .select({ count: count(products.id) })
-      .from(products);
-    
-    const countWhereConditions = [];
-    
-    if (search) {
-      countWhereConditions.push(ilike(products.name, `%${search}%`));
-    }
+    let totalCountQuery = db.select({ count: count(products.id) }).from(products);
     
     if (category) {
-      // Only join categories if we are filtering by it
-      countQuery = countQuery.leftJoin(categories, eq(products.categoryId, categories.id)) as any;
-      countWhereConditions.push(eq(categories.code, category));
+      totalCountQuery = totalCountQuery.leftJoin(categories, eq(products.categoryId, categories.id)) as any;
+      countConditions.push(eq(categories.code, category));
     }
     
     if (branchId) {
-      // Only join inventory if we are filtering by branch
-      countQuery = countQuery.leftJoin(inventory, eq(products.id, inventory.productId)) as any;
-      countWhereConditions.push(eq(inventory.branchId, branchId));
+      totalCountQuery = totalCountQuery.leftJoin(inventory, eq(products.id, inventory.productId)) as any;
+      countConditions.push(eq(inventory.branchId, branchId));
     }
     
-    if (countWhereConditions.length > 0) {
-      countQuery = countQuery.where(and(...countWhereConditions)) as any;
-    }
-    
-    const totalCountResult = await countQuery;
+    const totalCountResult = await totalCountQuery.where(and(...countConditions));
     const totalCount = Number(totalCountResult[0].count);
     const totalPages = Math.ceil(totalCount / limit);
     
@@ -159,197 +147,80 @@ export async function GET(request: NextRequest) {
       JSON.stringify({
         success: true,
         data: productList,
-        pagination: {
-          page,
-          limit,
-          totalCount,
-          totalPages,
-          hasNext: page < totalPages,
-          hasPrev: page > 1
-        }
+        pagination: { page, limit, totalCount, totalPages, hasNext: page < totalPages, hasPrev: page > 1 }
       }),
-      { 
-        status: 200, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error fetching products:', error);
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
-    );
+    return new Response(JSON.stringify({ success: false, message: 'Internal server error' }), { status: 500 });
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await auth.api.getSession({
+      headers: await headers(),
+    });
+
+    if (!session?.user?.storeId) {
+      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
+    }
+
+    const storeId = session.user.storeId;
     const body = await request.json();
-    
     const {
-      name,
-      description,
-      sku,
-      barcode,
-      image,
-      imageUrl,
-      categoryId,
-      brand,
-      unit = 'pcs',
-      profitMargin = '0.00',
-      purchasePrice = '0',
-      sellingPrice = '0',
-      customerPrice = '0',
-      stock = 0,
-      minStock = 5
+      name, description, sku, barcode, image, imageUrl, categoryId, brand,
+      unit = 'pcs', profitMargin = '0.00', purchasePrice = '0',
+      sellingPrice = '0', customerPrice = '0', stock = 0, minStock = 5
     } = body;
     
-    // Validate required fields
     if (!name || !sku || !barcode) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Name, SKU, and barcode are required' 
-        }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+      return new Response(JSON.stringify({ success: false, message: 'Name, SKU, and barcode are required' }), { status: 400 });
     }
     
-    // Check for duplicate SKU and auto-generate if it exists
     let finalSku = sku;
-    const skuExists = true;
-    let skuNumber = 0;
+    const existingSku = await db.select().from(products).where(and(eq(products.sku, finalSku), eq(products.storeId, storeId)));
     
-    // If SKU has a numeric suffix (like ABC00001), we'll increment it
-    const skuMatch = sku.match(/^(.*?)(\d+)$/);
-    if (skuMatch) {
-      const prefix = skuMatch[1];
-      skuNumber = parseInt(skuMatch[2]);
-      
-      // Check if the original SKU exists
-      let existingSku = await db
-        .select()
-        .from(products)
-        .where(eq(products.sku, finalSku));
-      
-      // If it exists, increment until we find a unique SKU
-      while (existingSku.length > 0) {
-        skuNumber++;
-        finalSku = prefix + String(skuNumber).padStart(skuMatch[2].length, '0');
-        existingSku = await db
-          .select()
-          .from(products)
-          .where(eq(products.sku, finalSku));
-      }
-    } else {
-      // For non-numeric SKUs, check directly
-      const existingProductBySku = await db
-        .select()
-        .from(products)
-        .where(eq(products.sku, sku));
-      
-      if (existingProductBySku.length > 0) {
-        // For non-numeric SKU, append a number to make it unique
+    if (existingSku.length > 0) {
         let counter = 1;
         let tempSku = `${sku}_${counter}`;
-        while ((await db.select().from(products).where(eq(products.sku, tempSku))).length > 0) {
+        while ((await db.select().from(products).where(and(eq(products.sku, tempSku), eq(products.storeId, storeId)))).length > 0) {
           counter++;
           tempSku = `${sku}_${counter}`;
         }
         finalSku = tempSku;
-      }
     }
 
-    // Check for duplicate barcode
-    const existingProductByBarcode = await db
-      .select()
-      .from(products)
-      .where(
-        eq(products.barcode, barcode)
-      );
-    
+    const existingProductByBarcode = await db.select().from(products).where(and(eq(products.barcode, barcode), eq(products.storeId, storeId)));
     if (existingProductByBarcode.length > 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Product with this barcode already exists' 
-        }),
-        { 
-          status: 409, 
-          headers: { 'Content-Type': 'application/json' } 
-        }
-      );
+      return new Response(JSON.stringify({ success: false, message: 'Product with this barcode already exists in your store' }), { status: 409 });
     }
     
-    // Generate unique ID
     const productId = `prod_${nanoid(10)}`;
-    
-    // Branch assignment for price/inventory
-    // If branchId is provided in body, use it. Otherwise, don't randomly pick one.
-    // If no branch is found at all, we'll use null for price (global).
     let targetBranchId: string | null = body.branchId || null;
     
-    if (!targetBranchId) {
-      try {
-        // Attempt to get an existing branch if needed for inventory, 
-        // but for price we prefer it to be global (null) if not specified.
-        const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
-        if (branchList.length > 0) {
-          // Only use this for inventory if we REALLY need a branch
-          // We'll keep targetBranchId as null for the price to make it global
-        }
-      } catch (error) {
-        console.log('Error querying branches');
-      }
-    }
-
-    // Validate category exists if categoryId is provided
     let validCategoryId = categoryId;
     if (categoryId) {
-      const categoryExists = await db
-        .select({ id: categories.id })
-        .from(categories)
-        .where(eq(categories.id, categoryId))
+      const categoryExists = await db.select({ id: categories.id }).from(categories)
+        .where(and(eq(categories.id, categoryId), eq(categories.storeId, storeId)))
         .limit(1);
-      
-      if (categoryExists.length === 0) {
-        // If category doesn't exist, set categoryId to null
-        validCategoryId = null;
-      }
+      if (categoryExists.length === 0) validCategoryId = null;
     }
 
-    // Insert the product using a transaction to ensure data consistency
     await db.transaction(async (tx) => {
-      // Insert the product
       await tx.insert(products).values({
         id: productId,
-        name,
-        description,
-        sku: finalSku,  // Use the potentially auto-generated SKU
-        barcode,
-        image,
-        imageUrl,
-        categoryId: validCategoryId,
-        unit,
-        profitMargin
+        storeId,
+        name, description, sku: finalSku, barcode, image, imageUrl, categoryId: validCategoryId, unit, profitMargin
       });
       
-      // Insert the product price entry
       if (purchasePrice !== '0' || sellingPrice !== '0' || customerPrice !== '0') {
         await tx.insert(productPrices).values({
           id: `pp_${nanoid(10)}`,
+          storeId,
           productId,
-          branchId: targetBranchId, // Use the target branch ID or null (global)
+          branchId: targetBranchId,
           purchasePrice: purchasePrice.toString(),
           sellingPrice: sellingPrice.toString(),
           customerPrice: customerPrice.toString(),
@@ -358,16 +229,16 @@ export async function POST(request: NextRequest) {
         });
       }
       
-      // Insert the inventory entry - if no branchId is available, we try to find one
       let inventoryBranchId = targetBranchId;
       if (!inventoryBranchId) {
-        const branchList = await db.select({ id: branches.id }).from(branches).limit(1);
+        const branchList = await tx.select({ id: branches.id }).from(branches).where(eq(branches.storeId, storeId)).limit(1);
         if (branchList.length > 0) inventoryBranchId = branchList[0].id;
       }
 
       if (inventoryBranchId) {
         await tx.insert(inventory).values({
           id: `inv_${nanoid(10)}`,
+          storeId,
           productId,
           branchId: inventoryBranchId,
           quantity: stock,
@@ -378,27 +249,13 @@ export async function POST(request: NextRequest) {
       }
     });
     
-    // Return the created product with related data
-    const [createdProduct] = await db
-      .select({
-        id: products.id,
-        name: products.name,
-        description: products.description,
-        sku: products.sku,
-        barcode: products.barcode,
-        image: products.image,
-        imageUrl: products.imageUrl,
-        unit: products.unit,
-        profitMargin: products.profitMargin,
-        createdAt: products.createdAt,
-        updatedAt: products.updatedAt,
-        categoryId: products.categoryId,
-        categoryName: categories.name,
-        sellingPrice: productPrices.sellingPrice,
-        customerPrice: productPrices.customerPrice,
-        purchasePrice: productPrices.purchasePrice,
-        stock: inventory.quantity,
-        minStock: inventory.minStock
+    const [createdProduct] = await db.select({
+        id: products.id, name: products.name, description: products.description, sku: products.sku,
+        barcode: products.barcode, image: products.image, imageUrl: products.imageUrl, unit: products.unit,
+        profitMargin: products.profitMargin, createdAt: products.createdAt, updatedAt: products.updatedAt,
+        categoryId: products.categoryId, categoryName: categories.name,
+        sellingPrice: productPrices.sellingPrice, customerPrice: productPrices.customerPrice,
+        purchasePrice: productPrices.purchasePrice, stock: inventory.quantity, minStock: inventory.minStock
       })
       .from(products)
       .leftJoin(categories, eq(products.categoryId, categories.id))
@@ -408,28 +265,11 @@ export async function POST(request: NextRequest) {
       .limit(1);
     
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        message: 'Product created successfully',
-        data: createdProduct
-      }),
-      { 
-        status: 201, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
+      JSON.stringify({ success: true, message: 'Product created successfully', data: createdProduct }),
+      { status: 201, headers: { 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error creating product:', error);
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        message: 'Internal server error',
-        error: (error as Error).message 
-      }),
-      { 
-        status: 500, 
-        headers: { 'Content-Type': 'application/json' } 
-      }
-    );
+    return new Response(JSON.stringify({ success: false, message: 'Internal server error' }), { status: 500 });
   }
 }

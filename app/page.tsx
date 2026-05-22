@@ -305,38 +305,49 @@ export default function Home() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
             {[
               {
-                name: "Startup",
-                price: "Rp 299rb",
+                name: "Monthly",
+                price: "Rp 99rb",
                 desc: "Sangat cocok untuk satu cabang yang baru mulai.",
                 features: ["1 Cabang", "Standard POS", "Inventaris Dasar", "Laporan Email Harian"],
-                recommended: false
+                recommended: false,
+                link: "/payment-gateway?plan=monthly"
               },
               {
-                name: "Business Pro",
-                price: "Rp 799rb",
-                desc: "Ideal untuk rantai bisnis multi-cabang yang berkembang.",
-                features: ["Hingga 5 Cabang", "Inventaris Lanjutan", "Akses AI Assistant", "Manajemen Berbasis Peran", "Ekspor Excel/PDF"],
-                recommended: true
+                name: "Yearly",
+                price: "Rp 999rb",
+                desc: "Hemat lebih banyak dengan komitmen tahunan.",
+                features: ["5 Cabang", "Inventaris Lanjutan", "Akses AI Assistant", "Ekspor Excel/PDF", "Dukungan Prioritas"],
+                recommended: true,
+                link: "/payment-gateway?plan=yearly"
               },
               {
-                name: "Enterprise",
-                price: "Custom",
-                desc: "Untuk kerajaan ritel besar dan waralaba.",
-                features: ["Cabang Tanpa Batas", "Akses API Penuh", "Manajer Akun Khusus", "Opsi White-label", "Dukungan Prioritas 24/7"],
-                recommended: false
+                name: "One Payment",
+                price: "Rp 1.999rb",
+                desc: "Bayar sekali, gunakan selamanya. Tanpa biaya bulanan.",
+                features: ["Cabang Tanpa Batas", "Akses AI Assistant", "Opsi White-label", "Update Selamanya", "Dukungan VIP"],
+                recommended: false,
+                link: "/payment-gateway?plan=permanent"
               }
             ].map((plan, i) => (
-              <Card key={i} className={`p-8 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col ${plan.recommended ? 'ring-2 ring-blue-600 shadow-2xl scale-105 z-10' : ''}`}>
+              <Card key={i} className={`p-8 border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col relative ${plan.recommended ? 'ring-2 ring-blue-600 shadow-2xl scale-105 z-10' : ''}`}>
                 {plan.recommended && (
                   <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1 bg-blue-600 text-white text-xs font-bold rounded-full">
                     PALING POPULER
+                  </div>
+                )}
+                {plan.name === 'One Payment' && (
+                  <div className="absolute top-0 right-0 p-4">
+                    <div className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 text-[10px] font-bold rounded-md">
+                      LIFETIME
+                    </div>
                   </div>
                 )}
                 <div className="mb-8">
                   <h3 className="text-xl font-bold mb-2">{plan.name}</h3>
                   <div className="flex items-baseline gap-1 mb-4">
                     <span className="text-4xl font-bold">{plan.price}</span>
-                    {plan.price !== 'Custom' && <span className="text-gray-500">/bln</span>}
+                    {plan.name === 'Monthly' && <span className="text-gray-500">/bln</span>}
+                    {plan.name === 'Yearly' && <span className="text-gray-500">/thn</span>}
                   </div>
                   <p className="text-sm text-gray-500">{plan.desc}</p>
                 </div>
@@ -350,9 +361,11 @@ export default function Home() {
                   ))}
                 </div>
 
-                <Button className={`w-full rounded-xl h-12 font-bold ${plan.recommended ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-200'}`}>
-                  Get Started
-                </Button>
+                <Link href={plan.link}>
+                  <Button className={`w-full rounded-xl h-12 font-bold ${plan.recommended ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 hover:bg-gray-200'}`}>
+                    Get Started
+                  </Button>
+                </Link>
               </Card>
             ))}
           </div>

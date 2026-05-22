@@ -8,10 +8,24 @@ export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "tran
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "cancelled", "refunded"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percentage", "fixed_amount"]);
 export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split", "pos"]);
+export const storeTypeEnum = pgEnum("store_type", ["VAPE", "WARUNG", "MINIMARKET"]);
+
+// Store Settings (The "Tenant" configuration)
+export const storeSettings = pgTable("store_settings", {
+  id: text("id").primaryKey().notNull(),
+  name: text("name").notNull(),
+  address: text("address").notNull(),
+  whatsapp: text("whatsapp").notNull(),
+  storeType: storeTypeEnum("store_type").notNull(),
+  ownerId: text("owner_id").notNull().references(() => user.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 // Branches table (for multi-cabang support)
 export const branches = pgTable("branches", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   address: text("address").notNull(),
   phone: text("phone"),
@@ -40,6 +54,7 @@ export const userBranches = pgTable("user_branches", {
 // Categories table
 export const categories = pgTable("categories", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   description: text("description"),
   code: text("code").notNull().unique(), // E.g., FB for Freebase, SL for SaltNic, etc.
@@ -52,6 +67,7 @@ export const categories = pgTable("categories", {
 // Brands table
 export const brands = pgTable("brands", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   description: text("description"),
   code: text("code").notNull().unique(),
@@ -62,6 +78,7 @@ export const brands = pgTable("brands", {
 // Products table
 export const products = pgTable("products", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   description: text("description"),
   sku: text("sku").notNull().unique(),
@@ -85,6 +102,7 @@ export const products = pgTable("products", {
 // Product prices table (to track price changes over time)
 export const productPrices = pgTable("product_prices", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   productId: text("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
@@ -99,6 +117,7 @@ export const productPrices = pgTable("product_prices", {
 // Members table
 export const members = pgTable("members", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   phone: text("phone").notNull(),
   email: text("email").unique(),
@@ -111,6 +130,7 @@ export const members = pgTable("members", {
 // Suppliers table
 export const suppliers = pgTable("suppliers", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   contactPerson: text("contact_person"),
   phone: text("phone").notNull(),
@@ -124,6 +144,7 @@ export const suppliers = pgTable("suppliers", {
 // Inventory table
 export const inventory = pgTable("inventory", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   productId: text("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
@@ -145,6 +166,7 @@ export const inventory = pgTable("inventory", {
 // Inventory transactions (for tracking stock movements)
 export const inventoryTransactions = pgTable("inventory_transactions", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   productId: text("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
@@ -168,6 +190,7 @@ export const inventoryTransactions = pgTable("inventory_transactions", {
 // Discounts table
 export const discounts = pgTable("discounts", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   name: text("name").notNull(),
   description: text("description"),
   type: discountTypeEnum("type").notNull(), // percentage or fixed amount
@@ -179,9 +202,10 @@ export const discounts = pgTable("discounts", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Transaction table
+// Transactions table
 export const transactions = pgTable("transactions", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   transactionNumber: text("transaction_number").notNull().unique(),
   branchId: text("branch_id")
     .notNull()
@@ -206,6 +230,7 @@ export const transactions = pgTable("transactions", {
 // Transaction details table
 export const transactionDetails = pgTable("transaction_details", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   transactionId: text("transaction_id")
     .notNull()
     .references(() => transactions.id, { onDelete: "cascade" }),
@@ -223,6 +248,7 @@ export const transactionDetails = pgTable("transaction_details", {
 // Purchase orders (for inventory management)
 export const purchaseOrders = pgTable("purchase_orders", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   orderNumber: text("order_number").notNull().unique(),
   supplierId: text("supplier_id")
     .notNull()
@@ -245,6 +271,7 @@ export const purchaseOrders = pgTable("purchase_orders", {
 // Purchase order details
 export const purchaseOrderDetails = pgTable("purchase_order_details", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   purchaseOrderId: text("purchase_order_id")
     .notNull()
     .references(() => purchaseOrders.id, { onDelete: "cascade" }),
@@ -261,6 +288,7 @@ export const purchaseOrderDetails = pgTable("purchase_order_details", {
 // Draft orders table (for saving partial orders to continue later)
 export const draftOrders = pgTable("draft_orders", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   userId: text("user_id")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
@@ -283,6 +311,7 @@ export const draftOrders = pgTable("draft_orders", {
 // Notifications table
 export const notifications = pgTable("notifications", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   userId: text("user_id").references(() => user.id, { onDelete: "cascade" }), // Optional: link to specific user
   branchId: text("branch_id").references(() => branches.id, { onDelete: "cascade" }).notNull(), // Target branch for the notification
   title: text("title").notNull(),
@@ -305,6 +334,7 @@ export const appSettings = pgTable("app_settings", {
 // Master Exchange Member Point table
 export const exchangePoints = pgTable("exchange_points", {
   id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
   pointExchangeTotal: integer("point_exchange_total").notNull(),
   exchangeItem: text("exchange_item").notNull(), // Product name or description
   productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
