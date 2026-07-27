@@ -17,6 +17,8 @@ import {
   FileText
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 import {
   BarChart,
@@ -294,6 +296,93 @@ export default function ReportingPage() {
   };
 
 
+  const exportToPDF = () => {
+    const doc = new jsPDF();
+    const generatedAt = new Date().toLocaleString();
+    const dateStamp = new Date().toISOString().split('T')[0];
+
+    if (reportType === "sales") {
+      doc.setFontSize(16);
+      doc.text(`Omset Report (${dateRange})`, 14, 16);
+      doc.setFontSize(9);
+      doc.text(`Generated on: ${generatedAt}`, 14, 22);
+
+      autoTable(doc, {
+        startY: 27,
+        head: [["Product Name", "Brand", "Category", "Qty", "Cust. Price", "Purch. Price", "Total Omset"]],
+        body: omzetData.map(item => [
+          item.productName,
+          item.brandName,
+          item.categoryName,
+          item.qty,
+          `Rp ${item.customerPrice.toLocaleString()}`,
+          `Rp ${item.purchasePrice.toLocaleString()}`,
+          `Rp ${item.grandTotalSales.toLocaleString()}`
+        ]),
+        foot: [
+          ["GRAND TOTAL", "", "", totalQty.toLocaleString(), "", `Rp ${totalPurchase.toLocaleString()}`, `Rp ${totalOmzet.toLocaleString()}`],
+          ["TOTAL GROSS PROFIT", "", "", "", "", "", `Rp ${(totalOmzet - totalPurchase).toLocaleString()}`]
+        ],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229] },
+        footStyles: { fillColor: [230, 230, 250], textColor: [0, 0, 0], fontStyle: 'bold' },
+      });
+
+      doc.save(`Omset_Report_${dateRange}_${dateStamp}.pdf`);
+    } else if (reportType === "inventory") {
+      doc.setFontSize(16);
+      doc.text('Inventory Report', 14, 16);
+      doc.setFontSize(9);
+      doc.text(`Generated on: ${generatedAt}`, 14, 22);
+
+      autoTable(doc, {
+        startY: 27,
+        head: [["SKU", "Product Name", "Category", "Stock", "Min. Stock", "Unit Cost", "Total Value"]],
+        body: inventoryData.map(item => [
+          item.sku,
+          item.productName,
+          item.categoryName,
+          item.quantity,
+          item.minStock,
+          `Rp ${Number(item.purchasePrice || 0).toLocaleString()}`,
+          `Rp ${((item.quantity || 0) * Number(item.purchasePrice || 0)).toLocaleString()}`
+        ]),
+        foot: [
+          ["TOTAL INVENTORY", "", "", inventoryStats?.totalQuantity?.toLocaleString() || 0, "", "TOTAL VALUE", `Rp ${inventoryStats?.totalValue?.toLocaleString() || 0}`]
+        ],
+        styles: { fontSize: 8 },
+        headStyles: { fillColor: [79, 70, 229] },
+        footStyles: { fillColor: [230, 230, 250], textColor: [0, 0, 0], fontStyle: 'bold' },
+      });
+
+      doc.save(`Inventory_Report_${dateStamp}.pdf`);
+    } else if (reportType === "mutation") {
+      doc.setFontSize(16);
+      doc.text(`Mutation Report (${dateRange})`, 14, 16);
+      doc.setFontSize(9);
+      doc.text(`Generated on: ${generatedAt}`, 14, 22);
+
+      autoTable(doc, {
+        startY: 27,
+        head: [["Product Name", "Qty", "Store / Customer", "Type", "Ref. Number", "Posting Date", "Before", "After"]],
+        body: mutationData.map(item => [
+          item.productName,
+          item.quantity,
+          item.partnerName,
+          item.type.toUpperCase(),
+          item.referenceId,
+          new Date(item.createdAt).toLocaleString(),
+          item.stockBefore,
+          item.stockAfter
+        ]),
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [79, 70, 229] },
+      });
+
+      doc.save(`Mutation_Report_${dateRange}_${dateStamp}.pdf`);
+    }
+  };
+
   const printReport = () => {
     window.print();
   };
@@ -343,9 +432,18 @@ export default function ReportingPage() {
             Excel
           </Button>
 
+          <Button variant="outline" onClick={exportToPDF} disabled={
+            (reportType === 'sales' && omzetData.length === 0) ||
+            (reportType === 'inventory' && inventoryData.length === 0) ||
+            (reportType === 'mutation' && mutationData.length === 0)
+          }>
+            <FileText className="h-4 w-4 mr-2 text-red-600" />
+            PDF
+          </Button>
+
           <Button variant="outline" onClick={printReport} disabled={reportType === 'sales' && omzetData.length === 0}>
             <Printer className="h-4 w-4 mr-2" />
-            Print / PDF
+            Print
           </Button>
         </div>
       </div>
