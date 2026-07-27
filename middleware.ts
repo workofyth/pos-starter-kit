@@ -1,10 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { getSessionCookie } from 'better-auth/cookies';
 
-// Simple middleware to protect routes
+// Protects all matched routes by requiring a valid session cookie.
+// This is an edge-safe presence check (no DB roundtrip); routes/API handlers
+// still perform their own server-side session + role verification.
 export function middleware(request: NextRequest) {
-  // This is a placeholder middleware
-  // In a real implementation, you would check for session/authorization here
-  // For now, let's allow all requests to pass through to avoid build issues
+  const sessionCookie = getSessionCookie(request);
+
+  if (!sessionCookie) {
+    const signInUrl = new URL('/sign-in', request.url);
+    signInUrl.searchParams.set('redirect', request.nextUrl.pathname);
+    return NextResponse.redirect(signInUrl);
+  }
+
   return NextResponse.next();
 }
 
