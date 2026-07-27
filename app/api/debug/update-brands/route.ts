@@ -1,9 +1,15 @@
 import { NextRequest } from 'next/server';
+import { requireMainAdmin, guardResponse } from '@/lib/admin-guard';
 import { db } from '@/db';
 import { sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireMainAdmin();
+    if (!guard.ok) {
+      return guardResponse(guard);
+    }
+
     // 1. Add the column via raw SQL if it doesn't exist
     // Using a safe approach to add column if it doesn't exist
     await db.execute(sql`

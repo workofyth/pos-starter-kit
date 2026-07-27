@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { requireMainAdmin, guardResponse } from '@/lib/admin-guard';
 import { db } from '@/db';
 import { brands } from '@/db/schema/pos';
 import { sql } from 'drizzle-orm';
@@ -6,6 +7,11 @@ import { nanoid } from 'nanoid';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireMainAdmin();
+    if (!guard.ok) {
+      return guardResponse(guard);
+    }
+
     // 1. Create brands table if it doesn't exist (Drizzle push might fail on Windows)
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS brands (

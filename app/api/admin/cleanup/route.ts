@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireMainAdmin, guardResponse } from '@/lib/admin-guard';
 import { db } from '@/db';
 import {
   storeSettings,
@@ -25,6 +26,11 @@ import { isNull, eq, or } from 'drizzle-orm';
 
 export async function GET(req: NextRequest) {
   try {
+    const guard = await requireMainAdmin();
+    if (!guard.ok) {
+      return guardResponse(guard);
+    }
+
     console.log('Starting data cleanup...');
 
     // 1. Ensure JZo2l9swAB4yMyTixb_1D exists in storeSettings

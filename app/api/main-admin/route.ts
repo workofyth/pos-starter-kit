@@ -2,11 +2,16 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { userBranches } from '@/db/schema/pos';
 import { eq } from 'drizzle-orm';
-import { useSession } from '@/lib/auth-client';
+import { requireMainAdmin, guardResponse } from '@/lib/admin-guard';
 
 // PUT - Set a user as main admin or remove main admin status
 export async function PUT(request: NextRequest) {
   try {
+    const guard = await requireMainAdmin();
+    if (!guard.ok) {
+      return guardResponse(guard);
+    }
+
     const body = await request.json();
     
     const {
