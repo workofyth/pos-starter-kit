@@ -731,8 +731,8 @@ export default function InventoryPage() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold">Inventory Management</h1>
-        <p className="text-gray-600">
+        <h1 className="text-3xl font-bold font-display">Inventory Management</h1>
+        <p className="text-muted-foreground">
           {isMainAdmin 
             ? "Manage your product stock across all branches" 
             : `Manage your product stock for ${userBranchName || 'your branch'}`}
@@ -746,7 +746,7 @@ export default function InventoryPage() {
             <CardTitle className="text-sm font-medium">Total Products</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.totalProducts}</div>
+            <div className="text-2xl font-bold font-display">{summary.totalProducts}</div>
           </CardContent>
         </Card>
         <Card>
@@ -754,7 +754,7 @@ export default function InventoryPage() {
             <CardTitle className="text-sm font-medium">Low Stock</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.lowStockCount}</div>
+            <div className="text-2xl font-bold font-display">{summary.lowStockCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -762,7 +762,7 @@ export default function InventoryPage() {
             <CardTitle className="text-sm font-medium">Out of Stock</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.outOfStockCount}</div>
+            <div className="text-2xl font-bold font-display">{summary.outOfStockCount}</div>
           </CardContent>
         </Card>
         <Card>
@@ -770,7 +770,7 @@ export default function InventoryPage() {
             <CardTitle className="text-sm font-medium">Overstock</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summary.overstockCount}</div>
+            <div className="text-2xl font-bold font-display">{summary.overstockCount}</div>
           </CardContent>
         </Card>
       </div>
@@ -806,7 +806,7 @@ export default function InventoryPage() {
                 <select
                   value={selectedBranch}
                   onChange={(e) => setSelectedBranch(e.target.value)}
-                  className="w-full p-2 border border-gray-300 rounded"
+                  className="w-full p-2 border border-input rounded-lg"
                 >
                   <option value="">All Branches</option>
                   {branchList.map((branch: Branch) => (
@@ -924,7 +924,7 @@ export default function InventoryPage() {
           {selectedItems.length > 0 && !isSubBranchUser && (
             <Button 
               variant="outline" 
-              className="bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100"
+              className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
               onClick={() => {
                 const initialQtys: Record<string, number> = {};
                 selectedItems.forEach(id => {
@@ -992,7 +992,7 @@ export default function InventoryPage() {
                   const stockStatus = getStockStatus(item.currentStock, item.minStock);
                   
                   return (
-                    <TableRow key={item.id} className={selectedItems.includes(item.id) ? "bg-blue-50" : ""}>
+                    <TableRow key={item.id} className={selectedItems.includes(item.id) ? "bg-primary/10" : ""}>
                       {!isSubBranchUser && (
                         <TableCell>
                           <input 
@@ -1148,7 +1148,7 @@ export default function InventoryPage() {
             <div>
               <label className="text-sm font-medium">Product</label>
               <select 
-                className="w-full p-2 border rounded-md"
+                className="w-full p-2 border rounded-lg"
                 value={newItem.productId}
                 onChange={(e) => {
                   const prodId = e.target.value;
@@ -1164,7 +1164,7 @@ export default function InventoryPage() {
             <div>
               <label className="text-sm font-medium">Branch</label>
               <select 
-                className="w-full p-2 border rounded-md"
+                className="w-full p-2 border rounded-lg"
                 value={newItem.branchId}
                 onChange={(e) => setNewItem({...newItem, branchId: e.target.value})}
                 disabled={!isMainAdmin}
@@ -1175,7 +1175,7 @@ export default function InventoryPage() {
                 ))}
               </select>
               {!isMainAdmin && (
-                <p className="text-xs text-gray-500 mt-1">Locked to your assigned branch</p>
+                <p className="text-xs text-muted-foreground mt-1">Locked to your assigned branch</p>
               )}
             </div>
             <div>
@@ -1244,7 +1244,7 @@ export default function InventoryPage() {
                 <label className="text-sm font-medium">Target Branch</label>
                 <select 
                   name="targetBranch" 
-                  className="w-full p-2 border rounded-md"
+                  className="w-full p-2 border rounded-lg"
                   defaultValue=""
                 >
                   <option value="">Select target branch...</option>
@@ -1273,7 +1273,7 @@ export default function InventoryPage() {
                 <label className="text-sm font-medium">Notes (Optional)</label>
                 <textarea 
                   name="notes"
-                  className="w-full p-2 border rounded-md" 
+                  className="w-full p-2 border rounded-lg" 
                   placeholder="Add any notes about this split..."
                   rows={3}
                 />
@@ -1349,7 +1349,7 @@ export default function InventoryPage() {
                 <div>
                   <label className="text-sm font-medium">Adjustment Type</label>
                   <select 
-                    className="w-full p-2 border rounded-md"
+                    className="w-full p-2 border rounded-lg"
                     value={adjustmentData.type}
                     onChange={(e) => setAdjustmentData({
                       ...adjustmentData, 
@@ -1379,7 +1379,7 @@ export default function InventoryPage() {
               <div>
                 <label className="text-sm font-medium">Notes</label>
                 <textarea 
-                  className="w-full p-2 border rounded-md" 
+                  className="w-full p-2 border rounded-lg" 
                   placeholder="Enter adjustment notes"
                   value={adjustmentData.notes}
                   onChange={(e) => setAdjustmentData({
@@ -1421,7 +1421,7 @@ export default function InventoryPage() {
               <label className="text-sm font-medium mb-1 block">Target Branch</label>
               <select 
                 id="bulkTargetBranch"
-                className="w-full p-2 border rounded-md"
+                className="w-full p-2 border rounded-lg"
               >
                 <option value="">Select target branch...</option>
                 {branchList
@@ -1431,7 +1431,7 @@ export default function InventoryPage() {
               </select>
             </div>
 
-            <div className="max-h-[300px] overflow-y-auto border rounded-md p-2">
+            <div className="max-h-[300px] overflow-y-auto border rounded-lg p-2">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1472,7 +1472,7 @@ export default function InventoryPage() {
               <label className="text-sm font-medium mb-1 block">Notes (Optional)</label>
               <textarea 
                 id="bulkSplitNotes"
-                className="w-full p-2 border rounded-md" 
+                className="w-full p-2 border rounded-lg" 
                 placeholder="Add any notes about this bulk split..."
                 rows={2}
               />

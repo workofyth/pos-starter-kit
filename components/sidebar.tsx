@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
@@ -20,7 +21,6 @@ import {
   Gift,
   type LucideIcon
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useSession } from "@/lib/auth-client";
 import { UserRole, getMenuAccessRules } from "@/lib/role-based-access";
 import { useEffect, useState } from "react";
@@ -157,35 +157,41 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="hidden md:block w-64 bg-slate-900 text-slate-50 border-r border-slate-800 h-full">
-      <div className="flex flex-col items-center justify-center border-b border-gray-100 dark:border-gray-700/50">
-        <img
-          src={logoUrl}
-          alt="Logo"
-          className="w-24 h-24 rounded-xl object-contain brightness-0 invert"
-        />
+    <aside className="bg-sidebar text-sidebar-foreground border-sidebar-border hidden h-full w-64 flex-col border-r md:flex">
+      <div className="flex items-center gap-2.5 px-5 py-6">
+        <div className="bg-card ring-border flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-xl shadow-soft ring-1">
+          <Image
+            src={logoUrl}
+            alt="Logo"
+            width={40}
+            height={40}
+            unoptimized
+            className="size-full object-contain p-1"
+          />
+        </div>
+        <span className="font-display truncate text-base font-bold tracking-tight">
+          POS System
+        </span>
       </div>
-      <nav className="mt-6">
-        <ul className="space-y-1 px-2">
+      <nav className="flex-1 overflow-y-auto px-3 pb-4">
+        <ul className="space-y-1">
           {filteredItems.map((item) => {
             const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
             const Icon = item.icon;
 
             return (
               <li key={item.href}>
-                <Link href={item.href}>
-                  <Button
-                    variant="ghost"
-                    className={cn(
-                      "w-full justify-start space-x-2 px-4 py-3 rounded-lg transition-all",
-                      isActive
-                        ? "bg-primary text-primary-foreground shadow-lg shadow-primary/20"
-                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-50"
-                    )}
-                  >
-                    <Icon className="h-5 w-5" />
-                    <span>{item.title}</span>
-                  </Button>
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3.5 py-2.5 text-sm font-medium transition-all duration-150",
+                    isActive
+                      ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-soft"
+                      : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                  )}
+                >
+                  <Icon className="size-[18px] shrink-0" />
+                  <span className="truncate">{item.title}</span>
                 </Link>
               </li>
             );

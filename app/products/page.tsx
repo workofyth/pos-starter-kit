@@ -633,8 +633,8 @@ export default function ProductsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Products</h1>
-          <p className="text-gray-500">Manage your products and inventory</p>
+          <h1 className="text-2xl font-bold font-display">Products</h1>
+          <p className="text-muted-foreground">Manage your products and inventory</p>
         </div>
         
         <div className="flex flex-wrap gap-2">
@@ -815,10 +815,10 @@ export default function ProductsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Product Image</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-border border-dashed rounded-lg">
                     <div className="space-y-1 text-center">
-                      <div className="flex text-sm text-gray-600">
-                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
+                      <div className="flex text-sm text-muted-foreground">
+                        <label className="relative cursor-pointer bg-background rounded-md font-medium text-primary hover:text-primary/80">
                           <span>Upload a file</span>
                           <input 
                             type="file" 
@@ -924,7 +924,7 @@ export default function ProductsPage() {
                         </label>
                         <p className="pl-1">or drag and drop</p>
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         PNG, JPG, GIF up to 10MB
                       </p>
                     </div>
@@ -1090,10 +1090,10 @@ export default function ProductsPage() {
                 </div>
                 <div>
                   <label className="text-sm font-medium">Product Image</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
+                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-border border-dashed rounded-lg">
                     <div className="space-y-1 text-center">
-                      <div className="flex text-sm text-gray-600">
-                        <label className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500">
+                      <div className="flex text-sm text-muted-foreground">
+                        <label className="relative cursor-pointer bg-background rounded-md font-medium text-primary hover:text-primary/80">
                           <span>Upload a file</span>
                           <input 
                             type="file" 
@@ -1157,7 +1157,7 @@ export default function ProductsPage() {
                         </label>
                         <p className="pl-1">or drag and drop</p>
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         PNG, JPG, GIF up to 10MB
                       </p>
                     </div>
@@ -1186,7 +1186,7 @@ export default function ProductsPage() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Bulk Import Products</DialogTitle>
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-muted-foreground">
                   Upload an Excel file to add multiple products at once
                 </p>
               </DialogHeader>
@@ -1202,7 +1202,7 @@ export default function ProductsPage() {
                     <Download className="h-4 w-4 mr-2" />
                     Download Template
                   </Button>
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-muted-foreground mt-2">
                     Download the template to see required fields and format
                   </p>
                 </div>
@@ -1271,7 +1271,7 @@ export default function ProductsPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search products by name, SKU, or barcode..."
                 value={searchTerm}
@@ -1328,17 +1328,17 @@ export default function ProductsPage() {
                 <TableRow key={`${product.id}-${product.branchId || 'no-branch'}-${index}`}>
                   <TableCell>
                     {product.image ? (
-                      <img 
-                        src={product.image} 
-                        alt={product.name} 
-                        className="w-10 h-10 object-cover rounded-md"
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-10 h-10 object-cover rounded-lg hover:shadow-soft transition-shadow"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.src = '/assets/images/placeholder-product.png';
                         }}
                       />
                     ) : (
-                      <div className="bg-gray-200 border-2 border-dashed rounded-md w-10 h-10" />
+                      <div className="bg-muted border-2 border-dashed border-border rounded-lg w-10 h-10" />
                     )}
                   </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>

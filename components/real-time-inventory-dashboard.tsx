@@ -74,29 +74,29 @@ export function RealTimeInventoryDashboard() {
 
   const getStatusColor = (status: StockMovement['status']) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'approved': return 'bg-blue-100 text-blue-800';
-      case 'rejected': return 'bg-red-100 text-red-800';
-      case 'completed': return 'bg-green-100 text-green-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'pending': return 'bg-chart-3/10 text-chart-3';
+      case 'approved': return 'bg-primary/10 text-primary';
+      case 'rejected': return 'bg-destructive/10 text-destructive';
+      case 'completed': return 'bg-chart-2/10 text-chart-2';
+      default: return 'bg-muted text-muted-foreground';
     }
   };
 
   const getTypeIcon = (type: StockMovement['type']) => {
     switch (type) {
-      case 'incoming': return <TrendingDown className="h-4 w-4 text-green-500" />;
-      case 'outgoing': return <TrendingUp className="h-4 w-4 text-red-500" />;
-      case 'transfer': return <Package className="h-4 w-4 text-blue-500" />;
-      default: return <Package className="h-4 w-4 text-gray-500" />;
+      case 'incoming': return <TrendingDown className="h-4 w-4 text-chart-2" />;
+      case 'outgoing': return <TrendingUp className="h-4 w-4 text-destructive" />;
+      case 'transfer': return <Package className="h-4 w-4 text-primary" />;
+      default: return <Package className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getTypeColor = (type: StockMovement['type']) => {
     switch (type) {
-      case 'incoming': return 'text-green-600';
-      case 'outgoing': return 'text-red-600';
-      case 'transfer': return 'text-blue-600';
-      default: return 'text-gray-600';
+      case 'incoming': return 'text-chart-2';
+      case 'outgoing': return 'text-destructive';
+      case 'transfer': return 'text-primary';
+      default: return 'text-muted-foreground';
     }
   };
 

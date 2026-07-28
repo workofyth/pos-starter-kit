@@ -192,8 +192,8 @@ export default function BranchesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Branches</h1>
-          <p className="text-gray-500">Manage multi-branch locations</p>
+          <h1 className="text-2xl font-bold font-display">Branches</h1>
+          <p className="text-muted-foreground">Manage multi-branch locations</p>
         </div>
         
         <div className="flex gap-2">
@@ -332,7 +332,7 @@ export default function BranchesPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search branches by name or address..."
                 value={searchTerm}
@@ -352,7 +352,7 @@ export default function BranchesPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredBranches.map((branch) => (
           <Card key={branch.id} className="overflow-hidden">
-            <CardHeader className="bg-gray-50 dark:bg-gray-800">
+            <CardHeader className="bg-muted">
               <div className="flex justify-between items-start">
                 <div>
                   <CardTitle className="flex items-center gap-2">
@@ -384,18 +384,18 @@ export default function BranchesPage() {
             <CardContent className="pt-4">
               <div className="space-y-3">
                 <div className="flex items-start gap-2">
-                  <MapPin className="h-4 w-4 mt-0.5 text-gray-500 flex-shrink-0" />
+                  <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground flex-shrink-0" />
                   <p className="text-sm">{branch.address}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   <p className="text-sm">{branch.phone}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                   <p className="text-sm">{branch.email}</p>
                 </div>
-                <div className="pt-2 text-xs text-gray-500">
+                <div className="pt-2 text-xs text-muted-foreground">
                   Created: {branch.createdAt}
                 </div>
               </div>

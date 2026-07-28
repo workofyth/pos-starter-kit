@@ -282,7 +282,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             >
               <Link href="/">
                 <Image src={logoUrl} alt="CodeGuide" width={32} height={32} className="rounded-lg object-contain" />
-                <span className="text-base font-semibold font-parkinsans">CodeGuide</span>
+                <span className="font-display text-base font-bold tracking-tight">CodeGuide</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

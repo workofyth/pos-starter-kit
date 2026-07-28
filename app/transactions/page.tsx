@@ -290,8 +290,8 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Transactions</h1>
-          <p className="text-gray-500">View and manage sales transactions</p>
+          <h1 className="text-2xl font-bold font-display">Transactions</h1>
+          <p className="text-muted-foreground">View and manage sales transactions</p>
         </div>
         
         <div className="flex gap-2">
@@ -342,7 +342,7 @@ export default function TransactionsPage() {
               <select
                 value={selectedBranchFilter}
                 onChange={(e) => setSelectedBranchFilter(e.target.value)}
-                className="p-2 border rounded-md text-sm"
+                className="p-2 border border-input rounded-lg text-sm bg-transparent shadow-soft"
               >
                 <option value="">All Branches</option>
                 {branchList.map(b => (
@@ -367,21 +367,21 @@ export default function TransactionsPage() {
         <CardContent>
           {cashierBranchId === null ? (
             <div className="text-center py-12">
-              <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
+              <CreditCard className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-medium">No branch assigned</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 You don&apos;t have access to any branch transactions.
               </p>
             </div>
           ) : isLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-blue-600"></div>
+              <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-primary"></div>
             </div>
           ) : filteredTransactions.length === 0 ? (
             <div className="text-center py-12">
-              <CreditCard className="mx-auto h-12 w-12 text-gray-400" />
+              <CreditCard className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-medium">No transactions</h3>
-              <p className="mt-1 text-sm text-gray-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {cashierBranchId !== null && session?.user 
                   ? 'No transactions found for your branch.' 
                   : 'No transactions found.'}
@@ -420,7 +420,7 @@ export default function TransactionsPage() {
                     <TableCell>Rp {transaction.tax.toLocaleString()}</TableCell>
                     <TableCell className="font-bold">Rp {transaction.total.toLocaleString()}</TableCell>
                     <TableCell>Rp {transaction.paidAmount.toLocaleString()}</TableCell>
-                    <TableCell className={transaction.changeAmount > 0 ? "text-green-600 font-medium" : ""}>
+                    <TableCell className={transaction.changeAmount > 0 ? "text-chart-2 font-medium" : ""}>
                       Rp {transaction.changeAmount.toLocaleString()}
                     </TableCell>
                     <TableCell>
@@ -458,13 +458,13 @@ export default function TransactionsPage() {
           <CardContent>
             {isProductsLoading ? (
               <div className="flex justify-center items-center h-32">
-                <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-blue-600"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-primary"></div>
               </div>
             ) : transactionProducts.length === 0 ? (
               <div className="text-center py-12">
-                <Package className="mx-auto h-12 w-12 text-gray-400" />
+                <Package className="mx-auto h-12 w-12 text-muted-foreground" />
                 <h3 className="mt-2 text-sm font-medium">No products found</h3>
-                <p className="mt-1 text-sm text-gray-500">
+                <p className="mt-1 text-sm text-muted-foreground">
                   There are no sold products recorded for the selected branches.
                 </p>
               </div>
@@ -487,7 +487,7 @@ export default function TransactionsPage() {
                       <TableCell>{new Date(tp.date).toLocaleDateString()}</TableCell>
                       <TableCell className="font-medium">{tp.transactionNumber}</TableCell>
                       <TableCell>{tp.productName}</TableCell>
-                      <TableCell className="text-gray-500">{tp.productSku || '-'}</TableCell>
+                      <TableCell className="text-muted-foreground">{tp.productSku || '-'}</TableCell>
                       <TableCell className="text-right">Rp {parseFloat(tp.unitPrice).toLocaleString()}</TableCell>
                       <TableCell className="text-center">{tp.quantity}</TableCell>
                       <TableCell className="text-right font-medium">Rp {parseFloat(tp.totalPrice).toLocaleString()}</TableCell>
@@ -509,7 +509,7 @@ export default function TransactionsPage() {
                 <Receipt className="h-5 w-5"/> Transaction Details
               </span>
               {selectedTransactionInfo && (
-                <span className="text-sm font-normal text-gray-500">
+                <span className="text-sm font-normal text-muted-foreground">
                   {selectedTransactionInfo.transactionNumber} - {selectedTransactionInfo.date}
                 </span>
               )}
@@ -518,18 +518,18 @@ export default function TransactionsPage() {
           <div className="py-4">
             {isDetailsLoading ? (
               <div className="flex justify-center items-center h-32">
-                <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-blue-600"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-primary"></div>
               </div>
             ) : selectedTransactionDetails.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Package className="mx-auto h-10 w-10 text-gray-300 mb-2"/>
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="mx-auto h-10 w-10 text-muted-foreground/60 mb-2"/>
                 No product details found for this transaction.
               </div>
             ) : (
-              <div className="rounded-md border">
+              <div className="rounded-lg border border-border">
                 <Table>
                   <TableHeader>
-                    <TableRow className="bg-gray-50">
+                    <TableRow className="bg-muted">
                       <TableHead>Product</TableHead>
                       <TableHead>SKU</TableHead>
                       <TableHead className="text-right">Price</TableHead>
@@ -541,7 +541,7 @@ export default function TransactionsPage() {
                     {selectedTransactionDetails.map((detail) => (
                       <TableRow key={detail.id}>
                         <TableCell className="font-medium">{detail.productName || 'Unknown Product'}</TableCell>
-                        <TableCell className="text-gray-500">{detail.productSku || '-'}</TableCell>
+                        <TableCell className="text-muted-foreground">{detail.productSku || '-'}</TableCell>
                         <TableCell className="text-right">Rp {parseFloat(detail.unitPrice).toLocaleString()}</TableCell>
                         <TableCell className="text-right">{detail.quantity}</TableCell>
                         <TableCell className="text-right font-medium">Rp {parseFloat(detail.totalPrice).toLocaleString()}</TableCell>
@@ -553,27 +553,27 @@ export default function TransactionsPage() {
             )}
             {selectedTransactionInfo && !isDetailsLoading && (
               <div className="mt-6 flex flex-col gap-2 items-end text-sm">
-                <div className="flex gap-4 min-w-48 justify-between text-gray-600">
+                <div className="flex gap-4 min-w-48 justify-between text-muted-foreground">
                   <span>Subtotal:</span>
                   <span>Rp {selectedTransactionInfo.subtotal.toLocaleString()}</span>
                 </div>
-                <div className="flex gap-4 min-w-48 justify-between text-gray-600">
+                <div className="flex gap-4 min-w-48 justify-between text-muted-foreground">
                   <span>Discount:</span>
                   <span>- Rp {selectedTransactionInfo.discount.toLocaleString()}</span>
                 </div>
-                <div className="flex gap-4 min-w-48 justify-between text-gray-600">
+                <div className="flex gap-4 min-w-48 justify-between text-muted-foreground">
                   <span>Tax:</span>
                   <span>Rp {selectedTransactionInfo.tax.toLocaleString()}</span>
                 </div>
-                <div className="flex gap-4 min-w-48 justify-between font-bold text-base border-t pt-2 mt-2">
+                <div className="flex gap-4 min-w-48 justify-between font-bold text-base border-t border-border pt-2 mt-2">
                   <span>Total:</span>
                   <span>Rp {selectedTransactionInfo.total.toLocaleString()}</span>
                 </div>
-                <div className="flex gap-4 min-w-48 justify-between text-gray-600 mt-1">
+                <div className="flex gap-4 min-w-48 justify-between text-muted-foreground mt-1">
                   <span>Paid Amount:</span>
                   <span>Rp {selectedTransactionInfo.paidAmount.toLocaleString()}</span>
                 </div>
-                <div className="flex gap-4 min-w-48 justify-between text-green-600 font-medium">
+                <div className="flex gap-4 min-w-48 justify-between text-chart-2 font-medium">
                   <span>Change:</span>
                   <span>Rp {selectedTransactionInfo.changeAmount.toLocaleString()}</span>
                 </div>

@@ -269,9 +269,9 @@ export default function PurchaseOrdersPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'received': return <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/50">Received</Badge>;
+      case 'received': return <Badge className="bg-chart-2/10 text-chart-2 border-chart-2/30">Received</Badge>;
       case 'cancelled': return <Badge variant="destructive">Cancelled</Badge>;
-      default: return <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/50">Pending</Badge>;
+      default: return <Badge className="bg-chart-3/10 text-chart-3 border-chart-3/30">Pending</Badge>;
     }
   };
 
@@ -296,7 +296,7 @@ export default function PurchaseOrdersPage() {
     <div className="p-6 space-y-6 max-w-[1600px] mx-auto animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold font-display bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
             Purchase Orders
           </h1>
           <p className="text-muted-foreground">Manage inventory restocking and suppliers</p>
@@ -319,16 +319,16 @@ export default function PurchaseOrdersPage() {
             <ShoppingCart className="w-4 h-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{purchaseOrders.length}</div>
+            <div className="text-2xl font-bold font-display">{purchaseOrders.length}</div>
           </CardContent>
         </Card>
         <Card className="bg-card/50 backdrop-blur-sm border-white/5">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Pending</CardTitle>
-            <Clock className="w-4 h-4 text-amber-500" />
+            <Clock className="w-4 h-4 text-chart-3" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold font-display">
               {purchaseOrders.filter(p => p.status === 'pending').length}
             </div>
           </CardContent>
@@ -336,10 +336,10 @@ export default function PurchaseOrdersPage() {
         <Card className="bg-card/50 backdrop-blur-sm border-white/5">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Received</CardTitle>
-            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+            <CheckCircle2 className="w-4 h-4 text-chart-2" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold font-display">
               {purchaseOrders.filter(p => p.status === 'received').length}
             </div>
           </CardContent>
@@ -350,14 +350,14 @@ export default function PurchaseOrdersPage() {
             <Package className="w-4 h-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
+            <div className="text-2xl font-bold font-display">
               Rp {purchaseOrders.reduce((sum, p) => sum + parseFloat(p.total), 0).toLocaleString()}
             </div>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="bg-card/50 backdrop-blur-md border-white/5 shadow-xl">
+      <Card className="bg-card/50 backdrop-blur-md border-white/5 shadow-soft-lg">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>PO History</CardTitle>
@@ -405,7 +405,7 @@ export default function PurchaseOrdersPage() {
                        <Eye className="w-4 h-4" />
                     </Button>
                     {po.status === 'pending' && (
-                      <Button variant="ghost" size="icon" className="hover:bg-emerald-500/20 hover:text-emerald-400" onClick={() => openReceiveModal(po)}>
+                      <Button variant="ghost" size="icon" className="hover:bg-chart-2/20 hover:text-chart-2" onClick={() => openReceiveModal(po)}>
                         <CheckCircle2 className="w-4 h-4" />
                       </Button>
                     )}
@@ -460,7 +460,7 @@ export default function PurchaseOrdersPage() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
+              <h3 className="text-lg font-semibold font-display flex items-center gap-2">
                 <Package className="w-5 h-5" /> Items
               </h3>
               <Button variant="outline" size="sm" onClick={addItemToNewPO}>
@@ -526,7 +526,7 @@ export default function PurchaseOrdersPage() {
             <div className="flex justify-end p-4 bg-white/5 rounded-lg border border-white/10">
               <div className="text-right space-y-1">
                 <p className="text-sm text-muted-foreground">Total Summary</p>
-                <p className="text-2xl font-bold text-primary">
+                <p className="text-2xl font-bold font-display text-primary">
                   Rp {newPO.items.reduce((sum, i) => sum + (i.quantity * i.unitPrice), 0).toLocaleString()}
                 </p>
               </div>
@@ -595,7 +595,7 @@ export default function PurchaseOrdersPage() {
 
           <div className="flex justify-between items-center mt-6 p-4 bg-primary/5 rounded-xl border border-primary/20">
              <p className="font-semibold text-lg">Grand Total</p>
-             <p className="font-bold text-2xl text-primary">Rp {selectedPO && parseFloat(selectedPO.total).toLocaleString()}</p>
+             <p className="font-bold text-2xl font-display text-primary">Rp {selectedPO && parseFloat(selectedPO.total).toLocaleString()}</p>
           </div>
         </DialogContent>
       </Dialog>
@@ -605,7 +605,7 @@ export default function PurchaseOrdersPage() {
         <DialogContent className="max-w-3xl bg-background/95 backdrop-blur-lg border-white/10 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-6 h-6 text-emerald-500" /> Receive Stock for {selectedPO?.orderNumber}
+              <CheckCircle2 className="w-6 h-6 text-chart-2" /> Receive Stock for {selectedPO?.orderNumber}
             </DialogTitle>
           </DialogHeader>
           
@@ -628,7 +628,7 @@ export default function PurchaseOrdersPage() {
                             <TableCell>
                                <Input 
                                  type="number" 
-                                 className="text-center h-10 text-emerald-400 font-bold bg-emerald-500/10 border-emerald-500/20"
+                                 className="text-center h-10 text-chart-2 font-bold bg-chart-2/10 border-chart-2/20"
                                  value={receivingItems[item.productId] || 0}
                                  onChange={(e) => setReceivingItems({...receivingItems, [item.productId]: parseInt(e.target.value) || 0})}
                                />
@@ -641,7 +641,7 @@ export default function PurchaseOrdersPage() {
           </div>
           <DialogFooter>
              <Button variant="outline" onClick={() => setIsReceiveDialogOpen(false)} disabled={isReceiveLoading}>Cancel</Button>
-             <Button className="bg-emerald-600 hover:bg-emerald-500 text-white" onClick={handleReceivePO} disabled={isReceiveLoading}>
+             <Button className="bg-chart-2 hover:bg-chart-2/90 text-white" onClick={handleReceivePO} disabled={isReceiveLoading}>
                 {isReceiveLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processing...</> : "Confirm & Update Inventory"}
              </Button>
           </DialogFooter>

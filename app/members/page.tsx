@@ -198,8 +198,8 @@ export default function MembersPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Members</h1>
-          <p className="text-gray-500">Manage customer loyalty and points</p>
+          <h1 className="text-2xl font-bold font-display">Members</h1>
+          <p className="text-muted-foreground">Manage customer loyalty and points</p>
         </div>
         
         <div className="flex gap-2">
@@ -332,7 +332,7 @@ export default function MembersPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search members by name, phone, or email..."
                 value={searchTerm}
@@ -353,12 +353,12 @@ export default function MembersPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <Users className="h-6 w-6 text-blue-600" />
+              <div className="bg-primary/10 p-3 rounded-full">
+                <Users className="h-6 w-6 text-primary" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Members</p>
-                <p className="text-2xl font-bold">{members.length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Members</p>
+                <p className="text-2xl font-bold font-display">{members.length}</p>
               </div>
             </div>
           </CardContent>
@@ -367,12 +367,12 @@ export default function MembersPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-green-100 p-3 rounded-full">
-                <Award className="h-6 w-6 text-green-600" />
+              <div className="bg-chart-2/10 p-3 rounded-full">
+                <Award className="h-6 w-6 text-chart-2" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Members</p>
-                <p className="text-2xl font-bold">{members.filter(m => m.points > 0).length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Active Members</p>
+                <p className="text-2xl font-bold font-display">{members.filter(m => m.points > 0).length}</p>
               </div>
             </div>
           </CardContent>
@@ -381,12 +381,12 @@ export default function MembersPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-purple-100 p-3 rounded-full">
-                <Calendar className="h-6 w-6 text-purple-600" />
+              <div className="bg-chart-5/10 p-3 rounded-full">
+                <Calendar className="h-6 w-6 text-chart-5" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Avg Points</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm font-medium text-muted-foreground">Avg Points</p>
+                <p className="text-2xl font-bold font-display">
                   {(members.reduce((sum, m) => sum + Number(m.points), 0) / members.length || 0).toFixed(1)}
                 </p>
               </div>
@@ -415,13 +415,13 @@ export default function MembersPage() {
               </thead>
               <tbody>
                 {filteredMembers.map((member) => (
-                  <tr key={member.id} className="border-b hover:bg-gray-50">
+                  <tr key={member.id} className="border-b hover:bg-muted">
                     <td className="py-3 px-4">
                       <div className="font-medium">{member.name}</div>
                     </td>
                     <td className="py-3 px-4">
                       <div>{member.phone}</div>
-                      <div className="text-sm text-gray-500">{member.email}</div>
+                      <div className="text-sm text-muted-foreground">{member.email}</div>
                     </td>
                     <td className="py-3 px-4">
                       <Badge variant="secondary" className="flex items-center gap-1">

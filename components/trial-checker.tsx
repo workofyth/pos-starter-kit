@@ -63,35 +63,37 @@ export function TrialChecker() {
 
   if (isExpired) {
     return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-white/80 dark:bg-gray-950/80 backdrop-blur-md p-4">
-        <Card className="max-w-lg w-full border-none shadow-2xl overflow-hidden ring-1 ring-red-100 dark:ring-red-900/30">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 backdrop-blur-md p-4">
+        <Card className="max-w-lg w-full border-none shadow-soft-lg overflow-hidden ring-1 ring-destructive/20">
           <CardContent className="p-10 text-center">
-            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+            <div className="w-20 h-20 bg-destructive/10 text-destructive rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
               <AlertTriangle className="w-12 h-12" />
             </div>
-            <h2 className="text-3xl font-extrabold mb-4 tracking-tight">Your Trial has Expired!</h2>
-            <p className="text-gray-500 mb-8 leading-relaxed">
+            <h2 className="font-display text-3xl font-bold mb-4 tracking-tight">Your Trial has Expired!</h2>
+            <p className="text-muted-foreground mb-8 leading-relaxed">
               Your 14-day free trial of Talertech POS has ended. To continue managing your business, please subscribe to one of our premium plans.
             </p>
             <div className="grid grid-cols-1 gap-4">
-              <Button 
-                onClick={() => router.push("/payment-gateway?plan=yearly")} 
-                className="h-14 font-bold text-lg bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-500/20 rounded-2xl group"
+              <Button
+                onClick={() => router.push("/payment-gateway?plan=yearly")}
+                size="lg"
+                className="h-14 font-bold text-lg rounded-2xl group"
               >
                 <CreditCard className="w-5 h-5 mr-2" />
                 Upgrade to Yearly Plan
                 <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </Button>
-              <Button 
-                onClick={() => router.push("/payment-gateway?plan=monthly")} 
-                variant="outline" 
+              <Button
+                onClick={() => router.push("/payment-gateway?plan=monthly")}
+                variant="outline"
+                size="lg"
                 className="h-14 font-bold text-lg rounded-2xl border-2"
               >
                 Monthly Plan
               </Button>
-              <button 
+              <button
                 onClick={() => router.push("/payment-gateway?plan=permanent")}
-                className="text-sm font-bold text-blue-600 hover:underline mt-2"
+                className="text-sm font-bold text-primary hover:underline mt-2"
               >
                 Looking for Lifetime Access? Buy One Payment &rarr;
               </button>
@@ -106,15 +108,15 @@ export function TrialChecker() {
   if (daysRemaining !== null && daysRemaining <= 3 && daysRemaining > 0 && !isExpired) {
     return (
       <div className="fixed bottom-8 right-8 z-[90] animate-in slide-in-from-bottom-10 duration-500">
-        <div className="bg-amber-100 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 p-4 rounded-2xl shadow-xl flex items-center gap-4 max-w-sm">
-           <div className="w-10 h-10 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0">
+        <div className="bg-chart-3/10 border border-chart-3/30 p-4 rounded-2xl shadow-soft-lg flex items-center gap-4 max-w-sm">
+           <div className="w-10 h-10 rounded-full bg-chart-3 text-black flex items-center justify-center shrink-0">
               <AlertTriangle className="w-6 h-6" />
            </div>
            <div>
               <p className="font-bold text-sm">Trial expires in {daysRemaining} days</p>
-              <button 
+              <button
                 onClick={() => router.push("/payment-gateway?plan=yearly")}
-                className="text-[10px] font-bold text-amber-600 hover:underline uppercase"
+                className="text-[10px] font-bold text-chart-3 hover:underline uppercase"
               >
                 Upgrade Now &rarr;
               </button>

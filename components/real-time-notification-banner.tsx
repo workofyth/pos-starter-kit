@@ -236,30 +236,30 @@ export function RealTimeNotificationBanner() {
   const getNotificationIcon = (type: RealTimeNotification['type']) => {
     switch (type) {
       case 'stock_split_request':
-        return <Package className="h-5 w-5 text-blue-500" />;
+        return <Package className="h-5 w-5 text-primary" />;
       case 'stock_split_approved':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle className="h-5 w-5 text-chart-2" />;
       case 'stock_split_rejected':
-        return <XCircle className="h-5 w-5 text-red-500" />;
+        return <XCircle className="h-5 w-5 text-destructive" />;
       case 'stock_split_resent':
-        return <Clock className="h-5 w-5 text-yellow-500" />;
+        return <Clock className="h-5 w-5 text-chart-3" />;
       default:
-        return <Bell className="h-5 w-5 text-gray-500" />;
+        return <Bell className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
   const getNotificationColor = (type: RealTimeNotification['type']) => {
     switch (type) {
       case 'stock_split_request':
-        return 'bg-blue-50 border-blue-200';
+        return 'bg-primary/10 border-primary/20';
       case 'stock_split_approved':
-        return 'bg-green-50 border-green-200';
+        return 'bg-chart-2/10 border-chart-2/20';
       case 'stock_split_rejected':
-        return 'bg-red-50 border-red-200';
+        return 'bg-destructive/10 border-destructive/20';
       case 'stock_split_resent':
-        return 'bg-yellow-50 border-yellow-200';
+        return 'bg-chart-3/10 border-chart-3/20';
       default:
-        return 'bg-gray-50 border-gray-200';
+        return 'bg-muted border-border';
     }
   };
 
@@ -282,9 +282,9 @@ export function RealTimeNotificationBanner() {
   return (
     <div className="fixed top-4 right-4 z-50 w-80">
       {splitStockNotifications.map((notification) => (
-        <div 
+        <div
           key={notification.id}
-          className={`mb-2 p-4 border rounded-lg shadow-lg transform transition-all duration-300 ease-in-out ${getNotificationColor(notification.type)} ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}
+          className={`mb-2 p-4 border rounded-lg shadow-soft-lg transform transition-all duration-300 ease-in-out ${getNotificationColor(notification.type)} ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-full opacity-0'}`}
         >
           <div className="flex items-start">
             <div className="flex-shrink-0 mt-0.5">
@@ -292,25 +292,25 @@ export function RealTimeNotificationBanner() {
             </div>
             <div className="ml-3 flex-1">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-gray-900">{notification.title}</h4>
+                <h4 className="text-sm font-medium text-foreground">{notification.title}</h4>
                 <Badge variant="secondary" className="text-xs">
                   {notification.data?.branch}
                 </Badge>
               </div>
-              <p className="mt-1 text-sm text-gray-600">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {notification.message}
               </p>
               {notification.data && (
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   {notification.data.quantity} units of {notification.data.productId}
                 </p>
               )}
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-muted-foreground/70">
                 {new Date(notification.timestamp).toLocaleTimeString()}
               </p>
             </div>
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               size="sm"
               className="h-6 w-6 p-0 ml-2"
               onClick={() => handleMarkAsRead(notification.id)}

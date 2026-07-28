@@ -238,8 +238,8 @@ export default function CategoriesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Categories</h1>
-          <p className="text-gray-500">Manage product categories and codes</p>
+          <h1 className="text-2xl font-bold font-display">Categories</h1>
+          <p className="text-muted-foreground">Manage product categories and codes</p>
         </div>
         <div className="flex gap-2">
           {!isSubBranchUser && (
@@ -276,7 +276,7 @@ export default function CategoriesPage() {
                     onChange={(e) => setNewCategory({...newCategory, code: e.target.value.toUpperCase()})}
                     maxLength={3}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                  <p className="text-xs text-muted-foreground mt-1">Used for auto-generating SKUs</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Point per Purchase</label>
@@ -287,7 +287,7 @@ export default function CategoriesPage() {
                     value={newCategory.point}
                     onChange={(e) => setNewCategory({...newCategory, point: parseFloat(e.target.value) || 0})}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Points awarded for each product in this category</p>
+                  <p className="text-xs text-muted-foreground mt-1">Points awarded for each product in this category</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Description</label>
@@ -337,7 +337,7 @@ export default function CategoriesPage() {
                     onChange={(e) => setNewCategory({...newCategory, code: e.target.value.toUpperCase()})}
                     maxLength={3}
                   />
-                  <p className="text-xs text-gray-500 mt-1">Used for auto-generating SKUs</p>
+                  <p className="text-xs text-muted-foreground mt-1">Used for auto-generating SKUs</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium">Point per Purchase</label>
@@ -381,7 +381,7 @@ export default function CategoriesPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search categories by name or code..."
                 value={searchTerm}
@@ -423,12 +423,12 @@ export default function CategoriesPage() {
                     <Badge variant="secondary">{category.code}</Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                    <Badge variant="outline" className="bg-chart-3/10 text-chart-3 border-chart-3/20">
                       {category.point || 0} Pts
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {category.description || <span className="text-gray-400">No description</span>}
+                    {category.description || <span className="text-muted-foreground">No description</span>}
                   </TableCell>
                   <TableCell>{category.createdAt}</TableCell>
                   <TableCell>

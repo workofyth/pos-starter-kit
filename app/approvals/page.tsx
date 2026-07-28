@@ -410,15 +410,15 @@ export default function ApprovalsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Approval Requests</h1>
-          <p className="text-gray-500">Manage inventory split requests</p>
+          <h1 className="text-2xl font-bold font-display">Approval Requests</h1>
+          <p className="text-muted-foreground">Manage inventory split requests</p>
           {userBranchType === 'main' || isMainAdmin ? (
-            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+            <p className="text-sm text-primary mt-1">
               <Building className="inline h-4 w-4 mr-1" />
               Viewing all split requests across all branches
             </p>
           ) : userBranchType === 'sub' && userBranchId ? (
-            <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+            <p className="text-sm text-chart-2 mt-1">
               <Building2 className="inline h-4 w-4 mr-1" />
               Viewing split requests for your branch only
             </p>
@@ -427,12 +427,12 @@ export default function ApprovalsPage() {
       </div>
 
       {/* Tabs for different statuses */}
-      <div className="flex space-x-1 bg-gray-100 p-1 rounded-md w-fit">
+      <div className="flex space-x-1 bg-muted p-1 rounded-lg w-fit">
         <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'pending'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-card text-foreground shadow-soft'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() => setActiveTab('pending')}
         >
@@ -442,10 +442,10 @@ export default function ApprovalsPage() {
           </div>
         </button>
         <button
-          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             activeTab === 'approved'
-              ? 'bg-white text-gray-900 shadow'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-card text-foreground shadow-soft'
+              : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={() => setActiveTab('approved')}
         >
@@ -456,10 +456,10 @@ export default function ApprovalsPage() {
         </button>
         {(!userBranchType || userBranchType === 'main' || isMainAdmin) && (
           <button
-            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
               activeTab === 'rejected'
-                ? 'bg-white text-gray-900 shadow'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-card text-foreground shadow-soft'
+                : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => setActiveTab('rejected')}
           >
@@ -476,7 +476,7 @@ export default function ApprovalsPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search approval requests..."
                 value={searchTerm}
@@ -521,8 +521,8 @@ export default function ApprovalsPage() {
             {activeTab === 'rejected' && 'Rejected Stock Transfers'}
           </CardTitle>
           {activeTab === 'pending' && (
-            <p className="text-sm text-gray-500">
-              {userBranchType === 'sub' 
+            <p className="text-sm text-muted-foreground">
+              {userBranchType === 'sub'
                 ? 'Showing only pending stock transfer requests for your branch' 
                 : 'Showing all pending stock transfer requests'}
             </p>
@@ -544,11 +544,11 @@ export default function ApprovalsPage() {
             <TableBody>
               {filteredApprovals.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <div className="flex flex-col items-center justify-center">
-                      <Package className="h-12 w-12 text-gray-300 mb-2" />
-                      <p className="text-gray-500">No approval requests found</p>
-                      <p className="text-sm text-gray-400 mt-1">
+                      <Package className="h-12 w-12 text-muted-foreground/40 mb-2" />
+                      <p className="text-muted-foreground">No approval requests found</p>
+                      <p className="text-sm text-muted-foreground/70 mt-1">
                         {searchTerm ? 'Try adjusting your search criteria' : `No ${activeTab} requests`}
                       </p>
                     </div>
@@ -564,12 +564,12 @@ export default function ApprovalsPage() {
                         {userBranchType === 'sub' && userBranchId ? (
                           request.sourceBranchId === userBranchId ? (
                             <>
-                              <TrendingUp className="h-4 w-4 text-blue-500" />
+                              <TrendingUp className="h-4 w-4 text-primary" />
                               <span className="text-xs">Outgoing</span>
                             </>
                           ) : request.targetBranchId === userBranchId ? (
                             <>
-                              <TrendingDown className="h-4 w-4 text-green-500" />
+                              <TrendingDown className="h-4 w-4 text-chart-2" />
                               <span className="text-xs">Incoming</span>
                             </>
                           ) : (
@@ -630,7 +630,7 @@ export default function ApprovalsPage() {
           
           {/* Pagination */}
           <div className="flex justify-between items-center mt-4">
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               Showing page {approvalsPage} of {totalPages}
             </div>
             <div className="flex gap-2">
@@ -687,12 +687,12 @@ export default function ApprovalsPage() {
                     {userBranchType === 'sub' && userBranchId ? (
                       selectedRequest.sourceBranchId === userBranchId ? (
                         <div className="flex items-center gap-2">
-                          <TrendingUp className="h-4 w-4 text-blue-500" />
+                          <TrendingUp className="h-4 w-4 text-primary" />
                           <span>Outgoing to {selectedRequest.targetBranchName}</span>
                         </div>
                       ) : selectedRequest.targetBranchId === userBranchId ? (
                         <div className="flex items-center gap-2">
-                          <TrendingDown className="h-4 w-4 text-green-500" />
+                          <TrendingDown className="h-4 w-4 text-chart-2" />
                           <span>Incoming from {selectedRequest.sourceBranchName}</span>
                         </div>
                       ) : (

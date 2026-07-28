@@ -306,25 +306,25 @@ export function NotificationMenu() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'stock_split':
-        return <Package className="h-5 w-5 text-blue-500" />;
+        return <Package className="h-5 w-5 text-primary" />;
       case 'stock_split_request':
-        return <Package className="h-5 w-5 text-blue-500" />;
+        return <Package className="h-5 w-5 text-primary" />;
       case 'stock_split_approved':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle className="h-5 w-5 text-chart-2" />;
       case 'stock_split_rejected':
-        return <X className="h-5 w-5 text-red-500" />;
+        return <X className="h-5 w-5 text-destructive" />;
       case 'stock_split_resent':
-        return <Clock className="h-5 w-5 text-yellow-500" />;
+        return <Clock className="h-5 w-5 text-chart-3" />;
       case 'inventory_update':
-        return <Package className="h-5 w-5 text-green-500" />;
+        return <Package className="h-5 w-5 text-chart-2" />;
       case 'approval_request':
-        return <Clock className="h-5 w-5 text-yellow-500" />;
+        return <Clock className="h-5 w-5 text-chart-3" />;
       case 'approval_approved':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle className="h-5 w-5 text-chart-2" />;
       case 'approval_rejected':
-        return <X className="h-5 w-5 text-red-500" />;
+        return <X className="h-5 w-5 text-destructive" />;
       default:
-        return <AlertCircle className="h-5 w-5 text-gray-500" />;
+        return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
@@ -430,22 +430,22 @@ export function NotificationMenu() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-hidden">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Notifications</h3>
+          <h3 className="font-display font-semibold tracking-tight">Notifications</h3>
           {notifications.length > 0 && (
             <div className="flex gap-2">
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={markAllAsRead}
                 className="text-xs"
               >
                 Mark all read
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={clearAllNotifications}
-                className="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                className="text-xs text-destructive hover:text-destructive"
               >
                 Clear all
               </Button>
@@ -454,45 +454,45 @@ export function NotificationMenu() {
         </div>
         <div className="max-h-80 overflow-y-auto">
           {loading ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-muted-foreground">
               Loading notifications...
             </div>
           ) : notifications.length === 0 ? (
-            <div className="p-4 text-center text-sm text-gray-500">
+            <div className="p-4 text-center text-sm text-muted-foreground">
               No notifications
             </div>
           ) : (
             <div className="divide-y">
               {notifications
                 .filter(notification => notification.id) // Ensure notification has an ID
-                .filter((notification, index, self) => 
+                .filter((notification, index, self) =>
                   index === self.findIndex(n => n.id === notification.id) // Ensure unique IDs
                 )
                 .map((notification) => (
                   <div
                     key={notification.id}
-                    className={`p-3 ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
+                    className={`p-3 ${!notification.isRead ? 'bg-accent/40' : ''}`}
                   >
                   <div className="flex gap-3">
                     <div className="flex-shrink-0">
                       {getNotificationIcon(notification.type)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-medium ${!notification.isRead ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
+                      <p className={`text-sm font-medium ${!notification.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
                         {notification.title}
                       </p>
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {notification.message}
                       </p>
-                      <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                        {formatTimeAgo(notification.createdAt)} 
+                      <p className="text-xs text-muted-foreground/70 mt-1">
+                        {formatTimeAgo(notification.createdAt)}
                         {notification.branchName && ` • ${notification.branchName}`}
                       </p>
                     </div>
                     {!notification.isRead && (
-                      <button 
+                      <button
                         onClick={() => markAsRead(notification.id)}
-                        className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                        className="text-xs text-primary hover:underline"
                       >
                         Mark read
                       </button>

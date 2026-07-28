@@ -454,8 +454,8 @@ export default function POSPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">Point of Sale</h1>
-        <p className="text-gray-500">Process sales transactions</p>
+        <h1 className="text-2xl font-bold font-display">Point of Sale</h1>
+        <p className="text-muted-foreground">Process sales transactions</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
@@ -489,14 +489,14 @@ export default function POSPage() {
                     </Badge>
                   ))}
                   {selectedMember && (
-                    <div className="w-full mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex justify-between items-center">
+                    <div className="w-full mt-2 p-3 bg-primary/10 rounded-lg flex justify-between items-center">
                       <div>
-                        <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">Selected: {selectedMember.name}</p>
-                        <p className="text-xs text-blue-600 dark:text-blue-400">Available Points: <span className="font-bold">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
+                        <p className="text-sm font-semibold text-primary">Selected: {selectedMember.name}</p>
+                        <p className="text-xs text-primary">Available Points: <span className="font-bold">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
                       </div>
                       <Dialog open={isExchangeDialogOpen} onOpenChange={setIsExchangeDialogOpen}>
                         <DialogTrigger asChild>
-                          <Button size="sm" variant="outline" className="bg-white dark:bg-gray-800 border-blue-200 text-blue-700 hover:bg-blue-50">
+                          <Button size="sm" variant="outline" className="bg-card border-primary/20 text-primary hover:bg-primary/10">
                             <Gift className="h-4 w-4 mr-2" />
                             Exchange Points
                           </Button>
@@ -506,18 +506,18 @@ export default function POSPage() {
                             <DialogTitle>Exchange Points for Rewards</DialogTitle>
                           </DialogHeader>
                           <div className="space-y-4 py-4">
-                            <p className="text-sm text-gray-500">Your current points: <span className="font-bold text-blue-600">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
+                            <p className="text-sm text-muted-foreground">Your current points: <span className="font-bold text-primary">{Number(selectedMember.points).toLocaleString()} Pts</span></p>
                             <div className="max-h-64 overflow-y-auto space-y-2">
                               {exchangeRewards.map((reward) => (
-                                <div key={reward.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-gray-50">
+                                <div key={reward.id} className="flex justify-between items-center p-3 border border-border rounded-lg hover:bg-muted">
                                   <div>
                                     <h4 className="font-medium">{reward.exchangeItem}</h4>
-                                    <Badge variant="secondary" className="mt-1 bg-purple-50 text-purple-700 border-purple-100">
+                                    <Badge variant="secondary" className="mt-1 bg-chart-5/10 text-chart-5 border-chart-5/20">
                                       {Number(reward.pointExchangeTotal).toLocaleString()} Pts
                                     </Badge>
                                   </div>
-                                  <Button 
-                                    size="sm" 
+                                  <Button
+                                    size="sm"
                                     disabled={selectedMember.points < reward.pointExchangeTotal}
                                     onClick={() => addExchangeToCart(reward)}
                                   >
@@ -526,7 +526,7 @@ export default function POSPage() {
                                 </div>
                               ))}
                               {exchangeRewards.length === 0 && (
-                                <p className="text-center text-gray-500 py-4">No rewards available</p>
+                                <p className="text-center text-muted-foreground py-4">No rewards available</p>
                               )}
                             </div>
                           </div>
@@ -575,7 +575,7 @@ export default function POSPage() {
                 {productsList.filter(p => p.stock > 0).map((product) => (
                   <div 
                     key={`product-${product.id}-${product.branchId || 'main'}`}
-                    className="cursor-pointer hover:shadow-md transition-shadow border rounded-lg p-3"
+                    className="cursor-pointer hover:shadow-soft transition-shadow border border-border rounded-lg p-3"
                     onClick={() => addToCart(product)}
                   >
                     <div className="flex flex-col items-center text-center">
@@ -590,15 +590,15 @@ export default function POSPage() {
                           }}
                         />
                       ) : (
-                        <div className="bg-gray-200 border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
-                          <Package className="h-6 w-6 text-gray-400" />
+                        <div className="bg-muted border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
+                          <Package className="h-6 w-6 text-muted-foreground" />
                         </div>
                       )}
                       <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
-                      <p className="text-sm text-gray-500">Rp {(Number(product.customerPrice || product.sellingPrice) || 0).toLocaleString()}</p>
+                      <p className="text-sm text-muted-foreground">Rp {(Number(product.customerPrice || product.sellingPrice) || 0).toLocaleString()}</p>
                       <div className="mt-1 text-center w-full">
                         <p className="text-xs">Stock: {product.stock}</p>
-                        <p className="text-xs text-gray-500">{product.sku}</p>
+                        <p className="text-xs text-muted-foreground">{product.sku}</p>
                         {product.stock <= 5 && (
                           <Badge variant="destructive" className="mt-1 text-xs">Low Stock</Badge>
                         )}
@@ -622,7 +622,7 @@ export default function POSPage() {
             </CardHeader>
             <CardContent>
               {cart.length === 0 ? (
-                <p className="text-gray-500 text-center py-8">Cart is empty</p>
+                <p className="text-muted-foreground text-center py-8">Cart is empty</p>
               ) : (
                 <div className="space-y-4 max-h-96 overflow-y-auto">
                   {cart.map((item, idx) => (
@@ -630,9 +630,9 @@ export default function POSPage() {
                       <div className="min-w-0">
                         <h4 className="font-medium flex items-center gap-1 truncate">
                           {item.name}
-                          {item.isExchange && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-green-100 text-green-800">Reward</Badge>}
+                          {item.isExchange && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-chart-2/10 text-chart-2">Reward</Badge>}
                         </h4>
-                        <p className="text-sm text-gray-500 truncate">
+                        <p className="text-sm text-muted-foreground truncate">
                           {item.isExchange ? "Free" : `Rp ${(Number(item.price) || 0).toLocaleString()}`} x {item.quantity}
                         </p>
                       </div>

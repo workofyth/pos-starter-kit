@@ -308,7 +308,7 @@ export default function ReportingPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-[70vh]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-blue-600"></div>
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-primary"></div>
       </div>
     );
   }
@@ -317,8 +317,8 @@ export default function ReportingPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="print:hidden">
-          <h1 className="text-2xl font-bold">Reporting</h1>
-          <p className="text-gray-500">View business analytics and reports</p>
+          <h1 className="text-2xl font-bold font-display">Reporting</h1>
+          <p className="text-muted-foreground">View business analytics and reports</p>
         </div>
 
 
@@ -339,7 +339,7 @@ export default function ReportingPage() {
             (reportType === 'inventory' && inventoryData.length === 0) ||
             (reportType === 'mutation' && mutationData.length === 0)
           }>
-            <FileSpreadsheet className="h-4 w-4 mr-2 text-green-600" />
+            <FileSpreadsheet className="h-4 w-4 mr-2 text-chart-2" />
             Excel
           </Button>
 
@@ -351,7 +351,7 @@ export default function ReportingPage() {
       </div>
 
       <div className="hidden print:block mb-8">
-        <h1 className="text-3xl font-bold">
+        <h1 className="text-3xl font-bold font-display">
           {reportType === 'sales' ? 'Omset Report' : 'Business Report'} ({dateRange.toUpperCase()})
         </h1>
         <p>Generated on: {new Date().toLocaleString()}</p>
@@ -367,7 +367,7 @@ export default function ReportingPage() {
         <Button
           variant={reportType === "sales" ? "default" : "secondary"}
           onClick={() => setReportType("sales")}
-          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
+          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-primary"
         >
           Omset Detail
         </Button>
@@ -375,7 +375,7 @@ export default function ReportingPage() {
           <Button
             variant={reportType === "overview" ? "default" : "secondary"}
             onClick={() => setReportType("overview")}
-            className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
+            className="rounded-none border-b-2 border-transparent data-[variant=default]:border-primary"
           >
             Analytics Overview
           </Button>
@@ -383,14 +383,14 @@ export default function ReportingPage() {
         <Button
           variant={reportType === "inventory" ? "default" : "secondary"}
           onClick={() => setReportType("inventory")}
-          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
+          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-primary"
         >
           Inventory Info
         </Button>
         <Button
           variant={reportType === "mutation" ? "default" : "secondary"}
           onClick={() => setReportType("mutation")}
-          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-blue-600"
+          className="rounded-none border-b-2 border-transparent data-[variant=default]:border-primary"
         >
           Mutation Report
         </Button>
@@ -399,15 +399,15 @@ export default function ReportingPage() {
       {reportType === "overview" && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 print:hidden">
           {[
-            { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), color: "blue", icon: DollarSign },
-            { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), color: "green", icon: TrendingUp },
-            { label: "Transactions", val: stats.transactionsCount.toLocaleString(), color: "purple", icon: ShoppingCart },
-            { label: "Inventory Value (Est.)", val: formatCurrency(stats.inventoryValue), color: "yellow", icon: Package }
+            { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), colorClass: "bg-primary/10 text-primary", icon: DollarSign },
+            { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), colorClass: "bg-chart-2/10 text-chart-2", icon: TrendingUp },
+            { label: "Transactions", val: stats.transactionsCount.toLocaleString(), colorClass: "bg-chart-5/10 text-chart-5", icon: ShoppingCart },
+            { label: "Inventory Value (Est.)", val: formatCurrency(stats.inventoryValue), colorClass: "bg-chart-3/10 text-chart-3", icon: Package }
           ].map((s, i) => (
-            <Card key={i} className="border-none shadow-md bg-white dark:bg-gray-900 group transition-all">
+            <Card key={i} className="border-none shadow-soft bg-card group transition-all">
               <CardContent className="p-4">
                 <div className="flex items-center">
-                  <div className={`bg-${s.color}-100 dark:bg-${s.color}-900/30 p-3 rounded-2xl text-${s.color}-600 dark:text-${s.color}-400 group-hover:scale-110 transition-transform`}>
+                  <div className={`${s.colorClass} p-3 rounded-2xl group-hover:scale-110 transition-transform`}>
                     <s.icon className="h-6 w-6" />
                   </div>
                   <div className="ml-4">
@@ -493,7 +493,7 @@ export default function ReportingPage() {
                 </thead>
                 <tbody>
                   {topProducts.map((product, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
+                    <tr key={index} className="border-b hover:bg-muted/50">
                       <td className="py-3 px-4 font-medium">{product.name}</td>
                       <td className="py-3 px-4">{product.sold}</td>
                       <td className="py-3 px-4">{formatCurrency(product.revenue)}</td>
@@ -520,12 +520,12 @@ export default function ReportingPage() {
             {omzetLoading ? (
               <div className="py-10 text-center">Loading omzet details...</div>
             ) : omzetData.length === 0 ? (
-              <div className="py-10 text-center text-gray-500">No sales data found for this period.</div>
+              <div className="py-10 text-center text-muted-foreground">No sales data found for this period.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b bg-gray-50 dark:bg-gray-800">
+                    <tr className="border-b bg-muted">
                       <th className="text-left py-3 px-2 font-semibold">Product Name</th>
                       <th className="text-left py-3 px-2 font-semibold">Brand</th>
                       <th className="text-left py-3 px-2 font-semibold">Category</th>
@@ -536,21 +536,21 @@ export default function ReportingPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="bg-gray-100 dark:bg-gray-800 font-bold border-b-2 border-gray-300 dark:border-gray-600">
+                    <tr className="bg-muted font-bold border-b-2 border-border">
                       <td colSpan={3} className="py-3 px-2 text-right">GRAND TOTAL</td>
-                      <td className="text-right py-3 px-2 text-blue-600">{totalQty.toLocaleString()} PCS</td>
+                      <td className="text-right py-3 px-2 text-primary">{totalQty.toLocaleString()} PCS</td>
                       <td className="text-right py-3 px-2"></td>
-                      <td className="text-right py-3 px-2 text-red-600">Rp {totalPurchase.toLocaleString()}</td>
-                      <td className="text-right py-3 px-2 text-green-600">Rp {totalOmzet.toLocaleString()}</td>
+                      <td className="text-right py-3 px-2 text-destructive">Rp {totalPurchase.toLocaleString()}</td>
+                      <td className="text-right py-3 px-2 text-chart-2">Rp {totalOmzet.toLocaleString()}</td>
                     </tr>
-                    <tr className="bg-blue-50 dark:bg-blue-900/20 font-bold border-b-2 border-blue-100">
+                    <tr className="bg-primary/10 font-bold border-b-2 border-primary/20">
                       <td colSpan={6} className="py-4 px-2 text-right text-lg">TOTAL GROSS PROFIT</td>
-                      <td className="text-right py-4 px-2 text-lg text-blue-700 dark:text-blue-400">
+                      <td className="text-right py-4 px-2 text-lg text-primary">
                         Rp {(totalOmzet - totalPurchase).toLocaleString()}
                       </td>
                     </tr>
                     {omzetData.map((item, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                      <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-3 px-2">{item.productName}</td>
                         <td className="py-3 px-2">{item.brandName}</td>
                         <td className="py-3 px-2">{item.categoryName}</td>
@@ -577,26 +577,26 @@ export default function ReportingPage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm font-medium text-gray-600">Total Unique Items</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Unique Items</p>
                 <p className="text-2xl font-bold">{inventoryStats?.totalItems || 0}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm font-medium text-gray-600">Total Stock (PCS)</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Stock (PCS)</p>
                 <p className="text-2xl font-bold">{inventoryStats?.totalQuantity?.toLocaleString() || 0}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm font-medium text-gray-600">Low Stock Alerts</p>
-                <p className="text-2xl font-bold text-red-600">{inventoryStats?.lowStockCount || 0}</p>
+                <p className="text-sm font-medium text-muted-foreground">Low Stock Alerts</p>
+                <p className="text-2xl font-bold text-destructive">{inventoryStats?.lowStockCount || 0}</p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="p-4">
-                <p className="text-sm font-medium text-gray-600">Total Inventory Value</p>
-                <p className="text-2xl font-bold text-blue-600">Rp {inventoryStats?.totalValue?.toLocaleString() || 0}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Inventory Value</p>
+                <p className="text-2xl font-bold text-primary">Rp {inventoryStats?.totalValue?.toLocaleString() || 0}</p>
               </CardContent>
             </Card>
           </div>
@@ -612,7 +612,7 @@ export default function ReportingPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm border-collapse">
                     <thead>
-                      <tr className="border-b bg-gray-50 dark:bg-gray-800">
+                      <tr className="border-b bg-muted">
                         <th className="text-left py-3 px-2 font-semibold">SKU</th>
                         <th className="text-left py-3 px-2 font-semibold">Product Name</th>
                         <th className="text-left py-3 px-2 font-semibold">Category</th>
@@ -624,17 +624,17 @@ export default function ReportingPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      <tr className="bg-blue-50 dark:bg-blue-900/20 font-bold border-b-2 border-blue-100">
+                      <tr className="bg-primary/10 font-bold border-b-2 border-primary/20">
                         <td colSpan={3} className="py-3 px-2 text-right">TOTAL INVENTORY</td>
-                        <td className="text-right py-3 px-2 text-blue-700 dark:text-blue-400">{inventoryStats?.totalQuantity?.toLocaleString()} PCS</td>
+                        <td className="text-right py-3 px-2 text-primary">{inventoryStats?.totalQuantity?.toLocaleString()} PCS</td>
                         <td colSpan={3} className="py-3 px-2 text-right">TOTAL VALUE</td>
-                        <td className="text-right py-3 px-2 text-blue-700 dark:text-blue-400">Rp {inventoryStats?.totalValue?.toLocaleString()}</td>
+                        <td className="text-right py-3 px-2 text-primary">Rp {inventoryStats?.totalValue?.toLocaleString()}</td>
                       </tr>
                       {inventoryData.map((item, idx) => {
                         const isLow = (item.quantity || 0) <= (item.minStock || 0);
                         const val = (item.quantity || 0) * Number(item.purchasePrice || 0);
                         return (
-                          <tr key={idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                          <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
                             <td className="py-3 px-2 font-mono text-xs">{item.sku}</td>
                             <td className="py-3 px-2">{item.productName}</td>
                             <td className="py-3 px-2">{item.categoryName}</td>
@@ -644,7 +644,7 @@ export default function ReportingPage() {
                               {isLow ? (
                                 <Badge variant="destructive">LOW STOCK</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-green-600 border-green-600">OK</Badge>
+                                <Badge variant="outline" className="text-chart-2 border-chart-2">OK</Badge>
                               )}
                             </td>
                             <td className="text-right py-3 px-2">Rp {Number(item.purchasePrice).toLocaleString()}</td>
@@ -672,12 +672,12 @@ export default function ReportingPage() {
             {mutLoading ? (
               <div className="py-10 text-center">Loading mutation details...</div>
             ) : mutationData.length === 0 ? (
-              <div className="py-10 text-center text-gray-500">No mutation data found for this period.</div>
+              <div className="py-10 text-center text-muted-foreground">No mutation data found for this period.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm border-collapse">
                   <thead>
-                    <tr className="border-b bg-gray-50 dark:bg-gray-800">
+                    <tr className="border-b bg-muted">
                       <th className="text-left py-3 px-2 font-semibold">Product Name</th>
                       <th className="text-right py-3 px-2 font-semibold">Qty (PCS)</th>
                       <th className="text-left py-3 px-2 font-semibold">Store / Customer</th>
@@ -690,10 +690,10 @@ export default function ReportingPage() {
                   </thead>
                   <tbody>
                     {mutationData.map((item, idx) => (
-                      <tr key={idx} className="border-b hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors">
+                      <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
                         <td className="py-3 px-2 font-medium">{item.productName}</td>
                         <td className="text-right py-3 px-2">
-                          <Badge variant={item.type === 'in' || item.type === 'receive' ? 'outline' : 'secondary'} className={item.type === 'in' || item.type === 'receive' ? 'text-green-600' : ''}>
+                          <Badge variant={item.type === 'in' || item.type === 'receive' ? 'outline' : 'secondary'} className={item.type === 'in' || item.type === 'receive' ? 'text-chart-2' : ''}>
                             {item.type === 'in' || item.type === 'receive' ? '+' : '-'}{Math.abs(item.quantity)}
                           </Badge>
                         </td>
@@ -702,7 +702,7 @@ export default function ReportingPage() {
                           <Badge variant="outline" className="capitalize">{item.type}</Badge>
                         </td>
                         <td className="py-3 px-2 font-mono text-xs">{item.referenceId}</td>
-                        <td className="py-3 px-2 text-gray-500">
+                        <td className="py-3 px-2 text-muted-foreground">
                           {new Date(item.createdAt).toLocaleString()}
                         </td>
                         <td className="text-right py-3 px-2">{item.stockBefore}</td>
@@ -723,8 +723,8 @@ export default function ReportingPage() {
             <CardTitle>Financial Report</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-gray-500">Detailed financial report showing profit, expenses, and cash flow.</p>
-            <div className="mt-4 h-64 flex items-center justify-center bg-gray-50 rounded-md">
+            <p className="text-muted-foreground">Detailed financial report showing profit, expenses, and cash flow.</p>
+            <div className="mt-4 h-64 flex items-center justify-center bg-muted rounded-lg">
               <p>Financial report content would appear here</p>
             </div>
           </CardContent>

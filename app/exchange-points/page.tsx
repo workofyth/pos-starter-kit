@@ -206,8 +206,8 @@ export default function ExchangePointsPage() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Exchange Member Points</h1>
-          <p className="text-gray-500">Configure point rewards and items</p>
+          <h1 className="text-2xl font-bold font-display">Exchange Member Points</h1>
+          <p className="text-muted-foreground">Configure point rewards and items</p>
         </div>
         {!isSubBranchUser && (
           <Dialog open={isAddDialogOpen} onOpenChange={(open) => {
@@ -266,7 +266,7 @@ export default function ExchangePointsPage() {
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">If linked, this product will be added to cart on exchange.</p>
+                  <p className="text-xs text-muted-foreground mt-1">If linked, this product will be added to cart on exchange.</p>
                 </div>
               </div>
               <Button onClick={createItem} disabled={isSubmitting}>
@@ -280,7 +280,7 @@ export default function ExchangePointsPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative">
-            <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+            <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Search rewards..."
               value={searchTerm}
@@ -310,7 +310,7 @@ export default function ExchangePointsPage() {
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">{item.exchangeItem}</TableCell>
                   <TableCell>
-                    <Badge className="bg-purple-100 text-purple-800 border-purple-200">
+                    <Badge className="bg-chart-5/10 text-chart-5 border-chart-5/20">
                       {item.pointExchangeTotal} Pts
                     </Badge>
                   </TableCell>

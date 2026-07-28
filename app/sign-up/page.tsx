@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { signUp } from "@/lib/auth-client";
 import { Loader2, Eye, EyeOff } from "lucide-react";
+import Image from "next/image";
 
 const signUpSchema = z.object({
     name: z.string().min(2, "Name must be at least 2 characters"),
@@ -71,10 +72,17 @@ export default function SignUpPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
-            <Card className="w-full max-w-md">
+        <div className="relative min-h-screen flex items-center justify-center bg-background px-4 py-8 overflow-hidden">
+            <div className="pointer-events-none absolute inset-0 z-0">
+                <div className="absolute -top-24 right-[10%] h-72 w-72 rounded-full bg-primary/10 blur-[100px]" />
+                <div className="absolute bottom-0 left-[8%] h-64 w-64 rounded-full bg-chart-3/15 blur-[100px]" />
+            </div>
+            <Card className="relative z-10 w-full max-w-md">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
+                    <div className="mx-auto mb-2 flex size-12 items-center justify-center overflow-hidden rounded-xl bg-card ring-1 ring-border shadow-soft">
+                        <Image src="/assets/images/products/default_logo_png.png" alt="Logo" width={48} height={48} className="size-full object-contain p-1.5" />
+                    </div>
+                    <CardTitle className="font-display text-2xl font-bold tracking-tight">Create account</CardTitle>
                     <CardDescription>
                         Enter your details to create a new account
                     </CardDescription>

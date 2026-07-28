@@ -100,17 +100,17 @@ export default function NotificationsPage() {
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'stock_split':
-        return <Package className="h-5 w-5 text-blue-500" />;
+        return <Package className="h-5 w-5 text-primary" />;
       case 'inventory_update':
-        return <Package className="h-5 w-5 text-green-500" />;
+        return <Package className="h-5 w-5 text-chart-2" />;
       case 'approval_request':
-        return <Clock className="h-5 w-5 text-yellow-500" />;
+        return <Clock className="h-5 w-5 text-chart-3" />;
       case 'approval_approved':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
+        return <CheckCircle className="h-5 w-5 text-chart-2" />;
       case 'approval_rejected':
-        return <X className="h-5 w-5 text-red-500" />;
+        return <X className="h-5 w-5 text-destructive" />;
       default:
-        return <AlertCircle className="h-5 w-5 text-gray-500" />;
+        return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
@@ -184,7 +184,7 @@ export default function NotificationsPage() {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex flex-col flex-1 overflow-hidden">
         <Header />
@@ -192,8 +192,8 @@ export default function NotificationsPage() {
           <div className="max-w-6xl mx-auto space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <div>
-                <h1 className="text-2xl font-bold">Notifications</h1>
-                <p className="text-gray-500">All your notifications in one place</p>
+                <h1 className="text-2xl font-bold font-display">Notifications</h1>
+                <p className="text-muted-foreground">All your notifications in one place</p>
               </div>
               {notifications.some(n => !n.isRead) && (
                 <Button onClick={markAllAsRead} variant="outline">
@@ -206,23 +206,23 @@ export default function NotificationsPage() {
             {Object.keys(groupedNotifications).length === 0 ? (
               <Card>
                 <CardContent className="p-12 text-center">
-                  <Bell className="h-12 w-12 mx-auto text-gray-400 mb-4" />
-                  <h3 className="text-lg font-medium mb-2">No notifications</h3>
-                  <p className="text-gray-500">You don&apos;t have any notifications yet.</p>
+                  <Bell className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2 font-display">No notifications</h3>
+                  <p className="text-muted-foreground">You don&apos;t have any notifications yet.</p>
                 </CardContent>
               </Card>
             ) : (
               <div className="space-y-6">
                 {Object.entries(groupedNotifications).map(([date, notifications]) => (
                   <div key={date}>
-                    <h2 className="text-lg font-semibold mb-4 pl-4 border-l-4 border-blue-500">
+                    <h2 className="text-lg font-semibold mb-4 pl-4 border-l-4 border-primary font-display">
                       {new Date(date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                     </h2>
                     <div className="space-y-3">
                       {notifications.map((notification) => (
-                        <Card 
-                          key={notification.id} 
-                          className={`border-l-4 ${notification.isRead ? 'border-l-gray-300' : 'border-l-blue-500'} ${!notification.isRead ? 'bg-gray-50 dark:bg-gray-800' : ''}`}
+                        <Card
+                          key={notification.id}
+                          className={`border-l-4 ${notification.isRead ? 'border-l-border' : 'border-l-primary'} ${!notification.isRead ? 'bg-muted/50' : ''}`}
                         >
                           <CardContent className="p-4">
                             <div className="flex items-start gap-3">
@@ -231,17 +231,17 @@ export default function NotificationsPage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
-                                  <h3 className={`font-medium ${!notification.isRead ? 'text-gray-900 dark:text-gray-100' : 'text-gray-600 dark:text-gray-400'}`}>
+                                  <h3 className={`font-medium ${!notification.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>
                                     {notification.title}
                                   </h3>
                                   {!notification.isRead && (
                                     <Badge variant="secondary" className="ml-2">New</Badge>
                                   )}
                                 </div>
-                                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                <p className="text-sm text-muted-foreground mt-1">
                                   {notification.message}
                                 </p>
-                                <div className="flex items-center gap-4 mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
                                   <span>{formatDate(notification.createdAt)}</span>
                                   {notification.branchName && (
                                     <span>• {notification.branchName}</span>
@@ -258,9 +258,9 @@ export default function NotificationsPage() {
                                   onClick={() => markAsRead(notification.id, !notification.isRead)}
                                 >
                                   {notification.isRead ? (
-                                    <Mail className="h-4 w-4 text-gray-500" />
+                                    <Mail className="h-4 w-4 text-muted-foreground" />
                                   ) : (
-                                    <MailOpen className="h-4 w-4 text-blue-500" />
+                                    <MailOpen className="h-4 w-4 text-primary" />
                                   )}
                                 </Button>
                               </div>

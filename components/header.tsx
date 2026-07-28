@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "@/lib/auth-client";
-import { MoonIcon, SunIcon, LogOut, Bell } from "lucide-react";
+import { MoonIcon, SunIcon, LogOut, Menu } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { UserRole } from "@/lib/role-based-access";
 import { useEffect, useState } from "react";
 import { NotificationMenu } from "@/components/notification-menu";
@@ -96,33 +97,21 @@ export function Header() {
     <Sheet>
       <SheetTrigger asChild>
         <Button variant="outline" size="icon">
+          <Menu className="size-5" />
           <span className="sr-only">Open menu</span>
-          <svg
-            className="h-5 w-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-              d="M4 6h16M4 12h16M4 18h16"
-            ></path>
-          </svg>
         </Button>
       </SheetTrigger>
-      <SheetContent side="left" className="w-64 p-0 bg-slate-900 border-slate-800 text-slate-50">
-        <SheetHeader className="p-8 border-b border-slate-800 flex flex-col items-center justify-center">
-          <img 
-            src={logoUrl} 
-            alt="Logo" 
-            className="w-20 h-20 rounded-xl object-contain brightness-0 invert mb-2" 
+      <SheetContent side="left" className="bg-sidebar text-sidebar-foreground border-sidebar-border w-64 p-0">
+        <SheetHeader className="border-sidebar-border flex flex-col items-center justify-center gap-2 border-b p-6">
+          <img
+            src={logoUrl}
+            alt="Logo"
+            className="bg-card ring-border size-16 rounded-xl object-contain p-1 shadow-soft ring-1"
           />
-          <SheetTitle className="text-xl font-bold tracking-tight text-slate-50">POS System</SheetTitle>
+          <SheetTitle className="font-display text-lg font-bold tracking-tight">POS System</SheetTitle>
         </SheetHeader>
         <nav className="mt-4">
-          <ul className="space-y-1 px-2">
+          <ul className="space-y-1 px-3">
             {filteredItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               const Icon = item.icon;
@@ -134,13 +123,13 @@ export function Header() {
                       <Button
                         variant="ghost"
                         className={cn(
-                          "w-full justify-start space-x-2 px-4 py-3 rounded-lg",
-                          isActive 
-                            ? "bg-primary text-primary-foreground" 
-                            : "text-slate-400 hover:bg-slate-800 hover:text-slate-50"
+                          "w-full justify-start gap-3 rounded-lg px-3.5 py-2.5 font-medium",
+                          isActive
+                            ? "bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground"
+                            : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                         )}
                       >
-                        <Icon className="h-5 w-5" />
+                        <Icon className="size-[18px]" />
                         <span>{item.title}</span>
                       </Button>
                     </Link>
@@ -156,13 +145,13 @@ export function Header() {
 
   if (isPending) {
     return (
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
+      <header className="bg-background/80 border-border flex h-16 items-center border-b px-4 backdrop-blur-sm md:px-6">
         <div className="flex items-center gap-4">
           <div className="md:hidden">
             <MobileNav />
           </div>
         </div>
-        <div className="flex items-center gap-4 ml-auto">
+        <div className="ml-auto flex items-center gap-4">
           <Button
             variant="outline"
             size="icon"
@@ -170,17 +159,17 @@ export function Header() {
           >
             {theme === "dark" ? (
               <>
-                <SunIcon className="h-5 w-5" />
+                <SunIcon className="size-5" />
                 <span className="sr-only">Light mode</span>
               </>
             ) : (
               <>
-                <MoonIcon className="h-5 w-5" />
+                <MoonIcon className="size-5" />
                 <span className="sr-only">Dark mode</span>
               </>
             )}
           </Button>
-          <div className="h-8 w-8 rounded-full bg-gray-200 animate-pulse"></div>
+          <div className="bg-muted size-8 animate-pulse rounded-full"></div>
         </div>
       </header>
     );
@@ -188,13 +177,13 @@ export function Header() {
 
   if (!session?.user) {
     return (
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
+      <header className="bg-background/80 border-border flex h-16 items-center border-b px-4 backdrop-blur-sm md:px-6">
         <div className="flex items-center gap-4">
           <div className="md:hidden">
             <MobileNav />
           </div>
         </div>
-        <div className="flex items-center gap-4 ml-auto">
+        <div className="ml-auto flex items-center gap-4">
           <Button
             variant="outline"
             size="icon"
@@ -202,12 +191,12 @@ export function Header() {
           >
             {theme === "dark" ? (
               <>
-                <SunIcon className="h-5 w-5" />
+                <SunIcon className="size-5" />
                 <span className="sr-only">Light mode</span>
               </>
             ) : (
               <>
-                <MoonIcon className="h-5 w-5" />
+                <MoonIcon className="size-5" />
                 <span className="sr-only">Dark mode</span>
               </>
             )}
@@ -227,13 +216,13 @@ export function Header() {
     : user.email?.[0]?.toUpperCase() || "U";
 
   return (
-    <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 h-16 flex items-center px-4 md:px-6">
+    <header className="bg-background/80 border-border flex h-16 items-center border-b px-4 backdrop-blur-sm md:px-6">
       <div className="flex items-center gap-4">
         <div className="md:hidden">
           <MobileNav />
         </div>
       </div>
-      <div className="flex items-center gap-4 ml-auto">
+      <div className="ml-auto flex items-center gap-3">
         <Button
           variant="outline"
           size="icon"
@@ -241,40 +230,49 @@ export function Header() {
         >
           {theme === "dark" ? (
             <>
-              <SunIcon className="h-5 w-5" />
+              <SunIcon className="size-5" />
               <span className="sr-only">Light mode</span>
             </>
           ) : (
             <>
-              <MoonIcon className="h-5 w-5" />
+              <MoonIcon className="size-5" />
               <span className="sr-only">Dark mode</span>
             </>
           )}
         </Button>
-        
+
         {/* Notification Menu */}
         <NotificationMenu />
-        
+
         {/* Display the role and branch information */}
         {userRole && (
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded capitalize">
+          <div className="hidden items-center gap-2 sm:flex">
+            <Badge variant="secondary" className="capitalize">
               {userRole}
-            </span>
+            </Badge>
             {(branchType || isMainAdmin) && (
-              <span className={`text-xs px-2 py-1 rounded ${isMainAdmin ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100' : branchType === 'main' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100' : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100'}`}>
+              <Badge
+                variant="outline"
+                className={cn(
+                  isMainAdmin
+                    ? "border-chart-5/30 bg-chart-5/10 text-chart-5"
+                    : branchType === 'main'
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : "border-chart-2/30 bg-chart-2/10 text-chart-2"
+                )}
+              >
                 {isMainAdmin ? 'Main Admin' : branchType === 'main' ? 'Main Branch' : 'Sub Branch'}
-              </span>
+              </Badge>
             )}
           </div>
         )}
-        
+
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-              <Avatar className="h-8 w-8">
+            <Button variant="ghost" className="relative h-9 w-9 rounded-full p-0">
+              <Avatar className="h-9 w-9">
                 <AvatarImage src={user.image || undefined} alt={user.name || "User"} />
-                <AvatarFallback>{initials}</AvatarFallback>
+                <AvatarFallback className="bg-primary/10 text-primary font-semibold">{initials}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
@@ -301,8 +299,8 @@ export function Header() {
                 )}
               </div>
             </div>
-            <DropdownMenuItem 
-              onClick={() => signOut()} 
+            <DropdownMenuItem
+              onClick={() => signOut()}
               className="cursor-pointer"
             >
               <LogOut className="mr-2 h-4 w-4" />

@@ -28,10 +28,10 @@ function renderMessageContent(content: string) {
     
     if (filteredRows.length > 0) {
       result.push(
-        <div key={`table-${index}`} className="my-2 border rounded-md overflow-hidden bg-white/50 dark:bg-black/20">
+        <div key={`table-${index}`} className="my-2 border rounded-lg overflow-hidden bg-card/50">
           <table className="w-full text-xs border-collapse">
             <thead>
-              <tr className="bg-yellow-50 dark:bg-yellow-900/10 border-b">
+              <tr className="bg-chart-3/10 border-b">
                 {filteredRows[0].map((cell, i) => (
                   <th key={i} className="p-2 text-left font-bold border-r last:border-r-0">{cell.trim()}</th>
                 ))}
@@ -39,7 +39,7 @@ function renderMessageContent(content: string) {
             </thead>
             <tbody>
               {filteredRows.slice(1).map((row, i) => (
-                <tr key={i} className="border-b last:border-b-0 hover:bg-yellow-50/50">
+                <tr key={i} className="border-b last:border-b-0 hover:bg-chart-3/10">
                   {row.map((cell, j) => (
                     <td key={j} className="p-2 border-r last:border-r-0 whitespace-nowrap">
                       {cell.trim().startsWith('Rp') || !isNaN(Number(cell.trim().replace(/[,.]/g, ''))) ? (
@@ -73,8 +73,8 @@ function renderMessageContent(content: string) {
       if (inTable) flushTable(index);
       
       // Simple bold and line break handling
-      const formattedLine = line.split('**').map((part, i) => 
-        i % 2 === 1 ? <strong key={i} className="text-yellow-700 dark:text-yellow-400 font-bold">{part}</strong> : part
+      const formattedLine = line.split('**').map((part, i) =>
+        i % 2 === 1 ? <strong key={i} className="text-chart-3 font-bold">{part}</strong> : part
       );
       
       result.push(<p key={index} className={cn("min-h-[1em]", line.trim() === "" ? "my-1" : "")}>{formattedLine.length > 0 ? formattedLine : " "}</p>);
@@ -137,9 +137,9 @@ export function Chatbot() {
     <div className="fixed bottom-6 right-6 z-50">
       {/* Floating Button */}
       {!isOpen && (
-        <Button 
+        <Button
           onClick={() => setIsOpen(true)}
-          className="h-14 w-14 rounded-full shadow-2xl bg-yellow-400 hover:bg-yellow-500 text-black border-none"
+          className="h-14 w-14 rounded-full shadow-soft-lg bg-chart-3 hover:bg-chart-3/90 text-black border-none"
         >
           <MessageSquare className="h-6 w-6" />
         </Button>
@@ -147,8 +147,8 @@ export function Chatbot() {
 
       {/* Chat Window */}
       {isOpen && (
-        <Card className="w-[400px] h-[550px] flex flex-col shadow-2xl border-yellow-100 bg-white dark:bg-gray-900 animate-in slide-in-from-bottom-5 duration-300">
-          <CardHeader className="flex flex-row items-center justify-between p-4 bg-yellow-400 text-black rounded-t-xl border-none">
+        <Card className="w-[400px] h-[550px] flex flex-col shadow-soft-lg border-chart-3/20 bg-card animate-in slide-in-from-bottom-5 duration-300">
+          <CardHeader className="flex flex-row items-center justify-between p-4 bg-chart-3 text-black rounded-t-xl border-none">
             <div className="flex items-center gap-2">
               <Bot className="h-5 w-5" />
               <CardTitle className="text-lg">POS AI Assistant</CardTitle>
@@ -175,16 +175,16 @@ export function Chatbot() {
                     )}
                   >
                     <div className={cn(
-                      "h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-sm",
-                      msg.role === "assistant" ? "bg-yellow-100 text-yellow-600" : "bg-gray-100 text-gray-600"
+                      "h-8 w-8 rounded-full flex items-center justify-center shrink-0 shadow-soft",
+                      msg.role === "assistant" ? "bg-chart-3/15 text-chart-3" : "bg-primary/10 text-primary"
                     )}>
                       {msg.role === "assistant" ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
                     </div>
                     <div className={cn(
-                      "p-3 rounded-2xl text-sm shadow-sm prose prose-sm max-w-full overflow-x-auto",
-                      msg.role === "assistant" 
-                        ? "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-yellow-50" 
-                        : "bg-yellow-400 text-black font-medium"
+                      "p-3 rounded-2xl text-sm shadow-soft prose prose-sm max-w-full overflow-x-auto",
+                      msg.role === "assistant"
+                        ? "bg-muted text-foreground border border-transparent"
+                        : "bg-primary text-primary-foreground font-medium"
                     )}>
                       {renderMessageContent(msg.content)}
                     </div>
@@ -192,12 +192,12 @@ export function Chatbot() {
                 ))}
                 {isLoading && (
                   <div className="flex gap-3">
-                    <div className="h-8 w-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center animate-pulse">
+                    <div className="h-8 w-8 rounded-full bg-chart-3/15 text-chart-3 flex items-center justify-center animate-pulse">
                       <Bot className="h-4 w-4" />
                     </div>
-                    <div className="p-3 rounded-2xl bg-white dark:bg-gray-800 border border-yellow-50 shadow-sm flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-                      <span className="text-xs text-gray-500">Berfikir...</span>
+                    <div className="p-3 rounded-2xl bg-muted border border-transparent shadow-soft flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-chart-3" />
+                      <span className="text-xs text-muted-foreground">Berfikir...</span>
                     </div>
                   </div>
                 )}
@@ -205,23 +205,23 @@ export function Chatbot() {
             </ScrollArea>
           </CardContent>
 
-          <CardFooter className="p-4 border-t bg-gray-50/50 dark:bg-gray-900 rounded-b-xl">
-            <form 
+          <CardFooter className="p-4 border-t bg-muted/50 rounded-b-xl">
+            <form
               onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
               className="flex w-full gap-2"
             >
-              <Input 
+              <Input
                 placeholder="Tanyakan tentang stok atau penjualan..."
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 autoComplete="off"
-                className="flex-1 bg-white dark:bg-gray-800 border-yellow-100 focus-visible:ring-yellow-400"
+                className="flex-1 bg-card border-chart-3/20 focus-visible:ring-chart-3"
               />
-              <Button 
-                type="submit" 
-                size="icon" 
+              <Button
+                type="submit"
+                size="icon"
                 disabled={isLoading || !input.trim()}
-                className="bg-yellow-400 hover:bg-yellow-500 text-black border-none"
+                className="bg-chart-3 hover:bg-chart-3/90 text-black border-none"
               >
                 <Send className="h-4 w-4" />
               </Button>

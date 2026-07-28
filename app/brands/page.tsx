@@ -231,8 +231,8 @@ export default function BrandsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Brand Management</h1>
-          <p className="text-gray-500">Manage product brands and identity</p>
+          <h1 className="text-2xl font-bold font-display">Brand Management</h1>
+          <p className="text-muted-foreground">Manage product brands and identity</p>
         </div>
         <div className="flex gap-2">
           {!isSubBranchUser && (
@@ -351,7 +351,7 @@ export default function BrandsPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search brands by name or code..."
                 value={searchTerm}
@@ -386,7 +386,7 @@ export default function BrandsPage() {
             <TableBody>
               {filteredBrands.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                     No brands found
                   </TableCell>
                 </TableRow>
@@ -398,7 +398,7 @@ export default function BrandsPage() {
                       <Badge variant="secondary">{brand.code}</Badge>
                     </TableCell>
                     <TableCell>
-                      {brand.description || <span className="text-gray-400">No description</span>}
+                      {brand.description || <span className="text-muted-foreground">No description</span>}
                     </TableCell>
                     <TableCell>
                       {brand.createdAt ? new Date(brand.createdAt).toLocaleDateString() : '-'}

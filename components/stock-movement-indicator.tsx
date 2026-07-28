@@ -40,13 +40,13 @@ export function StockMovementIndicator({
   
   return (
     <div className={`inline-flex items-center ml-2 text-xs font-medium transition-all duration-500 ${
-      isAnimating 
-        ? movement > 0 
-          ? 'text-green-600 animate-pulse' 
-          : 'text-red-600 animate-pulse'
-        : movement > 0 
-          ? 'text-green-500' 
-          : 'text-red-500'
+      isAnimating
+        ? movement > 0
+          ? 'text-chart-2 animate-pulse'
+          : 'text-destructive animate-pulse'
+        : movement > 0
+          ? 'text-chart-2'
+          : 'text-destructive'
     }`}>
       {movement > 0 ? (
         <TrendingUp className="w-3 h-3 mr-1" />

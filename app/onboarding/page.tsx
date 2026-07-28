@@ -46,19 +46,23 @@ export default function OnboardingPage() {
     ];
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex items-center justify-center p-4">
-            <div className="max-w-2xl w-full">
+        <div className="relative min-h-screen bg-background flex items-center justify-center p-4 overflow-hidden">
+            <div className="pointer-events-none absolute inset-0 z-0">
+                <div className="absolute -top-24 left-[10%] h-72 w-72 rounded-full bg-primary/10 blur-[100px]" />
+                <div className="absolute bottom-0 right-[8%] h-64 w-64 rounded-full bg-chart-3/15 blur-[100px]" />
+            </div>
+            <div className="relative z-10 max-w-2xl w-full">
                 <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-blue-600/20">
-                        <Rocket className="text-white w-10 h-10" />
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-soft-lg">
+                        <Rocket className="text-primary-foreground w-8 h-8" />
                     </div>
-                    <h1 className="text-3xl font-extrabold tracking-tight">Set Up Your POS</h1>
-                    <p className="text-gray-500 mt-2">Just a few more details to get your business running</p>
+                    <h1 className="font-display text-3xl font-bold tracking-tight">Set up your POS</h1>
+                    <p className="text-muted-foreground mt-2">Just a few more details to get your business running</p>
                 </div>
 
-                <Card className="border-none shadow-2xl overflow-hidden">
-                    <CardHeader className="bg-gray-50 dark:bg-gray-900 border-b p-8">
-                        <CardTitle>Business Identity</CardTitle>
+                <Card className="overflow-hidden p-0">
+                    <CardHeader className="bg-muted/50 border-b p-8">
+                        <CardTitle className="font-display tracking-tight">Business Identity</CardTitle>
                         <CardDescription>This information will appear on your receipts and reports.</CardDescription>
                     </CardHeader>
                     <CardContent className="p-8">
@@ -66,43 +70,43 @@ export default function OnboardingPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold flex items-center gap-2">
-                                        <Store className="w-4 h-4 text-blue-600" />
+                                        <Store className="w-4 h-4 text-primary" />
                                         Store Name
                                     </label>
-                                    <input 
+                                    <input
                                         required
                                         value={formData.storeName}
                                         onChange={(e) => setFormData({...formData, storeName: e.target.value})}
                                         placeholder="e.g. Talertech Vape Jakarta"
-                                        className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-600 outline-none transition-all"
+                                        className="w-full h-12 px-4 rounded-xl bg-muted border border-transparent focus:border-ring outline-none transition-all"
                                     />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-sm font-bold flex items-center gap-2">
-                                        <MessageCircle className="w-4 h-4 text-green-500" />
+                                        <MessageCircle className="w-4 h-4 text-chart-2" />
                                         WhatsApp Number
                                     </label>
-                                    <input 
+                                    <input
                                         required
                                         value={formData.whatsapp}
                                         onChange={(e) => setFormData({...formData, whatsapp: e.target.value})}
                                         placeholder="e.g. 08123456789"
-                                        className="w-full h-12 px-4 rounded-xl bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-600 outline-none transition-all"
+                                        className="w-full h-12 px-4 rounded-xl bg-muted border border-transparent focus:border-ring outline-none transition-all"
                                     />
                                 </div>
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm font-bold flex items-center gap-2">
-                                    <MapPin className="w-4 h-4 text-red-500" />
+                                    <MapPin className="w-4 h-4 text-destructive" />
                                     Store Address
                                 </label>
-                                <textarea 
+                                <textarea
                                     required
                                     value={formData.address}
                                     onChange={(e) => setFormData({...formData, address: e.target.value})}
                                     placeholder="Full address of your main branch"
-                                    className="w-full h-24 p-4 rounded-xl bg-gray-100 dark:bg-gray-800 border-transparent focus:border-blue-600 outline-none transition-all resize-none"
+                                    className="w-full h-24 p-4 rounded-xl bg-muted border border-transparent focus:border-ring outline-none transition-all resize-none"
                                 />
                             </div>
 
@@ -110,26 +114,27 @@ export default function OnboardingPage() {
                                 <label className="text-sm font-bold">What type of business is this?</label>
                                 <div className="grid grid-cols-3 gap-4">
                                     {storeTypes.map((t) => (
-                                        <div 
+                                        <div
                                             key={t.id}
                                             onClick={() => setFormData({...formData, storeType: t.id})}
                                             className={`cursor-pointer p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 text-center ${
-                                                formData.storeType === t.id 
-                                                ? 'border-blue-600 bg-blue-50 dark:bg-blue-900/20 text-blue-600' 
-                                                : 'border-gray-100 dark:border-gray-800 hover:border-gray-200'
+                                                formData.storeType === t.id
+                                                ? 'border-primary bg-primary/10 text-primary'
+                                                : 'border-border hover:border-primary/40'
                                             }`}
                                         >
-                                            <t.icon className={`w-6 h-6 ${formData.storeType === t.id ? 'text-blue-600' : 'text-gray-400'}`} />
+                                            <t.icon className={`w-6 h-6 ${formData.storeType === t.id ? 'text-primary' : 'text-muted-foreground'}`} />
                                             <span className="text-[10px] font-bold uppercase tracking-wider">{t.label}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            <Button 
-                                type="submit" 
+                            <Button
+                                type="submit"
                                 disabled={loading}
-                                className="w-full h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold text-lg shadow-xl shadow-blue-600/20 group"
+                                size="lg"
+                                className="w-full h-14 rounded-2xl font-bold text-lg group"
                             >
                                 {loading ? (
                                     <>

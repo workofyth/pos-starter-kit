@@ -103,29 +103,29 @@ export default function DashboardPage() {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-[70vh]">
-        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-blue-600"></div>
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-t-transparent border-primary"></div>
       </div>
     );
   }
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold font-display">Dashboard</h1>
         <Button>Generate Report</Button>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), color: "blue", icon: DollarSign, desc: "Total earnings from sales" },
-          { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), color: "green", icon: TrendingUp, desc: "Estimated gross profit" },
-          { label: "Transactions", val: stats.transactionsCount.toLocaleString(), color: "purple", icon: ShoppingCart, desc: "Completed sales orders" },
-          { label: "Inventory Val.", val: formatCurrency(stats.inventoryValue), color: "orange", icon: Package, desc: "Estimated stock value" }
+          { label: "Total Revenue", val: formatCurrency(stats.totalRevenue), iconClass: "bg-primary/10 text-primary", icon: DollarSign, desc: "Total earnings from sales" },
+          { label: "Net Profit (Est.)", val: formatCurrency(stats.netProfit), iconClass: "bg-chart-2/10 text-chart-2", icon: TrendingUp, desc: "Estimated gross profit" },
+          { label: "Transactions", val: stats.transactionsCount.toLocaleString(), iconClass: "bg-chart-5/10 text-chart-5", icon: ShoppingCart, desc: "Completed sales orders" },
+          { label: "Inventory Val.", val: formatCurrency(stats.inventoryValue), iconClass: "bg-chart-3/10 text-chart-3", icon: Package, desc: "Estimated stock value" }
         ].map((s, i) => (
-          <Card key={i} className="overflow-hidden border-none shadow-md bg-white dark:bg-gray-900 group hover:shadow-lg transition-all">
+          <Card key={i} className="overflow-hidden border-none shadow-soft bg-card group hover:shadow-soft-lg transition-all">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-2xl bg-${s.color}-100 dark:bg-${s.color}-900/30 text-${s.color}-600 dark:text-${s.color}-400 group-hover:scale-110 transition-transform`}>
+                <div className={`p-3 rounded-2xl ${s.iconClass} group-hover:scale-110 transition-transform`}>
                   <s.icon className="h-6 w-6" />
                 </div>
                 <div className="text-right">
@@ -195,10 +195,10 @@ export default function DashboardPage() {
       {/* Bottom Grid: Recent Transactions & Top Products */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity */}
-        <Card className="lg:col-span-2 border-none shadow-md bg-white dark:bg-gray-900">
+        <Card className="lg:col-span-2 border-none shadow-soft bg-card">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Recent Transactions</CardTitle>
-            <Button variant="ghost" size="sm" className="text-blue-600">View All</Button>
+            <Button variant="ghost" size="sm" className="text-primary">View All</Button>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -220,12 +220,12 @@ export default function DashboardPage() {
                     </thead>
                     <tbody className="divide-y">
                       {recentTransactions.map((t, i) => (
-                        <tr key={i} className="group hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                        <tr key={i} className="group hover:bg-muted transition-colors">
                           <td className="py-4 font-medium">{t.customerName}</td>
                           <td className="py-4 text-sm text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</td>
-                          <td className="py-4 text-right font-bold text-green-600">{formatCurrency(t.total)}</td>
+                          <td className="py-4 text-right font-bold text-chart-2">{formatCurrency(t.total)}</td>
                           <td className="py-4 text-right">
-                             <span className="px-2 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-[10px] font-bold">PAID</span>
+                             <span className="px-2 py-1 rounded-full bg-chart-2/10 text-chart-2 text-[10px] font-bold">PAID</span>
                           </td>
                         </tr>
                       ))}
@@ -238,7 +238,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Top Products */}
-        <Card className="border-none shadow-md bg-white dark:bg-gray-900">
+        <Card className="border-none shadow-soft bg-card">
           <CardHeader>
             <CardTitle>Top Selling Products</CardTitle>
           </CardHeader>
@@ -249,7 +249,7 @@ export default function DashboardPage() {
               ) : (
                 topProducts.map((p, i) => (
                   <div key={i} className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center font-bold text-blue-600">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center font-bold text-primary">
                       {i + 1}
                     </div>
                     <div className="flex-1 min-w-0">

@@ -438,8 +438,8 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-gray-500">Manage POS system configuration</p>
+        <h1 className="text-2xl font-bold font-display">Settings</h1>
+        <p className="text-muted-foreground">Manage POS system configuration</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -480,8 +480,8 @@ export default function SettingsPage() {
               {activeTab === "general" && (
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-lg font-medium">General Configuration</h3>
-                    <p className="text-sm text-gray-500">Basic POS system settings</p>
+                    <h3 className="text-lg font-medium font-display">General Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Basic POS system settings</p>
                   </div>
                   
                   <div className="space-y-4">
@@ -527,8 +527,8 @@ export default function SettingsPage() {
               {activeTab === "store" && (
                 <div className="space-y-4">
                   <div>
-                    <h3 className="text-lg font-medium">Store Configuration</h3>
-                    <p className="text-sm text-gray-500">Store-specific settings</p>
+                    <h3 className="text-lg font-medium font-display">Store Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Store-specific settings</p>
                   </div>
                   
                   <div className="space-y-4">
@@ -567,8 +567,8 @@ export default function SettingsPage() {
               {activeTab === "payment" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Payment Configuration</h3>
-                    <p className="text-sm text-gray-500">Configure accepted payment methods and gateways</p>
+                    <h3 className="text-lg font-medium font-display">Payment Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Configure accepted payment methods and gateways</p>
                   </div>
                   
                   <div className="space-y-4">
@@ -638,8 +638,8 @@ export default function SettingsPage() {
               {activeTab === "integration" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">AI Intelligence Center</h3>
-                    <p className="text-sm text-gray-500">Configure your business assistant powerhouse</p>
+                    <h3 className="text-lg font-medium font-display">AI Intelligence Center</h3>
+                    <p className="text-sm text-muted-foreground">Configure your business assistant powerhouse</p>
                   </div>
                   
                   <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
@@ -695,8 +695,8 @@ export default function SettingsPage() {
               {activeTab === "appearance" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Appearance & Branding</h3>
-                    <p className="text-sm text-gray-500">Customize the look and feel of your application</p>
+                    <h3 className="text-lg font-medium font-display">Appearance & Branding</h3>
+                    <p className="text-sm text-muted-foreground">Customize the look and feel of your application</p>
                   </div>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -795,8 +795,8 @@ export default function SettingsPage() {
               {activeTab === "alerts" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Alerts & Notifications</h3>
-                    <p className="text-sm text-gray-500">Configure system alerts and email notifications</p>
+                    <h3 className="text-lg font-medium font-display">Alerts & Notifications</h3>
+                    <p className="text-sm text-muted-foreground">Configure system alerts and email notifications</p>
                   </div>
                   
                   <div className="space-y-6">
@@ -853,8 +853,8 @@ export default function SettingsPage() {
               {activeTab === "reporting" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Reporting Configuration</h3>
-                    <p className="text-sm text-gray-500">Manage how data is processed and reported</p>
+                    <h3 className="text-lg font-medium font-display">Reporting Configuration</h3>
+                    <p className="text-sm text-muted-foreground">Manage how data is processed and reported</p>
                   </div>
                   
                   <div className="space-y-4 p-4 border rounded-xl bg-muted/20">
@@ -881,8 +881,8 @@ export default function SettingsPage() {
               {activeTab === "inventory" && (
                 <div className="space-y-6">
                   <div>
-                    <h3 className="text-lg font-medium">Inventory & SKU Settings</h3>
-                    <p className="text-sm text-gray-500">Global configuration for product stock and identifiers</p>
+                    <h3 className="text-lg font-medium font-display">Inventory & SKU Settings</h3>
+                    <p className="text-sm text-muted-foreground">Global configuration for product stock and identifiers</p>
                   </div>
                   
                   <div className="space-y-6">

@@ -136,8 +136,8 @@ export default function DraftOrdersPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Draft Orders</h1>
-          <p className="text-gray-500">Manage delayed orders</p>
+          <h1 className="text-2xl font-bold font-display">Draft Orders</h1>
+          <p className="text-muted-foreground">Manage delayed orders</p>
         </div>
       </div>
 
@@ -146,7 +146,7 @@ export default function DraftOrdersPage() {
         <CardContent className="pt-6">
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search draft orders by ID, cashier, or member..."
                 value={searchTerm}
@@ -166,7 +166,7 @@ export default function DraftOrdersPage() {
         <CardContent>
           {isLoading ? (
             <div className="flex justify-center items-center h-32">
-              <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-blue-600"></div>
+              <div className="h-8 w-8 animate-spin rounded-full border border-t-transparent border-primary"></div>
             </div>
           ) : (
             <Table>
@@ -191,7 +191,7 @@ export default function DraftOrdersPage() {
                         {draftOrder.memberName ? (
                           <Badge variant="secondary">{draftOrder.memberName}</Badge>
                         ) : (
-                          <span className="text-gray-500">-</span>
+                          <span className="text-muted-foreground">-</span>
                         )}
                       </TableCell>
                       <TableCell>{draftOrder.cartData.length} items</TableCell>
@@ -222,7 +222,7 @@ export default function DraftOrdersPage() {
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-gray-500">
+                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                       No draft orders found
                     </TableCell>
                   </TableRow>

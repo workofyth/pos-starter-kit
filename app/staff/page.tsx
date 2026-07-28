@@ -376,10 +376,10 @@ export default function StaffPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Staff</h1>
-          <p className="text-gray-500">Manage employee access and roles</p>
+          <h1 className="text-2xl font-bold font-display">Staff</h1>
+          <p className="text-muted-foreground">Manage employee access and roles</p>
           {isLimitedAccess && (
-            <p className="text-sm text-blue-600 mt-1">
+            <p className="text-sm text-primary mt-1">
               Showing staff for your branch only
             </p>
           )}
@@ -471,7 +471,7 @@ export default function StaffPage() {
                     )}
                   </select>
                   {userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId && (
-                    <p className="text-xs text-gray-500 mt-1">You can only select your own branch</p>
+                    <p className="text-xs text-muted-foreground mt-1">You can only select your own branch</p>
                   )}
                 </div>
               </div>
@@ -556,7 +556,7 @@ export default function StaffPage() {
                     )}
                   </select>
                   {userRole && !isMainAdmin && userBranchType !== 'main' && userBranchId && (
-                    <p className="text-xs text-gray-500 mt-1">You can only select your own branch</p>
+                    <p className="text-xs text-muted-foreground mt-1">You can only select your own branch</p>
                   )}
                 </div>
               </div>
@@ -571,7 +571,7 @@ export default function StaffPage() {
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-2 top-3 h-4 w-4 text-gray-500" />
+              <Search className="absolute left-2 top-3 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search staff by name, email, or branch..."
                 value={searchTerm}
@@ -600,12 +600,12 @@ export default function StaffPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <User className="h-6 w-6 text-blue-600" />
+              <div className="bg-primary/10 p-3 rounded-full">
+                <User className="h-6 w-6 text-primary" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Staff</p>
-                <p className="text-2xl font-bold">{filteredStaff.length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Total Staff</p>
+                <p className="text-2xl font-bold font-display">{filteredStaff.length}</p>
               </div>
             </div>
           </CardContent>
@@ -614,12 +614,12 @@ export default function StaffPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-green-100 p-3 rounded-full">
-                <User className="h-6 w-6 text-green-600" />
+              <div className="bg-chart-2/10 p-3 rounded-full">
+                <User className="h-6 w-6 text-chart-2" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Active Staff</p>
-                <p className="text-2xl font-bold">{filteredStaff.filter(s => s.isActive !== false).length}</p>
+                <p className="text-sm font-medium text-muted-foreground">Active Staff</p>
+                <p className="text-2xl font-bold font-display">{filteredStaff.filter(s => s.isActive !== false).length}</p>
               </div>
             </div>
           </CardContent>
@@ -628,12 +628,12 @@ export default function StaffPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-purple-100 p-3 rounded-full">
-                <Building className="h-6 w-6 text-purple-600" />
+              <div className="bg-chart-5/10 p-3 rounded-full">
+                <Building className="h-6 w-6 text-chart-5" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Main Branch</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm font-medium text-muted-foreground">Main Branch</p>
+                <p className="text-2xl font-bold font-display">
                   {filteredStaff.filter(s => s.isMainAdmin || (s.branch && s.branch.type === 'main')).length}
                 </p>
               </div>
@@ -644,12 +644,12 @@ export default function StaffPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <div className="bg-yellow-100 p-3 rounded-full">
-                <Building className="h-6 w-6 text-yellow-600" />
+              <div className="bg-chart-3/10 p-3 rounded-full">
+                <Building className="h-6 w-6 text-chart-3" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Sub Branch</p>
-                <p className="text-2xl font-bold">
+                <p className="text-sm font-medium text-muted-foreground">Sub Branch</p>
+                <p className="text-2xl font-bold font-display">
                   {filteredStaff.filter(s => s.branch && s.branch.type === 'sub').length}
                 </p>
               </div>
@@ -679,12 +679,12 @@ export default function StaffPage() {
               </thead>
               <tbody>
                 {filteredStaff.map((member) => (
-                  <tr key={member.id} className="border-b hover:bg-gray-50">
+                  <tr key={member.id} className="border-b hover:bg-muted">
                     <td className="py-3 px-4">
                       <div className="font-medium">{member.name}</div>
                     </td>
                     <td className="py-3 px-4">
-                      <div className="text-sm text-gray-500">{member.email}</div>
+                      <div className="text-sm text-muted-foreground">{member.email}</div>
                       <div>{member.phone || 'N/A'}</div>
                     </td>
                     <td className="py-3 px-4">

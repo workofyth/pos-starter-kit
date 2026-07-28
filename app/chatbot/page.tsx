@@ -36,8 +36,8 @@ function renderMessageContent(content: string | null | undefined) {
           <div className="bg-muted/50 px-3 py-1.5 border-b border-border/50 flex justify-between items-center bg-gradient-to-r from-muted/50 to-transparent">
             <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-80">Order Summary</span>
             <div className="flex gap-1">
-              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500/50" />
-              <div className="w-1.5 h-1.5 rounded-full bg-blue-500/50" />
+              <div className="w-1.5 h-1.5 rounded-full bg-chart-2/50" />
+              <div className="w-1.5 h-1.5 rounded-full bg-primary/50" />
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -56,7 +56,7 @@ function renderMessageContent(content: string | null | undefined) {
                       const val = cell.trim();
                       const isNumeric = val.startsWith('Rp') || !isNaN(Number(val.replace(/[,.]/g, '')));
                       return (
-                        <td key={j} className={cn("px-3 py-2 text-foreground/70", isNumeric ? "font-mono font-medium text-blue-600 dark:text-blue-400" : "")}>
+                        <td key={j} className={cn("px-3 py-2 text-foreground/70", isNumeric ? "font-mono font-medium text-primary" : "")}>
                           {val}
                         </td>
                       );
@@ -89,7 +89,7 @@ function renderMessageContent(content: string | null | undefined) {
       const text = line.trim();
       if (text) {
         const formattedLine = line.split('**').map((part, i) => 
-          i % 2 === 1 ? <strong key={i} className="text-yellow-600 dark:text-yellow-400 font-bold">{part}</strong> : part
+          i % 2 === 1 ? <strong key={i} className="text-chart-3 font-bold">{part}</strong> : part
         );
         result.push(<p key={index} className="my-1 text-sm leading-relaxed">{formattedLine}</p>);
       } else if (line === "") {
@@ -216,17 +216,17 @@ export default function ChatbotPage() {
       {/* Header Info */}
       <div className="flex items-center justify-between mb-4 px-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
-            <Bot className="h-6 w-6 text-yellow-500" />
+          <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2 font-display">
+            <Bot className="h-6 w-6 text-chart-3" />
             AI Business Assistant
           </h1>
           <p className="text-sm text-muted-foreground">Analisis stok & manajemen pesanan real-time.</p>
         </div>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={clearHistory}
-          className="text-gray-400 hover:text-red-500 transition-colors"
+          className="text-muted-foreground hover:text-destructive transition-colors"
         >
           <Trash2 className="h-4 w-4 mr-2" />
           Clear Chat
@@ -234,7 +234,7 @@ export default function ChatbotPage() {
       </div>
 
       {/* Messages Area */}
-      <div className="flex-1 bg-white/50 dark:bg-gray-900/50 rounded-3xl border border-yellow-100/50 dark:border-yellow-900/20 shadow-inner overflow-hidden mb-24">
+      <div className="flex-1 bg-card/50 rounded-3xl border border-chart-3/20 shadow-inner overflow-hidden mb-24">
         <ScrollArea className="h-full" viewportRef={scrollRef}>
           <div className="p-6 space-y-8 pb-12">
             {messages.map((msg, index) => (
@@ -247,24 +247,24 @@ export default function ChatbotPage() {
               >
                 <div className={cn(
                   "h-9 w-9 rounded-xl flex items-center justify-center shrink-0 shadow-sm border",
-                  msg.role === "assistant" 
-                    ? "bg-yellow-50 text-yellow-600 border-yellow-200" 
-                    : "bg-white dark:bg-gray-800 text-gray-600 border-gray-200"
+                  msg.role === "assistant"
+                    ? "bg-chart-3/10 text-chart-3 border-chart-3/20"
+                    : "bg-card text-muted-foreground border-border"
                 )}>
                   {msg.role === "assistant" ? <Bot className="h-5 w-5" /> : <User className="h-5 w-5" />}
                 </div>
                 <div className="flex flex-col gap-1">
                   <div className={cn(
                     "p-4 rounded-2xl text-[15px] shadow-sm leading-relaxed",
-                    msg.role === "assistant" 
-                      ? "bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 border border-yellow-50/50" 
-                      : "bg-yellow-400 text-black font-medium"
+                    msg.role === "assistant"
+                      ? "bg-muted text-foreground border border-border/50"
+                      : "bg-primary text-primary-foreground font-medium"
                   )}>
                     {renderMessageContent(msg.content)}
                   </div>
                   {msg.timestamp && (
                     <span className={cn(
-                      "text-[10px] px-2 text-gray-400",
+                      "text-[10px] px-2 text-muted-foreground",
                       msg.role === "user" ? "text-right" : "text-left"
                     )}>
                       {msg.timestamp}
@@ -275,12 +275,12 @@ export default function ChatbotPage() {
             ))}
             {isLoading && (
               <div className="flex gap-4 animate-pulse">
-                <div className="h-9 w-9 rounded-xl bg-yellow-50 text-yellow-600 border border-yellow-200 flex items-center justify-center">
+                <div className="h-9 w-9 rounded-xl bg-chart-3/10 text-chart-3 border border-chart-3/20 flex items-center justify-center">
                   <Bot className="h-5 w-5" />
                 </div>
-                <div className="p-4 rounded-2xl bg-white dark:bg-gray-800 border border-yellow-50 shadow-sm flex items-center gap-3">
-                  <Loader2 className="h-4 w-4 animate-spin text-yellow-500" />
-                  <span className="text-sm text-gray-500 font-medium">Berpikir...</span>
+                <div className="p-4 rounded-2xl bg-card border border-border shadow-sm flex items-center gap-3">
+                  <Loader2 className="h-4 w-4 animate-spin text-chart-3" />
+                  <span className="text-sm text-muted-foreground font-medium">Berpikir...</span>
                 </div>
               </div>
             )}
@@ -289,16 +289,16 @@ export default function ChatbotPage() {
       </div>
 
       {/* Floating Input Area */}
-      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-gray-50 dark:from-gray-950 via-gray-50/80 dark:via-gray-950/80 to-transparent">
-        <form 
+      <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-background via-background/80 to-transparent">
+        <form
           onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
           className="max-w-3xl mx-auto relative group"
         >
           {/* Product Suggestions Overlay */}
           {showSuggestions && suggestions.length > 0 && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl border border-yellow-100 overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
-              <div className="p-2 border-b bg-yellow-50/50 dark:bg-yellow-900/10">
-                <p className="text-[10px] font-bold text-yellow-600 uppercase tracking-widest px-2">Saran Produk</p>
+            <div className="absolute bottom-full left-0 right-0 mb-2 bg-card rounded-2xl shadow-2xl border border-chart-3/20 overflow-hidden animate-in slide-in-from-bottom-4 duration-200">
+              <div className="p-2 border-b bg-chart-3/10">
+                <p className="text-[10px] font-bold text-chart-3 uppercase tracking-widest px-2">Saran Produk</p>
               </div>
               <div className="max-h-60 overflow-y-auto">
                 {suggestions.map((product) => (
@@ -306,13 +306,13 @@ export default function ChatbotPage() {
                     key={product.id}
                     type="button"
                     onClick={() => handleSuggestionClick(product)}
-                    className="w-full flex items-center justify-between p-3 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 text-left transition-colors border-b last:border-0 border-gray-50 dark:border-gray-700"
+                    className="w-full flex items-center justify-between p-3 hover:bg-chart-3/10 text-left transition-colors border-b last:border-0 border-border"
                   >
                     <div className="flex flex-col">
                       <span className="text-sm font-medium">{product.name}</span>
-                      <span className="text-[10px] text-gray-400">SKU: {product.sku}</span>
+                      <span className="text-[10px] text-muted-foreground">SKU: {product.sku}</span>
                     </div>
-                    <span className="text-xs font-bold text-green-600">Rp {Number(product.sellingPrice || 0).toLocaleString()}</span>
+                    <span className="text-xs font-bold text-chart-2">Rp {Number(product.sellingPrice || 0).toLocaleString()}</span>
                   </button>
                 ))}
               </div>
@@ -320,23 +320,23 @@ export default function ChatbotPage() {
           )}
 
           <div className="relative flex items-center">
-            <Input 
+            <Input
               placeholder="Tanyakan stok, analisis penjualan, atau buat pesanan..."
               value={input}
               onChange={(e) => setInput(e.target.value)}
               autoComplete="off"
-              className="w-full h-14 pl-6 pr-16 text-base bg-white dark:bg-gray-900 border-yellow-200/50 focus-visible:ring-yellow-400 shadow-2xl rounded-2xl transition-all"
+              className="w-full h-14 pl-6 pr-16 text-base bg-card border-chart-3/30 focus-visible:ring-chart-3 shadow-2xl rounded-2xl transition-all"
             />
-            <Button 
-              type="submit" 
+            <Button
+              type="submit"
               disabled={isLoading || !input.trim()}
               size="icon"
-              className="absolute right-2 h-10 w-10 bg-yellow-400 hover:bg-yellow-500 text-black rounded-xl shadow-lg transition-transform active:scale-90 disabled:opacity-50"
+              className="absolute right-2 h-10 w-10 bg-chart-3 hover:bg-chart-3/90 text-black rounded-xl shadow-lg transition-transform active:scale-90 disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </Button>
           </div>
-          <p className="text-[10px] text-center text-gray-400 mt-2">
+          <p className="text-[10px] text-center text-muted-foreground mt-2">
             AI dapat memberikan informasi stok dan membantu proses transaksi secara otomatis.
           </p>
         </form>
