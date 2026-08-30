@@ -47,11 +47,6 @@ export const allSidebarItems: SidebarItem[] = [
     icon: ShoppingCart,
   },
   {
-    title: "AI Assistant",
-    href: "/chatbot",
-    icon: LayoutDashboard,
-  },
-  {
     title: "Draft Orders",
     href: "/draft-orders",
     icon: ShoppingCart,
