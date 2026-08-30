@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { categories } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET a single category by ID
 export async function GET(
@@ -9,25 +10,29 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Category ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Category ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     const category = await db
       .select()
       .from(categories)
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.storeId, storeId)))
       .limit(1);
     
     if (category.length === 0) {
@@ -75,28 +80,32 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Category ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Category ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if category exists
     const existingCategory = await db
       .select()
       .from(categories)
-      .where(eq(categories.id, id));
-    
+      .where(and(eq(categories.id, id), eq(categories.storeId, storeId)));
+
     if (existingCategory.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -123,7 +132,7 @@ export async function PUT(
       const existingCategoryByCode = await db
         .select()
         .from(categories)
-        .where(eq(categories.code, code));
+        .where(and(eq(categories.code, code), eq(categories.storeId, storeId)));
       
       if (existingCategoryByCode.length > 0) {
         return new Response(
@@ -144,7 +153,7 @@ export async function PUT(
       const parentCategory = await db
         .select({ id: categories.id })
         .from(categories)
-        .where(eq(categories.id, parentId));
+        .where(and(eq(categories.id, parentId), eq(categories.storeId, storeId)));
       
       if (parentCategory.length === 0) {
         return new Response(
@@ -171,7 +180,7 @@ export async function PUT(
         point: point !== undefined ? (point ? parseFloat(point.toString()).toFixed(2) : "0.00") : (existingCategory[0] as any).point,
         updatedAt: new Date()
       })
-      .where(eq(categories.id, id))
+      .where(and(eq(categories.id, id), eq(categories.storeId, storeId)))
       .returning();
     
     return new Response(
@@ -207,63 +216,67 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Category ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Category ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if category exists
     const existingCategory = await db
       .select()
       .from(categories)
-      .where(eq(categories.id, id));
-    
+      .where(and(eq(categories.id, id), eq(categories.storeId, storeId)));
+
     if (existingCategory.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Category not found' 
+        JSON.stringify({
+          success: false,
+          message: 'Category not found'
         }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if category has children (subcategories)
     const childCategories = await db
       .select()
       .from(categories)
-      .where(eq(categories.parentId, id));
-    
+      .where(and(eq(categories.parentId, id), eq(categories.storeId, storeId)));
+
     if (childCategories.length > 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Cannot delete category with child categories' 
+        JSON.stringify({
+          success: false,
+          message: 'Cannot delete category with child categories'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Delete the category
     await db
       .delete(categories)
-      .where(eq(categories.id, id));
+      .where(and(eq(categories.id, id), eq(categories.storeId, storeId)));
     
     return new Response(
       JSON.stringify({ 

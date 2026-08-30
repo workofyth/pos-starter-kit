@@ -7,28 +7,33 @@ import {
   userBranches
 } from '@/db/schema/pos';
 import { eq, desc, and } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { searchParams } = new URL(request.url);
-    
+
     // User role evaluation
     const userId = searchParams.get('userId') || '';
     const branchId = searchParams.get('branchId') || '';
-    
+
     let isAdmin = false;
     if (userId) {
       const userBranchesResult = await db
         .select({ role: userBranches.role })
         .from(userBranches)
         .where(eq(userBranches.userId, userId));
-      
+
       if (userBranchesResult.length > 0) {
         isAdmin = userBranchesResult[0].role === 'admin';
       }
     }
 
-    const whereConditions = [];
+    const whereConditions = [eq(transactions.storeId, storeId)];
     if (branchId && !isAdmin) {
       whereConditions.push(eq(transactions.branchId, branchId));
     }

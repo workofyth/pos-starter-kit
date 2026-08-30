@@ -3,18 +3,13 @@ import { db } from '@/db';
 import { categories } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
-    }
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const { searchParams } = new URL(request.url);
     
@@ -29,7 +24,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
     // Build query
-    const whereConditions = [eq(categories.storeId, session.user.storeId)];
+    const whereConditions = [eq(categories.storeId, storeId)];
     if (search) {
       whereConditions.push(ilike(categories.name, `%${search}%`));
     }
@@ -94,44 +89,40 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
-    }
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const body = await request.json();
     const { name, description, code, parentId, point } = body;
-    
+
     if (!name || !code) {
       return new Response(JSON.stringify({ success: false, message: 'Name and code are required' }), { status: 400 });
     }
-    
+
     // Check for duplicate code within the same store
     const existingCategory = await db
       .select()
       .from(categories)
-      .where(and(eq(categories.code, code), eq(categories.storeId, session.user.storeId)));
-    
+      .where(and(eq(categories.code, code), eq(categories.storeId, storeId)));
+
     if (existingCategory.length > 0) {
       return new Response(JSON.stringify({ success: false, message: 'Category with this code already exists in your store' }), { status: 409 });
     }
-    
+
     // Validate parent category belongs to the store
     if (parentId) {
       const parentCategory = await db.select({ id: categories.id }).from(categories)
-        .where(and(eq(categories.id, parentId), eq(categories.storeId, session.user.storeId)));
+        .where(and(eq(categories.id, parentId), eq(categories.storeId, storeId)));
       if (parentCategory.length === 0) {
         return new Response(JSON.stringify({ success: false, message: 'Parent category does not exist' }), { status: 400 });
       }
     }
-    
+
     const categoryId = `cat_${nanoid(10)}`;
     const [newCategory] = await db.insert(categories).values({
         id: categoryId,
-        storeId: session.user.storeId,
+        storeId,
         name,
         description: description || null,
         code,

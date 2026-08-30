@@ -3,18 +3,14 @@ import { db } from '@/db';
 import { branches } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
+import { getPlan } from '@/lib/plans';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
-    }
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const { searchParams } = new URL(request.url);
     
@@ -30,7 +26,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
     // Build query
-    const whereConditions = [eq(branches.storeId, session.user.storeId)];
+    const whereConditions = [eq(branches.storeId, storeId)];
     
     if (search) {
       whereConditions.push(ilike(branches.name, `%${search}%`));
@@ -108,17 +104,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
-    }
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const body = await request.json();
     const { name, address, phone, email, type = 'sub' } = body;
-    
+
     if (!name || !address) {
       return new Response(JSON.stringify({ success: false, message: 'Name and address are required' }), { status: 400 });
     }
@@ -128,35 +120,26 @@ export async function POST(request: NextRequest) {
       .select({ count: count() })
       .from(branches)
       .where(and(
-        eq(branches.storeId, session.user.storeId),
+        eq(branches.storeId, storeId),
         eq(branches.type, 'sub')
       ));
-    
+
     const subBranchCount = Number(existingBranchesCountResult[0].count);
-    const plan = session.user.plan;
-    const subscriptionStatus = session.user.subscriptionStatus;
+    const planLimits = getPlan(guard.plan);
 
-    // Trial: 0 sub-branches
-    if (subscriptionStatus === 'trialing' && subBranchCount >= 0 && type === 'sub') {
-       return new Response(JSON.stringify({ success: false, message: 'Trial plan does not allow adding sub-branches. Please upgrade to Startup or Business.' }), { status: 403 });
+    if (type === 'sub' && subBranchCount >= planLimits.maxSubBranches) {
+       return new Response(JSON.stringify({
+         success: false,
+         message: `Your ${planLimits.label} plan allows up to ${planLimits.maxSubBranches} sub-branch${planLimits.maxSubBranches === 1 ? '' : 'es'}. Please upgrade your plan for more.`,
+       }), { status: 403 });
     }
 
-    // Startup: 1 sub-branch
-    if (plan === 'startup' && subBranchCount >= 1 && type === 'sub') {
-       return new Response(JSON.stringify({ success: false, message: 'Startup plan limit reached (max 1 sub-branch). Please upgrade to Business for more.' }), { status: 403 });
-    }
-
-    // Business: 5 sub-branches
-    if (plan === 'business' && subBranchCount >= 5 && type === 'sub') {
-       return new Response(JSON.stringify({ success: false, message: 'Business plan limit reached (max 5 sub-branches). Please upgrade to Enterprise for unlimited.' }), { status: 403 });
-    }
-    
     // Check for duplicate name within the same store
     const existingBranch = await db
       .select()
       .from(branches)
       .where(and(
-        eq(branches.storeId, session.user.storeId),
+        eq(branches.storeId, storeId),
         eq(branches.name, name)
       ));
     
@@ -170,7 +153,7 @@ export async function POST(request: NextRequest) {
       .insert(branches)
       .values({
         id: branchId,
-        storeId: session.user.storeId,
+        storeId: storeId,
         name,
         address,
         phone: phone || null,

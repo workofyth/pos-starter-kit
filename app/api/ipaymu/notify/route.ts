@@ -43,19 +43,19 @@ export async function POST(req: Request) {
     // Some docs say it's uppercase. We should be careful.
     // Also check if the signature is provided in headers or body.
     
-    // For now, let's use the body signature if provided, or header
     const receivedSignature = signature || req.headers.get("signature");
-    
+
     // Re-calculate signature to verify
     // According to iPaymu: signature = sha256(va + status + trx_id + apiKey)
     const stringToHash = `${va}${status}${trx_id}${apiKey}`;
     const calculatedSignature = crypto.createHash("sha256").update(stringToHash).digest("hex");
 
-    if (receivedSignature && receivedSignature !== calculatedSignature) {
-        console.error("Invalid iPaymu signature:", { received: receivedSignature, calculated: calculatedSignature });
-        // In production, you SHOULD return 403. 
-        // For debugging, we'll log it but proceed if you are sure about the status.
-        // return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 403 });
+    // Reject when the signature is missing OR doesn't match — without this,
+    // anyone could POST a fake "success" notification to grant themselves a
+    // subscription for free (no signature at all previously slipped through).
+    if (!receivedSignature || receivedSignature !== calculatedSignature) {
+        console.error("Invalid or missing iPaymu signature:", { received: receivedSignature, calculated: calculatedSignature });
+        return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 403 });
     }
 
     if (status === "berhasil" || status === "success") {

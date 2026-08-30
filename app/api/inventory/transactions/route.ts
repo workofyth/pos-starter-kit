@@ -3,11 +3,15 @@ import { db } from '@/db';
 import { inventoryTransactions, products, branches, user } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { inventory } from '@/db/schema/pos';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
-    
+
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -48,8 +52,8 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply filters
-    const whereConditions = [];
-    
+    const whereConditions = [eq(inventoryTransactions.storeId, guard.storeId)];
+
     if (search) {
       whereConditions.push(
         ilike(products.name, `%${search}%`)
@@ -118,8 +122,8 @@ export async function GET(request: NextRequest) {
       .leftJoin(products, eq(inventoryTransactions.productId, products.id))
       .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id));
     
-    const countWhereConditions = [];
-    
+    const countWhereConditions = [eq(inventoryTransactions.storeId, guard.storeId)];
+
     if (search) {
       countWhereConditions.push(
         ilike(products.name, `%${search}%`)

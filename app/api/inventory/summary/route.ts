@@ -2,17 +2,21 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { inventory, products, branches } from '@/db/schema/pos';
 import { eq, and, sql, count } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - Get inventory summary statistics
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
-    
+
     const branchId = searchParams.get('branchId') || '';
-    
+
     // Build where conditions
-    const whereConditions = [];
-    
+    const whereConditions = [eq(inventory.storeId, guard.storeId)];
+
     if (branchId) {
       whereConditions.push(eq(inventory.branchId, branchId));
     }

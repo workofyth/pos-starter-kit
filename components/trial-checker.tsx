@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CreditCard, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { getAccessStatus } from "@/lib/subscription";
 
 export function TrialChecker() {
   const { data: session } = useSession();
@@ -23,37 +24,16 @@ export function TrialChecker() {
       return;
     }
 
-    const now = new Date();
-    const trialStartDate = session.user.trialStartDate ? new Date(session.user.trialStartDate) : null;
-    const paymentDeadline = session.user.paymentDeadline ? new Date(session.user.paymentDeadline) : null;
-    
-    // Check for payment deadline (24 hours)
-    if (session.user.subscriptionStatus === 'pending_payment' && paymentDeadline && now > paymentDeadline) {
-       // If payment deadline passed, fallback to trial if never used
-       if (!session.user.hasUsedTrial) {
-          setIsExpired(false);
-          // Normally you'd call an API to update status to trialing here
-       } else {
-          setIsExpired(true);
-       }
-       return;
-    }
+    const access = getAccessStatus({
+      subscriptionStatus: session.user.subscriptionStatus,
+      trialStartDate: session.user.trialStartDate,
+      subscriptionEndDate: session.user.subscriptionEndDate,
+      paymentDeadline: session.user.paymentDeadline,
+      hasUsedTrial: session.user.hasUsedTrial,
+    });
 
-    if (trialStartDate) {
-      const diffTime = now.getTime() - trialStartDate.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      const remaining = 14 - diffDays;
-      setDaysRemaining(remaining);
-
-      if (diffDays >= 14 && session.user.subscriptionStatus === 'trialing') {
-        setIsExpired(true);
-      }
-    }
-
-    // Check for expired startup/business plans
-    if (session.user.subscriptionStatus === 'expired') {
-       setIsExpired(true);
-    }
+    setIsExpired(!access.active);
+    setDaysRemaining(access.daysRemaining ?? null);
   }, [session, pathname]);
 
   // If on landing page, auth pages, or payment gateway, don't show overlay

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { branches } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET a single branch by ID
 export async function GET(
@@ -9,25 +10,28 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     const branch = await db
       .select()
       .from(branches)
-      .where(eq(branches.id, id))
+      .where(and(eq(branches.id, id), eq(branches.storeId, guard.storeId)))
       .limit(1);
     
     if (branch.length === 0) {
@@ -75,28 +79,31 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check if branch exists
+
+    // Check if branch exists in this store
     const existingBranch = await db
       .select()
       .from(branches)
-      .where(eq(branches.id, id));
-    
+      .where(and(eq(branches.id, id), eq(branches.storeId, guard.storeId)));
+
     if (existingBranch.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -123,7 +130,7 @@ export async function PUT(
       const existingBranchByName = await db
         .select()
         .from(branches)
-        .where(eq(branches.name, name));
+        .where(and(eq(branches.name, name), eq(branches.storeId, guard.storeId)));
       
       if (existingBranchByName.length > 0) {
         return new Response(
@@ -150,7 +157,7 @@ export async function PUT(
         type: type !== undefined ? type : existingBranch[0].type,
         updatedAt: new Date()
       })
-      .where(eq(branches.id, id))
+      .where(and(eq(branches.id, id), eq(branches.storeId, guard.storeId)))
       .returning();
     
     return new Response(
@@ -186,46 +193,49 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check if branch exists
+
+    // Check if branch exists in this store
     const existingBranch = await db
       .select()
       .from(branches)
-      .where(eq(branches.id, id));
-    
+      .where(and(eq(branches.id, id), eq(branches.storeId, guard.storeId)));
+
     if (existingBranch.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch not found' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch not found'
         }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if branch has related records that would prevent deletion (in real app, you'd check transactions, inventory, etc.)
-    
+
     // Delete the branch
     await db
       .delete(branches)
-      .where(eq(branches.id, id));
+      .where(and(eq(branches.id, id), eq(branches.storeId, guard.storeId)));
     
     return new Response(
       JSON.stringify({ 

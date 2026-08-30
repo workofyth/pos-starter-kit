@@ -4,6 +4,7 @@ import { inventory, products, branches, inventoryTransactions, userBranches } fr
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { sendNotificationsToBranchRoles, sendMainBranchNotification } from '@/lib/notification-helpers';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // POST - Split inventory from one branch to another (specific inventory item split endpoint)
 export async function POST(
@@ -11,9 +12,13 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id: inventoryId } = await params;
     const body = await request.json();
-    
+
     if (!inventoryId) {
       return new Response(
         JSON.stringify({ 
@@ -49,7 +54,7 @@ export async function POST(
       );
     }
     
-    // Check if the inventory item exists
+    // Check if the inventory item exists (scoped to this store)
     const [inventoryItem] = await db
       .select({
         id: inventory.id,
@@ -58,8 +63,8 @@ export async function POST(
         quantity: inventory.quantity
       })
       .from(inventory)
-      .where(eq(inventory.id, inventoryId));
-    
+      .where(and(eq(inventory.id, inventoryId), eq(inventory.storeId, storeId)));
+
     if (!inventoryItem) {
       return new Response(
         JSON.stringify({ 
@@ -90,18 +95,32 @@ export async function POST(
     // Check if source and target branches are different
     if (sourceBranchId === targetBranchId) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Source and target branches must be different' 
+        JSON.stringify({
+          success: false,
+          message: 'Source and target branches must be different'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check user's role and branch assignment
+
+    // The target branch must belong to the caller's own store
+    const [targetBranchCheck] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, targetBranchId), eq(branches.storeId, storeId)))
+      .limit(1);
+
+    if (!targetBranchCheck) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Target branch not found in your store' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Check user's role and branch assignment (scoped to this store)
     const [userBranch] = await db
       .select({
         role: userBranches.role,
@@ -109,8 +128,9 @@ export async function POST(
         isMainAdmin: userBranches.isMainAdmin
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, userId));
-    
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)));
+
     if (!userBranch) {
       return new Response(
         JSON.stringify({ 
@@ -195,6 +215,7 @@ export async function POST(
     // Create approval request instead of directly processing the split
     const [approvalRequest] = await db.insert(inventoryTransactions).values({
       id: `itx_${nanoid(10)}`,
+      storeId,
       transactionNumber,
       productId: inventoryItem.productId,
       branchId: sourceBranchId, // Source branch
@@ -348,9 +369,13 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id: transactionId } = await params; // This should be the transaction ID, not inventory ID
     const body = await request.json();
-    
+
     if (!transactionId) {
       return new Response(
         JSON.stringify({ 
@@ -412,6 +437,7 @@ export async function PUT(
       .where(
         and(
           eq(inventoryTransactions.id, transactionId),
+          eq(inventoryTransactions.storeId, storeId),
           eq(inventoryTransactions.type, 'split'),
           eq(inventoryTransactions.status, 'pending')
         )
@@ -438,8 +464,9 @@ export async function PUT(
         isMainAdmin: userBranches.isMainAdmin
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, approvedBy));
-    
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, approvedBy), eq(branches.storeId, storeId)));
+
     if (!userBranch) {
       return new Response(
         JSON.stringify({ 
@@ -500,7 +527,8 @@ export async function PUT(
         .where(
           and(
             eq(inventory.productId, inventoryTransaction.productId),
-            eq(inventory.branchId, inventoryTransaction.branchId)
+            eq(inventory.branchId, inventoryTransaction.branchId),
+            eq(inventory.storeId, storeId)
           )
         );
       
@@ -529,10 +557,11 @@ export async function PUT(
         .where(
           and(
             eq(inventory.productId, inventoryTransaction.productId),
-            eq(inventory.branchId, inventoryTransaction.branchId)
+            eq(inventory.branchId, inventoryTransaction.branchId),
+            eq(inventory.storeId, storeId)
           )
         );
-      
+
       // 2. Add inventory to target branch
       const [targetInventory] = await db
         .select({ id: inventory.id, quantity: inventory.quantity })
@@ -540,7 +569,8 @@ export async function PUT(
         .where(
           and(
             eq(inventory.productId, inventoryTransaction.productId),
-            eq(inventory.branchId, inventoryTransaction.referenceId!)
+            eq(inventory.branchId, inventoryTransaction.referenceId!),
+            eq(inventory.storeId, storeId)
           )
         );
       
@@ -558,6 +588,7 @@ export async function PUT(
         // If inventory doesn't exist at target branch, create it
         await db.insert(inventory).values({
           id: `inv_${nanoid(10)}`,
+          storeId,
           productId: inventoryTransaction.productId,
           branchId: inventoryTransaction.referenceId!,
           quantity: inventoryTransaction.quantity,
@@ -602,6 +633,7 @@ export async function PUT(
       // 3b. Create a complementary 'receive' transaction for the target branch
       await db.insert(inventoryTransactions).values({
         id: `itx_recv_${nanoid(10)}`,
+        storeId,
         transactionNumber: `RECV-${updatedTransaction.transactionNumber || nanoid(6).toUpperCase()}`,
         productId: inventoryTransaction.productId,
         branchId: inventoryTransaction.referenceId!,

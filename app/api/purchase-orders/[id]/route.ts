@@ -7,13 +7,17 @@ import {
   branches,
   products
 } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const poId = params.id;
 
     const [po] = await db
@@ -37,7 +41,7 @@ export async function GET(
       .from(purchaseOrders)
       .leftJoin(suppliers, eq(purchaseOrders.supplierId, suppliers.id))
       .leftJoin(branches, eq(purchaseOrders.branchId, branches.id))
-      .where(eq(purchaseOrders.id, poId))
+      .where(and(eq(purchaseOrders.id, poId), eq(purchaseOrders.storeId, guard.storeId)))
       .limit(1);
 
     if (!po) {
@@ -60,7 +64,7 @@ export async function GET(
       })
       .from(purchaseOrderDetails)
       .leftJoin(products, eq(purchaseOrderDetails.productId, products.id))
-      .where(eq(purchaseOrderDetails.purchaseOrderId, poId));
+      .where(and(eq(purchaseOrderDetails.purchaseOrderId, poId), eq(purchaseOrderDetails.storeId, guard.storeId)));
 
     return new Response(
       JSON.stringify({ success: true, data: { ...po, items } }),

@@ -3,12 +3,17 @@ import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
 import { eq, and, or, isNull, sql, asc, desc } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET a single product by ID
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
         JSON.stringify({ 
@@ -90,9 +95,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
       .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId))
-      .where(eq(products.id, id))
+      .where(and(eq(products.id, id), eq(products.storeId, storeId)))
       .limit(1);
-    
+
     if (productData.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -135,28 +140,32 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // PUT - Update a product by ID
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Product ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Product ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if product exists
     const existingProduct = await db
       .select()
       .from(products)
-      .where(eq(products.id, id));
-    
+      .where(and(eq(products.id, id), eq(products.storeId, storeId)));
+
     if (existingProduct.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -196,10 +205,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .where(
           and(
             eq(products.sku, sku),
+            eq(products.storeId, storeId),
             sql`${products.id} != ${id}` // Exclude current product from check using SQL
           )
         );
-      
+
       if (skuConflict.length > 0) {
         return new Response(
           JSON.stringify({ 
@@ -221,10 +231,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         .where(
           and(
             eq(products.barcode, barcode),
+            eq(products.storeId, storeId),
             sql`${products.id} != ${id}` // Exclude current product from check using SQL
           )
         );
-      
+
       if (barcodeConflict.length > 0) {
         return new Response(
           JSON.stringify({ 
@@ -248,9 +259,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const categoryExists = await db
         .select({ id: categories.id })
         .from(categories)
-        .where(eq(categories.id, categoryId))
+        .where(and(eq(categories.id, categoryId), eq(categories.storeId, storeId)))
         .limit(1);
-      
+
       if (categoryExists.length === 0) {
         // If category doesn't exist, set categoryId to null
         validCategoryId = null;
@@ -275,16 +286,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           profitMargin: profitMargin !== undefined ? profitMargin : existingProduct[0].profitMargin,
           updatedAt: new Date()
         })
-        .where(eq(products.id, id));
-      
+        .where(and(eq(products.id, id), eq(products.storeId, storeId)));
+
       // Update or create product price if provided
       if (purchasePrice !== undefined || sellingPrice !== undefined || customerPrice !== undefined) {
         const existingPrice = await tx
           .select()
           .from(productPrices)
-          .where(eq(productPrices.productId, id))
+          .where(and(eq(productPrices.productId, id), eq(productPrices.storeId, storeId)))
           .limit(1);
-        
+
         if (existingPrice.length > 0) {
           // Update existing price
           await tx
@@ -293,16 +304,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
               purchasePrice: purchasePrice !== undefined ? purchasePrice.toString() : existingPrice[0].purchasePrice,
               sellingPrice: sellingPrice !== undefined ? sellingPrice.toString() : existingPrice[0].sellingPrice,
               customerPrice: customerPrice !== undefined ? customerPrice.toString() : existingPrice[0].customerPrice,
-              branchId: branchId || existingPrice[0].branchId, 
+              branchId: branchId || existingPrice[0].branchId,
               effectiveDate: new Date()
             })
-            .where(eq(productPrices.productId, id));
+            .where(and(eq(productPrices.productId, id), eq(productPrices.storeId, storeId)));
         } else {
           // Create new price entry
           await tx.insert(productPrices).values({
             id: `pp_${nanoid(10)}`,
+            storeId,
             productId: id,
-            branchId: branchId, 
+            branchId: branchId,
             purchasePrice: (purchasePrice || '0').toString(),
             sellingPrice: (sellingPrice || '0').toString(),
             customerPrice: (customerPrice || '0').toString(),
@@ -311,7 +323,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           });
         }
       }
-      
+
       // Update or create inventory if provided and a valid branch exists
       if ((stock !== undefined || minStock !== undefined) && branchId) {
         const existingInventory = await tx
@@ -320,11 +332,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           .where(
             and(
               eq(inventory.productId, id),
-              eq(inventory.branchId, branchId)
+              eq(inventory.branchId, branchId),
+              eq(inventory.storeId, storeId)
             )
           )
           .limit(1);
-        
+
         if (existingInventory.length > 0) {
           // Update existing inventory
           await tx
@@ -337,13 +350,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
             .where(
               and(
                 eq(inventory.productId, id),
-                eq(inventory.branchId, branchId)
+                eq(inventory.branchId, branchId),
+                eq(inventory.storeId, storeId)
               )
             );
         } else {
           // Create new inventory entry for the branch
           await tx.insert(inventory).values({
             id: `inv_${nanoid(10)}`,
+            storeId,
             productId: id,
             branchId: branchId,
             quantity: stock !== undefined ? stock : 0,
@@ -354,7 +369,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         }
       }
     });
-    
+
     // Return the updated product with related data
     const [updatedProduct] = await db
       .select({
@@ -382,12 +397,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .leftJoin(productPrices, eq(products.id, productPrices.productId))
       .leftJoin(inventory, eq(products.id, inventory.productId))
-      .where(eq(products.id, id))
+      .where(and(eq(products.id, id), eq(products.storeId, storeId)))
       .limit(1);
-    
+
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: 'Product updated successfully',
         data: updatedProduct
       }),
@@ -415,44 +430,48 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 // DELETE a product by ID
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Product ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Product ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if product exists
     const existingProduct = await db
       .select()
       .from(products)
-      .where(eq(products.id, id));
-    
+      .where(and(eq(products.id, id), eq(products.storeId, storeId)));
+
     if (existingProduct.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Product not found' 
+        JSON.stringify({
+          success: false,
+          message: 'Product not found'
         }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Delete the product (this will also delete related records due to cascade)
     await db
       .delete(products)
-      .where(eq(products.id, id));
+      .where(and(eq(products.id, id), eq(products.storeId, storeId)));
     
     return new Response(
       JSON.stringify({ 

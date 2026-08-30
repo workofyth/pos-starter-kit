@@ -12,13 +12,18 @@ import {
 import { eq, and, desc, sql, isNull, or } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
 import { nanoid } from 'nanoid';
-import { broadcastToBranch, broadcastToAll } from '@/lib/notification-sse';
+import { broadcastToBranch } from '@/lib/notification-sse';
 import { getRedis } from '@/lib/redis';
 import { sendNotificationsToBranchRoles, sendMainBranchNotification } from '@/lib/notification-helpers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // POST - Create a new approval request
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const {
       userId,
       productId,
@@ -31,11 +36,41 @@ export async function POST(request: NextRequest) {
 
     if (!userId || !productId || !sourceBranchId || !targetBranchId || !quantity) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'User ID, Product ID, Source Branch ID, Target Branch ID, and Quantity are required' 
+        JSON.stringify({
+          success: false,
+          message: 'User ID, Product ID, Source Branch ID, Target Branch ID, and Quantity are required'
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Product and both branches must belong to the caller's store.
+    const [productInStore] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(and(eq(products.id, productId), eq(products.storeId, storeId)))
+      .limit(1);
+    if (!productInStore) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Product not found in this store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const [sourceBranchCheck] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, sourceBranchId), eq(branches.storeId, storeId)))
+      .limit(1);
+    const [targetBranchCheck] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, targetBranchId), eq(branches.storeId, storeId)))
+      .limit(1);
+    if (!sourceBranchCheck || !targetBranchCheck) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Source or target branch not found in this store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
@@ -75,6 +110,7 @@ export async function POST(request: NextRequest) {
       .insert(inventoryTransactions)
       .values({
         id: transactionId,
+        storeId,
         transactionNumber,
         productId,
         branchId: sourceBranchId,
@@ -118,7 +154,7 @@ export async function POST(request: NextRequest) {
       const [mainBranch] = await db
         .select()
         .from(branches)
-        .where(eq(branches.type, 'main'))
+        .where(and(eq(branches.type, 'main'), eq(branches.storeId, storeId)))
         .limit(1);
 
       if (mainBranch) {
@@ -231,6 +267,10 @@ export async function POST(request: NextRequest) {
 // GET - Fetch pending approval requests for a user's branch
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { searchParams } = new URL(request.url);
 
     const userId = searchParams.get('userId') || '';
@@ -253,7 +293,8 @@ export async function GET(request: NextRequest) {
         branchId: userBranches.branchId
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, userId));
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)));
 
     if (userBranchResponse.length === 0) {
       return new Response(
@@ -297,6 +338,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id))
       .leftJoin(userTable, eq(inventoryTransactions.createdBy, userTable.id))
       .where(and(
+        eq(inventoryTransactions.storeId, storeId),
         eq(inventoryTransactions.type, 'split'),
         eq(inventoryTransactions.status, status)
       ))
@@ -311,7 +353,7 @@ export async function GET(request: NextRequest) {
         .select({ type: branches.type, isMainAdmin: userBranches.isMainAdmin })
         .from(userBranches)
         .leftJoin(branches, eq(userBranches.branchId, branches.id))
-        .where(eq(userBranches.userId, userId))
+        .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)))
         .limit(1);
 
       const userBranchType = userBranchInfo?.type || 'sub';
@@ -322,6 +364,7 @@ export async function GET(request: NextRequest) {
       } else {
         query = query.where(
           and(
+            eq(inventoryTransactions.storeId, storeId),
             eq(inventoryTransactions.type, 'split'),
             eq(inventoryTransactions.status, status),
             or(
@@ -340,6 +383,7 @@ export async function GET(request: NextRequest) {
       .select({ count: sql<number>`count(*)`.as('count') })
       .from(inventoryTransactions)
       .where(and(
+        eq(inventoryTransactions.storeId, storeId),
         eq(inventoryTransactions.type, 'split'),
         eq(inventoryTransactions.status, status)
       ))
@@ -350,7 +394,7 @@ export async function GET(request: NextRequest) {
         .select({ type: branches.type, isMainAdmin: userBranches.isMainAdmin })
         .from(userBranches)
         .leftJoin(branches, eq(userBranches.branchId, branches.id))
-        .where(eq(userBranches.userId, userId))
+        .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)))
         .limit(1);
 
       const userBranchType = userBranchInfo?.type || 'sub';
@@ -361,6 +405,7 @@ export async function GET(request: NextRequest) {
       } else {
         countQuery = countQuery.where(
           and(
+            eq(inventoryTransactions.storeId, storeId),
             eq(inventoryTransactions.type, 'split'),
             eq(inventoryTransactions.status, status),
             or(
@@ -403,6 +448,10 @@ export async function GET(request: NextRequest) {
 // PUT - Approve or reject an approval request
 export async function PUT(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id') || '';
     const {
@@ -426,7 +475,8 @@ export async function PUT(request: NextRequest) {
         branchId: userBranches.branchId
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, userId));
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)));
 
     if (userBranchResponse.length === 0) {
       return new Response(
@@ -468,7 +518,7 @@ export async function PUT(request: NextRequest) {
       .from(inventoryTransactions)
       .leftJoin(products, eq(inventoryTransactions.productId, products.id))
       .leftJoin(branches, eq(inventoryTransactions.branchId, branches.id))
-      .where(eq(inventoryTransactions.id, id));
+      .where(and(eq(inventoryTransactions.id, id), eq(inventoryTransactions.storeId, storeId)));
 
     const approvalReq = result[0] as {
       id: string;
@@ -602,12 +652,14 @@ export async function PUT(request: NextRequest) {
         .from(inventory)
         .where(and(
           eq(inventory.productId, approvalReq.productId),
-          eq(inventory.branchId, approvalReq.branchId)
+          eq(inventory.branchId, approvalReq.branchId),
+          eq(inventory.storeId, storeId)
         ));
 
       if (!sourceInventory) {
         await db.insert(inventory).values({
           id: `inv_${uuidv4()}`,
+          storeId,
           productId: approvalReq.productId,
           branchId: approvalReq.branchId,
           quantity: 0,
@@ -630,12 +682,14 @@ export async function PUT(request: NextRequest) {
           })
           .where(and(
             eq(inventory.productId, approvalReq.productId),
-            eq(inventory.branchId, approvalReq.branchId)
+            eq(inventory.branchId, approvalReq.branchId),
+            eq(inventory.storeId, storeId)
           ));
       }
 
       const conditions = [
         eq(inventory.productId, approvalReq.productId),
+        eq(inventory.storeId, storeId),
         approvalReq.referenceId ? eq(inventory.branchId, approvalReq.referenceId) : undefined
       ].filter(Boolean);
 
@@ -647,6 +701,7 @@ export async function PUT(request: NextRequest) {
       if (!targetInventory) {
         await db.insert(inventory).values({
           id: `inv_${uuidv4()}`,
+          storeId,
           productId: approvalReq.productId,
           branchId: approvalReq.referenceId!,
           quantity: approvalReq.quantity,
@@ -664,6 +719,7 @@ export async function PUT(request: NextRequest) {
           })
           .where(and(
             eq(inventory.productId, approvalReq.productId),
+            eq(inventory.storeId, storeId),
             approvalReq.referenceId ? eq(inventory.branchId, approvalReq.referenceId) : isNull(inventory.branchId)
           ));
       }
@@ -679,6 +735,7 @@ export async function PUT(request: NextRequest) {
       // Create a complementary transaction for the TARGET branch
       await db.insert(inventoryTransactions).values({
         id: `itx_recv_${nanoid(10)}`,
+        storeId,
         transactionNumber: `RECV-${approvalReq.transactionNumber || nanoid(6).toUpperCase()}`,
         productId: approvalReq.productId,
         branchId: approvalReq.referenceId!,
@@ -745,7 +802,7 @@ export async function PUT(request: NextRequest) {
         const [mainBranch] = await db
           .select()
           .from(branches)
-          .where(eq(branches.type, 'main'))
+          .where(and(eq(branches.type, 'main'), eq(branches.storeId, storeId)))
           .limit(1);
 
         if (mainBranch) {
@@ -797,7 +854,7 @@ export async function PUT(request: NextRequest) {
           const [mainBranch] = await db
             .select()
             .from(branches)
-            .where(eq(branches.type, 'main'))
+            .where(and(eq(branches.type, 'main'), eq(branches.storeId, storeId)))
             .limit(1);
 
           if (mainBranch) {
@@ -868,7 +925,7 @@ export async function PUT(request: NextRequest) {
             const [mainBranch] = await db
               .select()
               .from(branches)
-              .where(eq(branches.type, 'main'))
+              .where(and(eq(branches.type, 'main'), eq(branches.storeId, storeId)))
               .limit(1);
 
             if (mainBranch) {

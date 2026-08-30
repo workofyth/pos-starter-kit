@@ -3,20 +3,14 @@ import { db } from '@/db';
 import { products, productPrices, inventory, categories, branches } from '@/db/schema/pos';
 import { eq, and, or, isNull, ilike, desc, asc, count, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
 
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
-    }
-
-    const storeId = session.user.storeId;
+    const storeId = guard.storeId;
     const { searchParams } = new URL(request.url);
     
     // Pagination parameters
@@ -159,15 +153,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
 
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
-    }
-
-    const storeId = session.user.storeId;
+    const storeId = guard.storeId;
     const body = await request.json();
     const {
       name, description, sku, barcode, image, imageUrl, categoryId, brand,

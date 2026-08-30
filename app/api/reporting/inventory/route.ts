@@ -8,14 +8,22 @@ import {
   branches
 } from '@/db/schema/pos';
 import { eq, and, sql, desc } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
 
     // 1. Fetch Inventory with Product and Category details
-    let query = db
+    const scopeCondition = branchId
+      ? and(eq(inventory.storeId, guard.storeId), eq(inventory.branchId, branchId))
+      : eq(inventory.storeId, guard.storeId);
+
+    const inventoryData = await db
       .select({
         productId: products.id,
         productName: products.name,
@@ -31,15 +39,10 @@ export async function GET(request: NextRequest) {
       .leftJoin(categories, eq(products.categoryId, categories.id))
       .innerJoin(branches, eq(inventory.branchId, branches.id))
       .leftJoin(
-        productPrices, 
+        productPrices,
         sql`${productPrices.productId} = ${products.id} AND ${productPrices.createdAt} = (SELECT MAX(created_at) FROM ${productPrices} WHERE product_id = ${products.id})`
-      );
-
-    if (branchId) {
-      query = query.where(eq(inventory.branchId, branchId)) as any;
-    }
-
-    const inventoryData = await query;
+      )
+      .where(scopeCondition);
 
     // 2. Metrics for the inventory tab
     const totalItems = inventoryData.length;

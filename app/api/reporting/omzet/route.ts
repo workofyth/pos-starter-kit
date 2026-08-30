@@ -9,9 +9,13 @@ import {
 } from '@/db/schema/pos';
 import { eq, and, gte, lte, inArray, desc } from 'drizzle-orm';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
     const filter = searchParams.get('filter') || 'daily'; // daily, weekly, monthly, yearly
@@ -42,6 +46,7 @@ export async function GET(request: NextRequest) {
 
     // Build conditions
     const conditions = [
+      eq(transactions.storeId, guard.storeId),
       eq(transactions.status, 'completed'),
       gte(transactions.createdAt, startDate),
       lte(transactions.createdAt, endDate)

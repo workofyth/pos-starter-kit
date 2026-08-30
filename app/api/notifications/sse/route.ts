@@ -1,13 +1,31 @@
 import { NextRequest } from 'next/server';
 import { getRedis } from '@/lib/redis';
+import { db } from '@/db';
+import { branches } from '@/db/schema/pos';
+import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export const dynamic = 'force-dynamic';
 
 // GET - Server Sent Events endpoint for real-time notifications
 export async function GET(request: NextRequest) {
+  const guard = await requireOnboarded();
+  if (!guard.ok) return subscriptionGuardResponse(guard);
+
   const { searchParams } = new URL(request.url);
   const branchId = searchParams.get('branchId');
-  
+
+  if (branchId) {
+    const [branch] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+    if (!branch) {
+      return new Response(JSON.stringify({ success: false, message: 'Branch not found in your store' }), { status: 404 });
+    }
+  }
+
   const responseStream = new TransformStream();
   const writer = responseStream.writable.getWriter();
   const encoder = new TextEncoder();

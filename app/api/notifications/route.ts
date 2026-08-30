@@ -1,15 +1,19 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { notifications, branches } from '@/db/schema/pos';
-import { eq, and, desc, count, or, isNull } from 'drizzle-orm';
+import { eq, and, desc, count, or, isNull, type SQL } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch } from '@/lib/notification-sse';
 import redis from '@/lib/redis';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
-    
+
     // Query parameters
     const branchId = searchParams.get('branchId') || '';
     const userId = searchParams.get('userId') || '';
@@ -17,9 +21,9 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
     const offset = (page - 1) * limit;
-    
-    // Create cache key based on parameters
-    const cacheKey = `notifications:${userId}:${branchId}:${isRead}:${page}:${limit}`;
+
+    // Create cache key based on parameters (scoped by store)
+    const cacheKey = `notifications:${guard.storeId}:${userId}:${branchId}:${isRead}:${page}:${limit}`;
     
     // Try to get from Redis cache first
     try {
@@ -60,9 +64,9 @@ export async function GET(request: NextRequest) {
       .$dynamic();
     
     // Apply filters
-    const whereConditions = [];
-    
-    // Improved logic: If both branchId and userId are provided, 
+    const whereConditions: (SQL | undefined)[] = [eq(notifications.storeId, guard.storeId)];
+
+    // Improved logic: If both branchId and userId are provided,
     // we want notifications for that specific user OR general notifications for that branch (userId is null)
     if (branchId && userId) {
       whereConditions.push(eq(notifications.branchId, branchId));
@@ -93,8 +97,8 @@ export async function GET(request: NextRequest) {
       .from(notifications)
       .$dynamic();
     
-    const countWhereConditions = [];
-    
+    const countWhereConditions: (SQL | undefined)[] = [eq(notifications.storeId, guard.storeId)];
+
     if (branchId && userId) {
       countWhereConditions.push(eq(notifications.branchId, branchId));
       countWhereConditions.push(or(eq(notifications.userId, userId), isNull(notifications.userId)));
@@ -167,8 +171,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const body = await request.json();
-    
+
     const {
       userId,
       branchId,
@@ -177,29 +184,44 @@ export async function POST(request: NextRequest) {
       type,
       data
     } = body;
-    
+
     // Validate required fields
     if (!branchId || !title || !message || !type) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID, title, message, and type are required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID, title, message, and type are required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
+    // The target branch must belong to the caller's own store.
+    const [targetBranch] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+
+    if (!targetBranch) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Branch not found in your store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Generate unique ID
     const notificationId = `notif_${nanoid(10)}`;
-    
+
     // Insert the notification
     const [newNotification] = await db
       .insert(notifications)
       .values({
         id: notificationId,
+        storeId: guard.storeId,
         userId: userId || null, // Explicitly set to null if not provided
         branchId,
         title,
@@ -253,35 +275,38 @@ export async function POST(request: NextRequest) {
 // PUT route to update notification (mark as read)
 export async function PUT(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const body = await request.json();
-    
+
     const {
       id,
       isRead
     } = body;
-    
+
     // Validate required fields
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Update the notification
+
+    // Update the notification (scoped to the caller's store)
     const [updatedNotification] = await db
       .update(notifications)
       .set({
         isRead: isRead !== undefined ? isRead : notifications.isRead,
         updatedAt: new Date()
       })
-      .where(eq(notifications.id, id))
+      .where(and(eq(notifications.id, id), eq(notifications.storeId, guard.storeId)))
       .returning();
     
     if (!updatedNotification) {
@@ -334,23 +359,26 @@ export async function PUT(request: NextRequest) {
 // DELETE route to remove notification
 export async function DELETE(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const branchId = searchParams.get('branchId');
     const userId = searchParams.get('userId');
-    
+
     // If ID is provided, delete specific notification
     if (id) {
       // First get the notification to know which cache to invalidate
       const [notificationToDelete] = await db
         .select()
         .from(notifications)
-        .where(eq(notifications.id, id))
+        .where(and(eq(notifications.id, id), eq(notifications.storeId, guard.storeId)))
         .limit(1);
-      
+
       await db
         .delete(notifications)
-        .where(eq(notifications.id, id));
+        .where(and(eq(notifications.id, id), eq(notifications.storeId, guard.storeId)));
       
       // Invalidate Redis cache for this notification's branch and user
       if (notificationToDelete) {
@@ -392,7 +420,7 @@ export async function DELETE(request: NextRequest) {
     else if (userId) {
       await db
         .delete(notifications)
-        .where(eq(notifications.userId, userId));
+        .where(and(eq(notifications.userId, userId), eq(notifications.storeId, guard.storeId)));
       
       // Invalidate Redis cache for this user
       try {
@@ -420,7 +448,7 @@ export async function DELETE(request: NextRequest) {
     else if (branchId) {
       await db
         .delete(notifications)
-        .where(eq(notifications.branchId, branchId));
+        .where(and(eq(notifications.branchId, branchId), eq(notifications.storeId, guard.storeId)));
       
       // Invalidate Redis cache for this branch
       try {

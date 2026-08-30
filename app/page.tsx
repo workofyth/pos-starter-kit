@@ -5,6 +5,7 @@ import { HeroAuthButtons, AuthButtons } from "@/components/auth-buttons";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { PLANS } from "@/lib/plans";
 import {
   ShoppingCart,
   Package,
@@ -265,37 +266,9 @@ export default function Home() {
           </div>
 
           <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-3">
-            {[
-              {
-                name: "Monthly",
-                price: "Rp 99rb",
-                unit: "/bln",
-                desc: "Sangat cocok untuk satu cabang yang baru mulai.",
-                features: ["1 Cabang", "Standard POS", "Inventaris Dasar", "Laporan Email Harian"],
-                recommended: false,
-                link: "/payment-gateway?plan=monthly",
-              },
-              {
-                name: "Yearly",
-                price: "Rp 999rb",
-                unit: "/thn",
-                desc: "Hemat lebih banyak dengan komitmen tahunan.",
-                features: ["5 Cabang", "Inventaris Lanjutan", "Akses AI Assistant", "Ekspor Excel/PDF", "Dukungan Prioritas"],
-                recommended: true,
-                link: "/payment-gateway?plan=yearly",
-              },
-              {
-                name: "One Payment",
-                price: "Rp 1.999rb",
-                unit: null,
-                desc: "Bayar sekali, gunakan selamanya. Tanpa biaya bulanan.",
-                features: ["Cabang Tanpa Batas", "Akses AI Assistant", "Opsi White-label", "Update Selamanya", "Dukungan VIP"],
-                recommended: false,
-                link: "/payment-gateway?plan=permanent",
-              },
-            ].map((plan, i) => (
+            {[PLANS.monthly, PLANS.yearly, PLANS.permanent].map((plan) => (
               <Card
-                key={i}
+                key={plan.key}
                 className={`relative flex flex-col p-8 ${
                   plan.recommended ? "ring-primary/60 shadow-soft-lg z-10 scale-105 ring-2" : ""
                 }`}
@@ -305,11 +278,11 @@ export default function Home() {
                     PALING POPULER
                   </div>
                 )}
-                {plan.name === "One Payment" && (
+                {plan.key === "permanent" && (
                   <Badge className="bg-chart-2/10 text-chart-2 absolute top-4 right-4 border-transparent">LIFETIME</Badge>
                 )}
                 <div className="mb-8">
-                  <h3 className="font-display mb-2 text-xl font-bold tracking-tight">{plan.name}</h3>
+                  <h3 className="font-display mb-2 text-xl font-bold tracking-tight">{plan.label}</h3>
                   <div className="mb-4 flex items-baseline gap-1">
                     <span className="font-display text-4xl font-bold">{plan.price}</span>
                     {plan.unit && <span className="text-muted-foreground">{plan.unit}</span>}
@@ -318,7 +291,7 @@ export default function Home() {
                 </div>
 
                 <div className="mb-8 flex-1 space-y-4">
-                  {plan.features.map((feature, j) => (
+                  {plan.featureList.map((feature, j) => (
                     <div key={j} className="flex items-center gap-3 text-sm">
                       <CheckCircle2 className="text-primary size-4 shrink-0" />
                       <span>{feature}</span>
@@ -327,7 +300,7 @@ export default function Home() {
                 </div>
 
                 <Button asChild size="lg" variant={plan.recommended ? "default" : "secondary"} className="w-full">
-                  <Link href={plan.link}>Get Started</Link>
+                  <Link href={`/payment-gateway?plan=${plan.key}`}>Get Started</Link>
                 </Button>
               </Card>
             ))}

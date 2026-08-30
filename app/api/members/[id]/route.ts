@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { members } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET a single member by ID
 export async function GET(
@@ -9,25 +10,28 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Member ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Member ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     const member = await db
       .select()
       .from(members)
-      .where(eq(members.id, id))
+      .where(and(eq(members.id, id), eq(members.storeId, guard.storeId)))
       .limit(1);
     
     if (member.length === 0) {
@@ -75,28 +79,31 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Member ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Member ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check if member exists
+
+    // Check if member exists in this store
     const existingMember = await db
       .select()
       .from(members)
-      .where(eq(members.id, id));
-    
+      .where(and(eq(members.id, id), eq(members.storeId, guard.storeId)));
+
     if (existingMember.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -123,7 +130,7 @@ export async function PUT(
       const existingMemberByEmail = await db
         .select()
         .from(members)
-        .where(eq(members.email, email));
+        .where(and(eq(members.email, email), eq(members.storeId, guard.storeId)));
       
       if (existingMemberByEmail.length > 0) {
         return new Response(
@@ -144,7 +151,7 @@ export async function PUT(
       const existingMemberByPhone = await db
         .select()
         .from(members)
-        .where(eq(members.phone, phone));
+        .where(and(eq(members.phone, phone), eq(members.storeId, guard.storeId)));
       
       if (existingMemberByPhone.length > 0) {
         return new Response(
@@ -171,7 +178,7 @@ export async function PUT(
         points: points !== undefined ? points : existingMember[0].points,
         updatedAt: new Date()
       })
-      .where(eq(members.id, id))
+      .where(and(eq(members.id, id), eq(members.storeId, guard.storeId)))
       .returning();
     
     return new Response(
@@ -207,44 +214,47 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Member ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Member ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check if member exists
+
+    // Check if member exists in this store
     const existingMember = await db
       .select()
       .from(members)
-      .where(eq(members.id, id));
-    
+      .where(and(eq(members.id, id), eq(members.storeId, guard.storeId)));
+
     if (existingMember.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Member not found' 
+        JSON.stringify({
+          success: false,
+          message: 'Member not found'
         }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Delete the member
     await db
       .delete(members)
-      .where(eq(members.id, id));
+      .where(and(eq(members.id, id), eq(members.storeId, guard.storeId)));
     
     return new Response(
       JSON.stringify({ 

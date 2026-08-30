@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { userBranches, branches } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - Get user's branch data (role, branchId, etc.)
 export async function GET(
@@ -9,22 +10,25 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id: userId } = await params;
-    
+
     if (!userId) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'User ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'User ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Get user's branch assignments
+
+    // Get user's branch assignments (only within branches belonging to the caller's store)
     const userBranchData = await db
       .select({
         id: userBranches.id,
@@ -40,8 +44,8 @@ export async function GET(
         branchEmail: branches.email
       })
       .from(userBranches)
-      .leftJoin(branches, eq(userBranches.branchId, branches.id))
-      .where(eq(userBranches.userId, userId));
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, guard.storeId)));
     
     if (userBranchData.length === 0) {
       return new Response(

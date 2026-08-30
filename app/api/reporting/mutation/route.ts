@@ -12,9 +12,13 @@ import {
 } from '@/db/schema/pos';
 import { eq, and, gte, lte, desc, inArray, or } from 'drizzle-orm';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
     const branchId = searchParams.get('branchId');
     const filter = searchParams.get('filter') || 'daily';
@@ -44,6 +48,7 @@ export async function GET(request: NextRequest) {
     }
 
     const conditions = [
+      eq(inventoryTransactions.storeId, guard.storeId),
       gte(inventoryTransactions.createdAt, startDate),
       lte(inventoryTransactions.createdAt, endDate),
       or(
@@ -114,7 +119,7 @@ export async function GET(request: NextRequest) {
         })
         .from(transactions)
         .leftJoin(members, eq(transactions.memberId, members.id))
-        .where(inArray(transactions.transactionNumber, uniqueRefs));
+        .where(and(eq(transactions.storeId, guard.storeId), inArray(transactions.transactionNumber, uniqueRefs)));
       
       posTransactions.forEach(t => {
         memberMap[t.transactionNumber] = t.memberName || 'Retail Customer';
@@ -128,7 +133,7 @@ export async function GET(request: NextRequest) {
           name: branches.name
         })
         .from(branches)
-        .where(inArray(branches.id, uniqueBranchIds));
+        .where(and(eq(branches.storeId, guard.storeId), inArray(branches.id, uniqueBranchIds)));
       
       partnerBranches.forEach(b => {
         branchMap[b.id] = b.name;
@@ -143,7 +148,7 @@ export async function GET(request: NextRequest) {
         })
         .from(purchaseOrders)
         .leftJoin(suppliers, eq(purchaseOrders.supplierId, suppliers.id))
-        .where(inArray(purchaseOrders.orderNumber, poOrderNumbers));
+        .where(and(eq(purchaseOrders.storeId, guard.storeId), inArray(purchaseOrders.orderNumber, poOrderNumbers)));
       
       posWithSuppliers.forEach(p => {
         poSupplierMap[p.orderNumber] = p.supplierName || 'Unknown Supplier';

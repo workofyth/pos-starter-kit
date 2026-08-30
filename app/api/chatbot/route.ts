@@ -18,6 +18,7 @@ import {
 import { eq, sql, desc, sum, count, and, ilike, or, lt, lte, gte, ne } from 'drizzle-orm';
 import { auth } from "@/lib/auth";
 import { getRedis } from '@/lib/redis';
+import { hasFeature } from '@/lib/plans';
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -60,6 +61,10 @@ export async function DELETE(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) return new Response(JSON.stringify({ success: false, message: 'Unauthorized' }), { status: 401 });
+
+  if (!hasFeature(session.user.plan, 'aiAssistant')) {
+    return new Response(JSON.stringify({ success: false, message: 'AI Assistant is available on Yearly and One Payment plans. Please upgrade to use this feature.' }), { status: 403 });
+  }
 
   try {
     const { messages: incomingMessages } = await request.json();

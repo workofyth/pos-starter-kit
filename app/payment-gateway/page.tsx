@@ -6,24 +6,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { CreditCard, CheckCircle2, ShieldCheck, ArrowLeft, Loader2, QrCode, Wallet, Building2 } from "lucide-react";
 import { useState, useEffect, Suspense } from "react";
 import Link from "next/link";
+import { PLANS, getPlan } from "@/lib/plans";
 
 function PaymentGatewayContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const plan = searchParams.get("plan") || "monthly";
+  const requestedPlan = searchParams.get("plan");
+  const plan = requestedPlan && requestedPlan in PLANS && requestedPlan !== "free" ? requestedPlan : "monthly";
   const [processing, setProcessing] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("qris");
   const [selectedBank, setSelectedBank] = useState("cimb");
   const [paymentData, setPaymentData] = useState<any>(null);
 
-  const planInfo = {
-    monthly: { name: "Monthly", price: "Rp 99.999", interval: "Bulan" },
-    yearly: { name: "Yearly", price: "Rp 999.999", interval: "Tahun" },
-    permanent: { name: "One Payment", price: "Rp 1.999.999", interval: "Selamanya" },
-  };
-
-  const selectedPlan = planInfo[plan as keyof typeof planInfo] || planInfo.monthly;
+  const selectedPlanDef = getPlan(plan);
+  const selectedPlan = { name: selectedPlanDef.label, price: selectedPlanDef.price, interval: selectedPlanDef.interval };
 
   useEffect(() => {
     let interval: NodeJS.Timeout;

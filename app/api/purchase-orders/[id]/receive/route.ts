@@ -10,12 +10,17 @@ import {
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { v4 as uuidv4 } from 'uuid';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const poId = params.id;
     const { receivedItems, userId } = await request.json();
     console.log(`Processing PO Receive for ${poId} by user ${userId}`);
@@ -25,7 +30,7 @@ export async function POST(
     const [po] = await db
       .select()
       .from(purchaseOrders)
-      .where(eq(purchaseOrders.id, poId))
+      .where(and(eq(purchaseOrders.id, poId), eq(purchaseOrders.storeId, storeId)))
       .limit(1);
 
     if (!po) {
@@ -62,7 +67,8 @@ export async function POST(
           .set({ receivedQuantity: item.receivedQuantity })
           .where(and(
             eq(purchaseOrderDetails.purchaseOrderId, poId),
-            eq(purchaseOrderDetails.productId, item.productId)
+            eq(purchaseOrderDetails.productId, item.productId),
+            eq(purchaseOrderDetails.storeId, storeId)
           ));
 
         if (item.receivedQuantity > 0) {
@@ -72,7 +78,8 @@ export async function POST(
             .from(inventory)
             .where(and(
               eq(inventory.productId, item.productId),
-              eq(inventory.branchId, po.branchId)
+              eq(inventory.branchId, po.branchId),
+              eq(inventory.storeId, storeId)
             ))
             .limit(1);
 
@@ -95,6 +102,7 @@ export async function POST(
             // Create new inventory record
             await tx.insert(inventory).values({
               id: `inv_${nanoid(10)}`,
+              storeId,
               productId: item.productId,
               branchId: po.branchId,
               quantity: item.receivedQuantity,
@@ -109,6 +117,7 @@ export async function POST(
           // 3. Log mutation
           await tx.insert(inventoryTransactions).values({
             id: `itx_${nanoid(10)}`,
+            storeId,
             productId: item.productId,
             branchId: po.branchId,
             type: 'in', // Receiving PO is a stock-in event

@@ -1,25 +1,29 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { 
-  transactions, 
-  transactionDetails, 
-  products 
+import {
+  transactions,
+  transactionDetails,
+  products
 } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const resolvedParams = await params;
     const id = resolvedParams.id;
-    
-    // Fetch transaction by id
+
+    // Fetch transaction by id, scoped to this store
     const transactionRecord = await db
       .select()
       .from(transactions)
-      .where(eq(transactions.id, id))
+      .where(and(eq(transactions.id, id), eq(transactions.storeId, guard.storeId)))
       .limit(1);
 
     if (transactionRecord.length === 0) {
@@ -44,7 +48,7 @@ export async function GET(
       })
       .from(transactionDetails)
       .leftJoin(products, eq(transactionDetails.productId, products.id))
-      .where(eq(transactionDetails.transactionId, id));
+      .where(and(eq(transactionDetails.transactionId, id), eq(transactionDetails.storeId, guard.storeId)));
 
     return new Response(
       JSON.stringify({

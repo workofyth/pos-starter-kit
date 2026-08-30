@@ -5,6 +5,7 @@ import { eq, and, count, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { getRedis } from '@/lib/redis';
 import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - Get specific inventory item details
 export async function GET(
@@ -12,8 +13,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
         JSON.stringify({ 
@@ -50,9 +54,9 @@ export async function GET(
       .from(inventory)
       .leftJoin(products, eq(inventory.productId, products.id))
       .leftJoin(branches, eq(inventory.branchId, branches.id))
-      .where(eq(inventory.id, id))
+      .where(and(eq(inventory.id, id), eq(inventory.storeId, guard.storeId)))
       .limit(1);
-    
+
     if (inventoryItem.length === 0) {
       return new Response(
         JSON.stringify({ 
@@ -121,29 +125,32 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Inventory ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Inventory ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Check if this is a split request approval/rejection or inventory update
     if (body.action !== undefined) {
       // This is a split request approval/rejection
-      return await handleSplitRequestApproval(id, body);
+      return await handleSplitRequestApproval(id, body, guard.storeId);
     } else {
       // This is an inventory item update
-      return await handleInventoryUpdate(id, body);
+      return await handleInventoryUpdate(id, body, guard.storeId);
     }
   } catch (error) {
     console.error('Error processing PUT request:', error);
@@ -166,18 +173,18 @@ async function handleInventoryUpdate(id: string, body: {
   quantity?: number;
   minStock?: number;
   notes?: string;
-}) {
+}, storeId: string) {
   const {
     quantity,
     minStock,
     notes = ''
   } = body;
-  
-  // Check if inventory item exists
+
+  // Check if inventory item exists (scoped to the caller's store)
   const existingInventory = await db
     .select()
     .from(inventory)
-    .where(eq(inventory.id, id))
+    .where(and(eq(inventory.id, id), eq(inventory.storeId, storeId)))
     .limit(1);
 
   if (existingInventory.length === 0) {
@@ -215,9 +222,9 @@ async function handleInventoryUpdate(id: string, body: {
       lastUpdated: new Date(),
       updatedAt: new Date()
     })
-    .where(eq(inventory.id, id))
+    .where(and(eq(inventory.id, id), eq(inventory.storeId, storeId)))
     .returning();
-  
+
   // Publish real-time update for inventory adjustment using Redis Lists
   try {
     const updateData = {
@@ -255,6 +262,7 @@ async function handleInventoryUpdate(id: string, body: {
     
     await db.insert(inventoryTransactions).values({
       id: `itx_${nanoid(10)}`,
+      storeId,
       productId: existingInventory[0].productId,
       branchId: existingInventory[0].branchId,
       type: transactionType,
@@ -285,7 +293,7 @@ async function handleSplitRequestApproval(id: string, body: {
   action: 'approve' | 'reject';
   approvedBy: string;
   notes?: string;
-}) {
+}, storeId: string) {
   const {
     action, // 'approve' or 'reject'
     approvedBy, // User ID of the person approving/rejecting
@@ -334,6 +342,7 @@ async function handleSplitRequestApproval(id: string, body: {
     .where(
       and(
         eq(inventoryTransactions.id, id),
+        eq(inventoryTransactions.storeId, storeId),
         eq(inventoryTransactions.type, 'split'),
         eq(inventoryTransactions.status, 'pending')
       )
@@ -353,7 +362,7 @@ async function handleSplitRequestApproval(id: string, body: {
     );
   }
 
-  // Check user's role for approval permissions
+  // Check user's role for approval permissions (only within this store's branches)
   const userBranchResponse = await db
     .select({
       role: userBranches.role,
@@ -361,7 +370,8 @@ async function handleSplitRequestApproval(id: string, body: {
       isMainAdmin: userBranches.isMainAdmin
     })
     .from(userBranches)
-    .where(eq(userBranches.userId, approvedBy));
+    .innerJoin(branches, eq(userBranches.branchId, branches.id))
+    .where(and(eq(userBranches.userId, approvedBy), eq(branches.storeId, storeId)));
 
   if (userBranchResponse.length === 0) {
     return new Response(
@@ -483,6 +493,7 @@ async function handleSplitRequestApproval(id: string, body: {
       // If inventory doesn't exist at target branch, create it
       await db.insert(inventory).values({
         id: `inv_${nanoid(10)}`,
+        storeId,
         productId: inventoryTransaction[0].productId,
         branchId: inventoryTransaction[0].referenceId!,
         quantity: inventoryTransaction[0].quantity,
@@ -521,6 +532,7 @@ async function handleSplitRequestApproval(id: string, body: {
     // Create a complementary transaction for the TARGET branch
     await db.insert(inventoryTransactions).values({
       id: `itx_recv_${nanoid(10)}`,
+      storeId,
       productId: inventoryTransaction[0].productId,
       branchId: inventoryTransaction[0].referenceId!,
       referenceId: inventoryTransaction[0].branchId, // Original source is the reference
@@ -674,45 +686,48 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Inventory ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Inventory ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
-    // Check if inventory item exists
+
+    // Check if inventory item exists (scoped to the caller's store)
     const existingInventory = await db
       .select()
       .from(inventory)
-      .where(eq(inventory.id, id))
+      .where(and(eq(inventory.id, id), eq(inventory.storeId, guard.storeId)))
       .limit(1);
-    
+
     if (existingInventory.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Inventory item not found' 
+        JSON.stringify({
+          success: false,
+          message: 'Inventory item not found'
         }),
-        { 
-          status: 404, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
     // Delete the inventory item
     await db
       .delete(inventory)
-      .where(eq(inventory.id, id));
+      .where(and(eq(inventory.id, id), eq(inventory.storeId, guard.storeId)));
     
     return new Response(
       JSON.stringify({ 
@@ -746,9 +761,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
         JSON.stringify({ 
@@ -784,7 +802,7 @@ export async function POST(
       );
     }
     
-    // Check if the inventory item exists
+    // Check if the inventory item exists (scoped to the caller's store)
     const inventoryItem = await db
       .select({
         id: inventory.id,
@@ -793,7 +811,7 @@ export async function POST(
         quantity: inventory.quantity
       })
       .from(inventory)
-      .where(eq(inventory.id, id))
+      .where(and(eq(inventory.id, id), eq(inventory.storeId, guard.storeId)))
       .limit(1);
     
     if (inventoryItem.length === 0) {
@@ -823,6 +841,26 @@ export async function POST(
       );
     }
     
+    // Verify the target branch belongs to the same store
+    const [targetBranchInStore] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, targetBranchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+
+    if (!targetBranchInStore) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Target branch does not exist in your store'
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     // Check if source and target branches are different
     if (sourceBranchId === targetBranchId) {
       return new Response(
@@ -837,7 +875,7 @@ export async function POST(
       );
     }
     
-    // Check user's role and branch assignment
+    // Check user's role and branch assignment (only within this store's branches)
     const userBranchResponse = await db
       .select({
         role: userBranches.role,
@@ -845,7 +883,8 @@ export async function POST(
         isMainAdmin: userBranches.isMainAdmin
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, userId));
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, guard.storeId)));
     
     if (userBranchResponse.length === 0) {
       return new Response(
@@ -929,6 +968,7 @@ export async function POST(
     // Create approval request instead of directly processing the split
     const [approvalRequest] = await db.insert(inventoryTransactions).values({
       id: `itx_${nanoid(10)}`,
+      storeId: guard.storeId,
       productId: inventoryItem[0].productId,
       branchId: sourceBranchId, // Source branch
       referenceId: targetBranchId, // Target branch (stored in referenceId)

@@ -1,7 +1,10 @@
 import { NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
+  const guard = await requireOnboarded();
+  if (!guard.ok) return subscriptionGuardResponse(guard);
 
   // Create sample data for the template
   const templateData = [

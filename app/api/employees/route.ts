@@ -5,11 +5,15 @@ import { branches, userBranches } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { auth } from '@/lib/auth';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { searchParams } = new URL(request.url);
-    
+
     // Pagination parameters
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '10');
@@ -58,12 +62,12 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply search filters
-    const whereConditions = [];
-    
+    const whereConditions = [eq(branches.storeId, guard.storeId)];
+
     if (search) {
       whereConditions.push(ilike(user.name, `%${search}%`));
     }
-    
+
     if (branchId) {
       whereConditions.push(eq(userBranches.branchId, branchId));
     }
@@ -114,12 +118,12 @@ export async function GET(request: NextRequest) {
       .leftJoin(userBranches, eq(user.id, userBranches.userId))
       .leftJoin(branches, eq(userBranches.branchId, branches.id));
     
-    const countWhereConditions = [];
-    
+    const countWhereConditions = [eq(branches.storeId, guard.storeId)];
+
     if (search) {
       countWhereConditions.push(ilike(user.name, `%${search}%`));
     }
-    
+
     if (branchId) {
       countWhereConditions.push(eq(userBranches.branchId, branchId));
     }
@@ -194,6 +198,9 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const body = await request.json();
 
     const { name, email, branchId, role, image = null } = body;
@@ -209,6 +216,20 @@ export async function POST(request: NextRequest) {
           status: 400,
           headers: { 'Content-Type': 'application/json' }
         }
+      );
+    }
+
+    // The branch the new employee is assigned to must belong to the caller's own store.
+    const [targetBranch] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+
+    if (!targetBranch) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Branch not found in your store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
       );
     }
 

@@ -4,12 +4,17 @@ import { inventory, products, branches, inventoryTransactions, userBranches } fr
 import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { sendNotificationsToBranchRoles } from '@/lib/notification-helpers';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // POST - Create approval request for splitting inventory from one branch to another
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const body = await request.json();
-    
+
     const {
       productId, // Single split fallback
       quantity,  // Single split fallback
@@ -39,6 +44,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Both branches must belong to the caller's own store.
+    const ownBranches = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.storeId, storeId), eq(branches.id, sourceBranchId)));
+    const ownTargetBranches = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.storeId, storeId), eq(branches.id, targetBranchId)));
+
+    if (ownBranches.length === 0 || ownTargetBranches.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Source or target branch not found in your store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Prepare items list
     let splitItems = [];
     if (items && Array.isArray(items) && items.length > 0) {
@@ -52,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Check user's role and branch assignment
+    // Check user's role and branch assignment (scoped to this store via branches join)
     const userBranchResponse = await db
       .select({
         role: userBranches.role,
@@ -60,7 +82,8 @@ export async function POST(request: NextRequest) {
         isMainAdmin: userBranches.isMainAdmin
       })
       .from(userBranches)
-      .where(eq(userBranches.userId, userId));
+      .innerJoin(branches, eq(userBranches.branchId, branches.id))
+      .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)));
     
     if (userBranchResponse.length === 0) {
       return new Response(
@@ -102,6 +125,7 @@ export async function POST(request: NextRequest) {
         .from(inventory)
         .where(
           and(
+            eq(inventory.storeId, storeId),
             eq(inventory.productId, pId),
             eq(inventory.branchId, sourceBranchId)
           )
@@ -121,6 +145,7 @@ export async function POST(request: NextRequest) {
       // Create approval request
       const [approvalRequest] = await db.insert(inventoryTransactions).values({
         id: `itx_${nanoid(10)}`,
+        storeId,
         productId: pId,
         branchId: sourceBranchId,
         referenceId: targetBranchId,
@@ -138,7 +163,7 @@ export async function POST(request: NextRequest) {
       // Notification Logic
       const [sourceBranch] = await db.select({ type: branches.type, name: branches.name }).from(branches).where(eq(branches.id, sourceBranchId)).limit(1);
       const [targetBranch] = await db.select({ type: branches.type, name: branches.name }).from(branches).where(eq(branches.id, targetBranchId)).limit(1);
-      const [product] = await db.select({ name: products.name }).from(products).where(eq(products.id, pId)).limit(1);
+      const [product] = await db.select({ name: products.name }).from(products).where(and(eq(products.id, pId), eq(products.storeId, storeId))).limit(1);
 
       if (sourceBranch && targetBranch) {
         try {

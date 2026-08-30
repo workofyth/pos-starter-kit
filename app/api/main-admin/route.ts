@@ -1,14 +1,23 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { userBranches } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
-import { useSession } from '@/lib/auth-client';
+import { userBranches, branches } from '@/db/schema/pos';
+import { eq, and } from 'drizzle-orm';
+import { requireMainAdmin, guardResponse } from '@/lib/admin-guard';
 
 // PUT - Set a user as main admin or remove main admin status
 export async function PUT(request: NextRequest) {
   try {
+    const guard = await requireMainAdmin();
+    if (!guard.ok) return guardResponse(guard);
+    if (!guard.storeId) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'No store associated with your account' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const body = await request.json();
-    
+
     const {
       userId,        // User ID to set/unset as main admin
       branchId,      // Branch ID of the user's assignment
@@ -17,26 +26,40 @@ export async function PUT(request: NextRequest) {
 
     if (!userId || !branchId || isMainAdmin === undefined) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'User ID, Branch ID, and isMainAdmin status are required' 
+        JSON.stringify({
+          success: false,
+          message: 'User ID, Branch ID, and isMainAdmin status are required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
 
-    // Update the user's main admin status using userId and branchId combination
+    // The branch being modified must belong to the caller's own store.
+    const [branch] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+
+    if (!branch) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Branch not found in your store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Update the user's main admin status for this specific branch assignment
     const [updatedUserBranch] = await db
       .update(userBranches)
-      .set({ 
+      .set({
         isMainAdmin: Boolean(isMainAdmin),
         updatedAt: new Date()
       })
       .where(
-        eq(userBranches.userId, userId) // Match by user ID
+        and(eq(userBranches.userId, userId), eq(userBranches.branchId, branchId))
       )
       .returning();
 

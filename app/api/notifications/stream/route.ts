@@ -1,9 +1,10 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { notifications } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
+import { notifications, branches } from '@/db/schema/pos';
+import { eq, and } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { broadcastToBranch } from '@/lib/notification-sse';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - Returns information about the notification streaming endpoint
 export async function GET(request: NextRequest) {
@@ -22,8 +23,11 @@ export async function GET(request: NextRequest) {
 // POST - Send notification to specific branch via SSE
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const body = await request.json();
-    
+
     const {
       branchId,
       title,
@@ -31,21 +35,35 @@ export async function POST(request: NextRequest) {
       type,
       data
     } = body;
-    
+
     // Validate required fields
     if (!branchId || !title || !message || !type) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID, title, message, and type are required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID, title, message, and type are required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
+    // The target branch must belong to the caller's own store.
+    const [targetBranch] = await db
+      .select({ id: branches.id })
+      .from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, guard.storeId)))
+      .limit(1);
+
+    if (!targetBranch) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Branch not found in your store' }),
+        { status: 404, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     // Broadcast notification via SSE
     await broadcastToBranch(branchId, {
       title,

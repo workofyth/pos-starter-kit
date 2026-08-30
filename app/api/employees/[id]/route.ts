@@ -1,7 +1,23 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { user, userBranches } from '@/db/schema/pos';
+import { user, userBranches, branches } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
+
+/**
+ * The `user` table has no direct storeId column for employees (only the store
+ * owner's user row carries one), so tenant membership is verified through the
+ * employee's branch assignment: user -> userBranches -> branches.storeId.
+ */
+async function isEmployeeInStore(userId: string, storeId: string): Promise<boolean> {
+  const [membership] = await db
+    .select({ id: userBranches.id })
+    .from(userBranches)
+    .innerJoin(branches, eq(userBranches.branchId, branches.id))
+    .where(and(eq(userBranches.userId, userId), eq(branches.storeId, storeId)))
+    .limit(1);
+  return !!membership;
+}
 
 // GET a single employee by ID
 export async function GET(
@@ -9,21 +25,37 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Employee ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Employee ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
+    if (!(await isEmployeeInStore(id, guard.storeId))) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Employee not found'
+        }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     const employee = await db
       .select({
         id: user.id,
@@ -98,22 +130,38 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
     const body = await request.json();
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Employee ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Employee ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
+    if (!(await isEmployeeInStore(id, guard.storeId))) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Employee not found'
+        }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     // Check if user exists
     const existingUser = await db
       .select()
@@ -248,21 +296,37 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const { id } = await params;
-    
+
     if (!id) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Employee ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Employee ID is required'
         }),
-        { 
-          status: 400, 
-          headers: { 'Content-Type': 'application/json' } 
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
         }
       );
     }
-    
+
+    if (!(await isEmployeeInStore(id, guard.storeId))) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Employee not found'
+        }),
+        {
+          status: 404,
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
     // Check if employee exists
     const existingUser = await db
       .select()

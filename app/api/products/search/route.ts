@@ -1,12 +1,17 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { products, productPrices, inventory, categories } from '@/db/schema/pos';
-import { eq, and, or, isNull, ilike, desc, asc, count, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, ilike, desc, asc, count, sql, SQL } from 'drizzle-orm';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     const { searchParams } = new URL(request.url);
-    
+
     const search = searchParams.get('q') || searchParams.get('search') || '';
     const category = searchParams.get('category') || '';
     const minPrice = searchParams.get('minPrice');
@@ -94,8 +99,8 @@ export async function GET(request: NextRequest) {
       .offset(offset);
     
     // Apply filters
-    const whereConditions = [];
-    
+    const whereConditions: (SQL<unknown> | undefined)[] = [eq(products.storeId, storeId)];
+
     if (search) {
       whereConditions.push(or(
         ilike(products.name, `%${search}%`),
@@ -144,8 +149,8 @@ export async function GET(request: NextRequest) {
       .leftJoin(stockSubquery, eq(products.id, stockSubquery.productId))
       .leftJoin(priceSubquery, eq(products.id, priceSubquery.productId));
     
-    const countWhereConditions = [];
-    
+    const countWhereConditions: (SQL<unknown> | undefined)[] = [eq(products.storeId, storeId)];
+
     if (search) {
       countWhereConditions.push(or(
         ilike(products.name, `%${search}%`),

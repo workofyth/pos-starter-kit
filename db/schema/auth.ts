@@ -14,11 +14,12 @@ export const user = pgTable("users", {
     updatedAt: timestamp("updated_at")
         .$defaultFn(() => /* @__PURE__ */ new Date())
         .notNull(),
-    plan: text("plan").default("free").notNull(), // free, startup, pro, enterprise
+    plan: text("plan").default("free").notNull(), // free (trial default), monthly, yearly, permanent — matches the plans actually sold in lib/plans.ts
     subscriptionStatus: text("subscription_status").default("none").notNull(), // trialing, active, expired, none, pending_payment
     trialStartDate: timestamp("trial_start_date"),
     subscriptionEndDate: timestamp("subscription_end_date"),
     paymentDeadline: timestamp("payment_deadline"),
+    lastRenewalReminderAt: timestamp("last_renewal_reminder_at"),
     hasUsedTrial: boolean("has_used_trial").default(false).notNull(),
     isOnboarded: boolean("is_onboarded").default(false).notNull(),
     storeId: text("store_id"), // Global unique identifier for the store/tenant

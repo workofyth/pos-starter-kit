@@ -9,20 +9,14 @@ import {
   userBranches
 } from '@/db/schema/pos';
 import { eq, and, desc, count, sql } from 'drizzle-orm';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireOnboarded, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
 
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
-    }
-
-    const storeId = session.user.storeId;
+    const storeId = guard.storeId;
     const { searchParams } = new URL(request.url);
     
     const branchId = searchParams.get('branchId') || '';

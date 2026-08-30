@@ -15,20 +15,14 @@ import {
 import { broadcastToBranch } from '@/lib/notification-sse';
 import { eq, and, inArray } from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
 
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, error: 'Unauthorized' }), { status: 401 });
-    }
-
-    const storeId = session.user.storeId;
+    const storeId = guard.storeId;
     const {
       cashierId,
       memberId,

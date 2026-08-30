@@ -1,13 +1,18 @@
 import { NextRequest } from 'next/server';
 import * as XLSX from 'xlsx';
 import { db } from '@/db';
-import { products, categories, productPrices, inventory } from '@/db/schema/pos';
+import { products, categories, productPrices, inventory, branches } from '@/db/schema/pos';
 import { eq, and, desc } from 'drizzle-orm';
 import fs from 'fs';
 import { nanoid } from 'nanoid';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
+
     // Get the formData from the request
     const formData = await request.formData();
     const excelFile = formData.get('excel') as File | null;
@@ -15,21 +20,31 @@ export async function POST(request: NextRequest) {
 
     if (!excelFile) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Excel file is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Excel file is required'
         }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    // Validate branchId is provided
+    // Validate branchId is provided and belongs to this store
     if (!branchId) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          message: 'Branch ID is required' 
+        JSON.stringify({
+          success: false,
+          message: 'Branch ID is required'
         }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const [targetBranch] = await db.select({ id: branches.id }).from(branches)
+      .where(and(eq(branches.id, branchId), eq(branches.storeId, storeId)))
+      .limit(1);
+    if (!targetBranch) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Branch not found in your store' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -68,8 +83,8 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Fetch existing categories to validate codes
-      const allCategories = await db.select().from(categories);
+      // Fetch existing categories (scoped to this store) to validate codes
+      const allCategories = await db.select().from(categories).where(eq(categories.storeId, storeId));
       const categoryMap = new Map(allCategories.map(cat => [cat.code, cat]));
 
       // Process the data and create products
@@ -103,7 +118,8 @@ export async function POST(request: NextRequest) {
           .where(
             and(
               eq(products.sku, sku),
-              eq(products.barcode, barcode)
+              eq(products.barcode, barcode),
+              eq(products.storeId, storeId)
             )
           );
         
@@ -120,6 +136,7 @@ export async function POST(request: NextRequest) {
         // Create product object
         const newProduct = {
           id: productId,
+          storeId,
           name: row['Name'] || '',
           description: row['Description'] || '',
           sku,
@@ -162,6 +179,7 @@ export async function POST(request: NextRequest) {
           // Insert product price
           await db.insert(productPrices).values({
             id: `pp_${nanoid(10)}`,
+            storeId,
             productId: product.id,
             branchId: null, // Default to null for all branches initially
             purchasePrice: purchasePrice.toString(),
@@ -170,15 +188,10 @@ export async function POST(request: NextRequest) {
             createdAt: new Date()
           });
 
-          // Need to get the branch ID from the request parameters
-          // Validate that branchId is provided
-          if (!branchId) {
-            throw new Error('Branch ID is required for inventory creation');
-          }
-          
-          // Insert inventory record for the specified branch
+          // Insert inventory record for the specified (already store-validated) branch
           await db.insert(inventory).values({
             id: `inv_${nanoid(10)}`,
+            storeId,
             productId: product.id,
             branchId, // Dynamic branch ID from request parameters
             quantity: stock,

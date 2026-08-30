@@ -5,7 +5,8 @@ import fsExtra from 'fs-extra';
 import { mkdirp } from 'mkdirp';
 import { db } from '@/db';
 import { products } from '@/db/schema/pos';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
+import { requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // Create the images directory if it doesn't exist
 const imagesDir = path.join(process.cwd(), 'public', 'assets', 'images', 'products');
@@ -13,6 +14,9 @@ mkdirp.sync(imagesDir);
 
 export async function POST(request: NextRequest) {
   try {
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+
     const formData = await request.formData();
     
     // Extract file from FormData
@@ -52,11 +56,11 @@ export async function POST(request: NextRequest) {
     if (productId) {
       const imageUrl = `/assets/images/products/${sanitizedFileName}`;
       await db.update(products)
-        .set({ 
+        .set({
           imageUrl, // This corresponds to the imageUrl field in the schema
           image: imageUrl // Also update the image field for consistency
         })
-        .where(eq(products.id, productId));
+        .where(and(eq(products.id, productId), eq(products.storeId, guard.storeId)));
     }
 
     return new Response(

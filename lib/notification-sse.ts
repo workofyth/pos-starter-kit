@@ -80,7 +80,9 @@ export async function broadcastToBranch(branchId: string, notification: Notifica
   });
 }
 
-// Function to broadcast to all connections (for testing)
+// Broadcasts to every connected client across every tenant — unscoped by
+// storeId, so a real caller would leak notifications cross-tenant. Currently
+// unused; keep it that way unless it's given store scoping first.
 export async function broadcastToAll(notification: NotificationData) {
   // Try to push to all in-memory storage entries (server-side only)
   if (typeof window === 'undefined') {

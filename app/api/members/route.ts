@@ -3,18 +3,13 @@ import { db } from '@/db';
 import { members } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
-import { auth } from '@/lib/auth';
-import { headers } from 'next/headers';
+import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "No store associated with user" }), { status: 400 });
-    }
+    const guard = await requireOnboarded();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const { searchParams } = new URL(request.url);
     
@@ -29,7 +24,7 @@ export async function GET(request: NextRequest) {
     const sortOrder = searchParams.get('sortOrder') || 'desc';
     
     // Build query
-    const whereConditions = [eq(members.storeId, session.user.storeId)];
+    const whereConditions = [eq(members.storeId, storeId)];
     if (search) {
       whereConditions.push(ilike(members.name, `%${search}%`));
     }
@@ -92,43 +87,39 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await auth.api.getSession({
-      headers: await headers(),
-    });
-
-    if (!session?.user?.storeId) {
-      return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
-    }
+    const guard = await requireActiveAccess();
+    if (!guard.ok) return subscriptionGuardResponse(guard);
+    const storeId = guard.storeId;
 
     const body = await request.json();
     const { name, phone, email, address, points = 0 } = body;
-    
+
     if (!name || !phone) {
       return new Response(JSON.stringify({ success: false, message: 'Name and phone are required' }), { status: 400 });
     }
-    
+
     // Check for duplicate email within the same store
     if (email) {
       const existingMember = await db.select().from(members)
-        .where(and(eq(members.email, email), eq(members.storeId, session.user.storeId)));
-      
+        .where(and(eq(members.email, email), eq(members.storeId, storeId)));
+
       if (existingMember.length > 0) {
         return new Response(JSON.stringify({ success: false, message: 'Member with this email already exists in your store' }), { status: 409 });
       }
     }
-    
+
     // Check for duplicate phone within the same store
     const existingMemberByPhone = await db.select().from(members)
-      .where(and(eq(members.phone, phone), eq(members.storeId, session.user.storeId)));
-    
+      .where(and(eq(members.phone, phone), eq(members.storeId, storeId)));
+
     if (existingMemberByPhone.length > 0) {
       return new Response(JSON.stringify({ success: false, message: 'Member with this phone number already exists in your store' }), { status: 409 });
     }
-    
+
     const memberId = `mem_${nanoid(10)}`;
     const [newMember] = await db.insert(members).values({
         id: memberId,
-        storeId: session.user.storeId,
+        storeId,
         name, phone, email: email || null, address: address || null, points
       }).returning();
     
