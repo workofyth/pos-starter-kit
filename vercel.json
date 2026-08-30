@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/daily-omset",
+      "schedule": "10 17 * * *"
+    },
+    {
+      "path": "/api/cron/subscription-sweep",
+      "schedule": "0 18 * * *"
+    }
+  ]
+}
