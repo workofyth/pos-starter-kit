@@ -1,4 +1,5 @@
 import { betterAuth } from "better-auth";
+import { bearer } from "better-auth/plugins";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/db"; // your drizzle instance
 import { account, session, user, verification } from "@/db/schema/auth";
@@ -61,4 +62,10 @@ export const auth = betterAuth({
     emailAndPassword: {
         enabled: true,
     },
+    // Enables the Flutter mobile client to authenticate with a bearer token
+    // (stored in flutter_secure_storage) instead of a cookie jar: sign-in
+    // responses echo the session token back in a `set-auth-token` header,
+    // which the client then sends as `Authorization: Bearer <token>` on
+    // every request. Cookie-based web sessions are unaffected.
+    plugins: [bearer()],
 });
