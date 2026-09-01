@@ -492,6 +492,52 @@
         }
       }
     },
+    "/api/auth/forgot-password": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Request a password reset email",
+        "description": "Always returns a generic success message regardless of whether the email is registered (prevents account enumeration). Sends an email (via Resend, see lib/email-service.ts) with a link to `/reset-password/{token}` — that page collects the new password and calls POST /api/auth/reset-password.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["email"],
+            "properties": {
+              "email": { "type": "string", "format": "email" },
+              "redirectTo": { "type": "string", "description": "Where the reset-password page should send the user after a successful reset. Defaults to /sign-in." }
+            }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Request accepted (does not confirm the email exists).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } },
+          "400": { "description": "Missing email.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Reset password with a token",
+        "description": "`token` comes from the link in the email sent by POST /api/auth/forgot-password. Tokens expire after 1 hour and are single-use.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["token", "newPassword"],
+            "properties": {
+              "token": { "type": "string" },
+              "newPassword": { "type": "string", "format": "password", "minLength": 8 }
+            }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Password changed.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } },
+          "400": { "description": "Missing fields, token invalid/expired, or password too short/long.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
     "/api/auth/{path}": {
       "parameters": [{ "name": "path", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Catch-all — see description below." }],
       "get": {
