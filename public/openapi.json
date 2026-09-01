@@ -3,7 +3,7 @@
   "info": {
     "title": "Talertech POS API",
     "version": "1.0.0",
-    "description": "REST API backing the Talertech multi-branch POS SaaS web app — the same endpoints power the web dashboard and are intended for the Flutter mobile client.\n\n**Auth**: sign in via `POST /api/auth/sign-in/email`. The response includes a `set-auth-token` response header — send that value back as `Authorization: Bearer <token>` on every subsequent request (this is how the mobile client should authenticate; web clients may instead rely on the httpOnly session cookie better-auth also sets). Try it out in this UI: click **Authorize** and paste the token.\n\n**Response envelope**: nearly every JSON endpoint returns `{ success: true, data?: ..., message?: string, pagination?: {...} }` on success and `{ success: false, message: string, error?: string }` on failure. Endpoints that deviate (binary files, SSE streams) are noted individually.\n\n**Pagination** (only on list endpoints that declare it): `{ page, limit, totalCount, totalPages, hasNext, hasPrev }`.\n\n**Known limitations** (flagged here rather than silently fixed): a handful of write endpoints (`draft-orders`, `exchange-points` POST, `inventory` list/create, `purchase-orders`, `suppliers`) check for a valid session but do not enforce the trial/subscription-active gate the way most write endpoints do — see each endpoint's description. `POST /api/products/upload-image` writes to local disk and will not persist on Vercel's serverless filesystem. SSE endpoints can't be driven by a browser `EventSource` with an `Authorization` header — a mobile/native HTTP client is required.",
+    "description": "REST API backing the Talertech multi-branch POS SaaS web app — the same endpoints power the web dashboard and are intended for the Flutter mobile client.\n\n**Auth**: sign in via `POST /api/auth/sign-in/email`. The response includes a `set-auth-token` response header — send that value back as `Authorization: Bearer <token>` on every subsequent request (this is how the mobile client should authenticate; web clients may instead rely on the httpOnly session cookie better-auth also sets). Try it out in this UI: click **Authorize** and paste the token.\n\n**Response envelope**: nearly every JSON endpoint returns `{ success: true, data?: ..., message?: string, pagination?: {...} }` on success and `{ success: false, message: string, error?: string }` on failure. Endpoints that deviate (binary files, SSE streams) are noted individually.\n\n**Pagination** (only on list endpoints that declare it): `{ page, limit, totalCount, totalPages, hasNext, hasPrev }`.\n\n**Known limitations** (flagged here rather than silently fixed): a handful of write endpoints (`draft-orders`, `exchange-points` POST, `inventory` list/create, `purchase-orders`, `suppliers`) check for a valid session but do not enforce the trial/subscription-active gate the way most write endpoints do — see each endpoint's description. SSE endpoints can't be driven by a browser `EventSource` with an `Authorization` header — a mobile/native HTTP client is required. Product and employee photo upload/display was intentionally removed app-wide to keep the app lightweight — the `image`/`imageUrl` fields you may still see in some response payloads are inert leftovers and are never populated or read by any client.",
     "contact": { "name": "Talertech POS" }
   },
   "servers": [
@@ -837,19 +837,6 @@
           } } } },
           "400": { "description": "Missing file/branchId, or row-level validation errors.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "errors": { "type": "array", "items": { "type": "string" } } } } } } },
           "402": { "$ref": "#/components/responses/SubscriptionInactive" }
-        }
-      }
-    },
-    "/api/products/upload-image": {
-      "post": {
-        "tags": ["Products"], "summary": "Upload a product image",
-        "description": "⚠️ Writes to local disk (`public/assets/images/products/`). Does NOT persist on Vercel's ephemeral/read-only serverless filesystem in production — a known limitation, not something silently patched here.",
-        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
-          "type": "object", "required": ["image"], "properties": { "image": { "type": "string", "format": "binary" }, "productId": { "type": "string" } }
-        } } } },
-        "responses": {
-          "200": { "description": "Uploaded.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "type": "object", "properties": { "imageUrl": { "type": "string" }, "fileName": { "type": "string" } } } } } } } },
-          "400": { "description": "Missing image file." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }
         }
       }
     },

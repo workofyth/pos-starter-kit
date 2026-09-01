@@ -24,7 +24,6 @@ interface Staff {
   id: string;
   name: string;
   email: string;
-  image: string | null;
   branchId: string;
   role: "admin" | "manager" | "cashier" | "staff";
   phone:string;
@@ -65,8 +64,7 @@ export default function StaffPage() {
     email: "",
     phone: "",
     role: "staff" as "admin" | "manager" | "cashier" | "staff",
-    branchId: "",
-    image: ""
+    branchId: ""
   });
 
   // Fetch user's role and branch information
@@ -225,8 +223,7 @@ export default function StaffPage() {
           name: newStaff.name,
           email: newStaff.email,
           role: newStaff.role,
-          branchId: newStaff.branchId,
-          image: newStaff.image
+          branchId: newStaff.branchId
         }),
       });
 
@@ -239,8 +236,7 @@ export default function StaffPage() {
           email: "",
           phone: "",
           role: "staff",
-          branchId: "",
-          image: ""
+          branchId: ""
         });
         setIsAddDialogOpen(false);
         alert('Staff created successfully!');
@@ -281,7 +277,6 @@ export default function StaffPage() {
           email: newStaff.email,
           role: newStaff.role,
           branchId: newStaff.branchId,
-          image: newStaff.image,
           isActive: editingStaff.isActive
         }),
       });
@@ -289,7 +284,7 @@ export default function StaffPage() {
       const result = await response.json();
 
       if (response.ok && result.success) {
-        setStaff(staff.map(s => 
+        setStaff(staff.map(s =>
           s.id === editingStaff.id ? result.data : s
         ));
         setEditingStaff(null);
@@ -298,8 +293,7 @@ export default function StaffPage() {
           email: "",
           phone: "",
           role: "staff",
-          branchId: "",
-          image: ""
+          branchId: ""
         });
         setIsEditDialogOpen(false);
         alert('Staff updated successfully!');
@@ -355,8 +349,7 @@ export default function StaffPage() {
       email: staffMember.email,
       phone: staffMember.phone || "",
       role: staffMember.role,
-      branchId: staffMember.branchId,
-      image: staffMember.image || ""
+      branchId: staffMember.branchId
     });
     setIsEditDialogOpen(true);
   };

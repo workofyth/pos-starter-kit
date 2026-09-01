@@ -40,8 +40,6 @@ interface Product {
   customerPrice: number;
   stock: number;
   minStock: number;
-  image?: string;
-  imageUrl?: string;
   branchId?: string; // Add branch ID for multi-branch support
   branchName?: string; // Add branch name for display
 }
@@ -579,21 +577,9 @@ export default function POSPage() {
                     onClick={() => addToCart(product)}
                   >
                     <div className="flex flex-col items-center text-center">
-                      {product.image || product.imageUrl ? (
-                        <img 
-                          src={product.image || product.imageUrl} 
-                          alt={product.name} 
-                          className="w-16 h-16 object-contain rounded-md mb-2"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.src = '/assets/images/placeholder-product.png';
-                          }}
-                        />
-                      ) : (
-                        <div className="bg-muted border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
-                          <Package className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                      )}
+                      <div className="bg-muted border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
+                        <Package className="h-6 w-6 text-muted-foreground" />
+                      </div>
                       <h3 className="font-semibold text-sm line-clamp-2">{product.name}</h3>
                       <p className="text-sm text-muted-foreground">Rp {(Number(product.customerPrice || product.sellingPrice) || 0).toLocaleString()}</p>
                       <div className="mt-1 text-center w-full">

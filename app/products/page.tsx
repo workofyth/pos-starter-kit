@@ -40,8 +40,6 @@ interface Product {
   stock: number;
   minStock: number;
   profitMargin: number; // Profit margin percentage
-  image?: string; // Optional image URL
-  imageUrl?: string; // Path to stored image
   brand: string;
 }
 
@@ -58,8 +56,6 @@ interface ProductFormData {
   profitMargin: number;
   customerMargin: number;
   description: string;
-  image: string;
-  imageUrl?: string;
   brand: string;
   id?: string;
 }
@@ -90,8 +86,6 @@ interface InventoryItem {
   productSku: string;
   productBarcode: string;
   productDescription: string;
-  productImage: string | null;
-  productImageUrl: string | null;
   productCategoryId: string | null;
   productCategoryName: string | null;
   productCategoryCode: string | null;
@@ -192,8 +186,6 @@ export default function ProductsPage() {
               stock: Number(apiProduct.stock) || 0,
               minStock: Number(apiProduct.minStock) || 5,
               profitMargin: parseFloat(apiProduct.profitMargin as string) || 0,
-              image: apiProduct.image as string,
-              imageUrl: apiProduct.imageUrl as string,
               brand: apiProduct.brand as string || 'EJM'
             }));
             setProducts(formattedProducts);
@@ -289,10 +281,8 @@ export default function ProductsPage() {
     profitMargin: 0,
     customerMargin: 0,
     description: "",
-    image: "",
-    imageUrl: "",
     brand: "EJM",
-    id: Date.now().toString() // Temporary ID for image upload
+    id: Date.now().toString()
   });
 
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -319,8 +309,6 @@ export default function ProductsPage() {
       profitMargin: product.profitMargin,
       customerMargin: product.sellingPrice > 0 ? ((product.customerPrice - product.sellingPrice) / product.sellingPrice) * 100 : 0,
       description: "", // description might not be in the Product interface
-      image: product.image || "",
-      imageUrl: product.imageUrl || "",
       brand: product.brand || "EJM",
       id: product.id
     });
@@ -340,8 +328,6 @@ export default function ProductsPage() {
         categoryId: newProduct.categoryId || null,  // Send null if no category selected
         unit: newProduct.unit,
         profitMargin: newProduct.profitMargin.toString(),
-        image: newProduct.image || null,  // Send null if no image
-        imageUrl: newProduct.imageUrl || null,  // Send null if no image
         purchasePrice: newProduct.purchasePrice.toString(),
         sellingPrice: newProduct.sellingPrice.toString(),
         customerPrice: newProduct.customerPrice.toString()
@@ -371,12 +357,10 @@ export default function ProductsPage() {
             sellingPrice: newProduct.sellingPrice || 0,
             customerPrice: newProduct.customerPrice || 0,
             profitMargin: newProduct.profitMargin || 0,
-            image: newProduct.image,
-            imageUrl: newProduct.imageUrl,
             brand: newProduct.brand
           } : p
         ));
-        
+
         // Reset form and close dialog
         setEditingProduct(null);
         setNewProduct({
@@ -392,8 +376,6 @@ export default function ProductsPage() {
           profitMargin: 0,
           customerMargin: 0,
           description: "",
-          image: "",
-          imageUrl: "",
           brand: "EJM",
           id: Date.now().toString()
         });
@@ -552,8 +534,6 @@ export default function ProductsPage() {
         categoryId: newProduct.categoryId || null,  // Send null if no category selected
         unit: newProduct.unit,
         profitMargin: newProduct.profitMargin.toString(),
-        image: newProduct.image || null,  // Send null if no image
-        imageUrl: newProduct.imageUrl || null,  // Send null if no image
         purchasePrice: newProduct.purchasePrice.toString(),
         sellingPrice: newProduct.sellingPrice.toString(),
         customerPrice: newProduct.customerPrice.toString(),
@@ -590,11 +570,9 @@ export default function ProductsPage() {
           stock: newProductFromAPI.stock || 0,
           minStock: newProductFromAPI.minStock || 5,
           profitMargin: parseFloat(newProductFromAPI.profitMargin) || 0,
-          image: newProductFromAPI.image,
-          imageUrl: newProductFromAPI.imageUrl,
           brand: newProductFromAPI.brand || newProduct.brand || 'EJM'
         }]);
-        
+
         // Reset the form
         setNewProduct({
           name: "",
@@ -609,12 +587,10 @@ export default function ProductsPage() {
           profitMargin: 0,
           customerMargin: 0,
           description: "",
-          image: "",
-          imageUrl: "",
           brand: "EJM",
           id: Date.now().toString()
         });
-        
+
         setIsAddDialogOpen(false);
         alert('Product added successfully!');
       } else {
@@ -656,8 +632,6 @@ export default function ProductsPage() {
                 profitMargin: 0,
                 customerMargin: 0,
                 description: "",
-                image: "",
-                imageUrl: "",
                 brand: "EJM"
               });
             }
@@ -813,126 +787,9 @@ export default function ProductsPage() {
                     rows={3}
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Product Image</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-border border-dashed rounded-lg">
-                    <div className="space-y-1 text-center">
-                      <div className="flex text-sm text-muted-foreground">
-                        <label className="relative cursor-pointer bg-background rounded-md font-medium text-primary hover:text-primary/80">
-                          <span>Upload a file</span>
-                          <input 
-                            type="file" 
-                            className="sr-only" 
-                            accept="image/*"
-                            onChange={async (e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                const file = e.target.files[0];
-                                
-                                // Check if the product has been created in the database
-                                // Check if this is for a new product (temporary ID) or existing product
-                                const isNewProduct = !newProduct.id || 
-                                  (typeof newProduct.id === 'string' && 
-                                   (newProduct.id.length < 15 || newProduct.id.startsWith(Date.now().toString().substring(0,5)) || !newProduct.id.startsWith('prod_')));
-                                
-                                if (isNewProduct) {
-                                  // For new products, we need to upload the image first and then create the product
-                                  // Create a FormData object to send the file
-                                  const formData = new FormData();
-                                  formData.append('image', file);
-                                  
-                                  try {
-                                    const response = await fetch('/api/products/upload-image', {
-                                      method: 'POST',
-                                      body: formData
-                                    });
-                                    
-                                    if (response.ok) {
-                                      const result = await response.json();
-                                      
-                                      // Update the newProduct state with the temporary image URL
-                                      setNewProduct({
-                                        ...newProduct, 
-                                        image: result.data.imageUrl,
-                                        imageUrl: result.data.imageUrl
-                                      });
-                                      
-                                      alert('Image uploaded successfully! You can now save your product with this image.');
-                                    } else {
-                                      try {
-                                        const result = await response.json();
-                                        alert('Error uploading image: ' + result.message);
-                                      } catch (jsonError) {
-                                        console.error('Error parsing JSON response:', jsonError);
-                                        alert('Error uploading image: Server responded with an error');
-                                      }
-                                    }
-                                  } catch (error) {
-                                    console.error('Error uploading image:', error);
-                                    alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
-                                  }
-                                  return;
-                                }
-                                
-                                // For existing products, upload image and associate with product ID
-                                // Create a FormData object to send the file
-                                const formData = new FormData();
-                                formData.append('image', file);
-                                if (newProduct.id) {
-                                  formData.append('productId', newProduct.id);
-                                }
-                                
-                                try {
-                                  const response = await fetch('/api/products/upload-image', {
-                                    method: 'POST',
-                                    body: formData
-                                  });
-                                  
-                                  // Check if response is ok before parsing JSON
-                                  if (response.ok) {
-                                    const result = await response.json();
-                                    
-                                    // Update the product with the image URL
-                                    setNewProduct({
-                                      ...newProduct, 
-                                      image: result.imageUrl,
-                                      imageUrl: result.imageUrl
-                                    });
-                                    
-                                    // Update the product in the main products list if it exists
-                                    setProducts(products.map(p => 
-                                      p.id === newProduct.id ? { ...p, image: result.imageUrl, imageUrl: result.imageUrl } : p
-                                    ));
-                                    
-                                    alert('Image uploaded successfully!');
-                                  } else {
-                                    // Try to parse error response, or use generic message
-                                    try {
-                                      const result = await response.json();
-                                      alert('Error uploading image: ' + result.message);
-                                    } catch (jsonError) {
-                                      console.error('Error parsing JSON response:', jsonError);
-                                      alert('Error uploading image: Server responded with an error');
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Error uploading image:', error);
-                                  alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
-                                }
-                              }
-                            }}
-                          />
-                        </label>
-                        <p className="pl-1">or drag and drop</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        PNG, JPG, GIF up to 10MB
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
-              <Button 
-                onClick={handleAddProduct} 
+              <Button
+                onClick={handleAddProduct}
                 disabled={isSaving}
                 className="w-full"
               >
@@ -1088,84 +945,9 @@ export default function ProductsPage() {
                     rows={3}
                   />
                 </div>
-                <div>
-                  <label className="text-sm font-medium">Product Image</label>
-                  <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-border border-dashed rounded-lg">
-                    <div className="space-y-1 text-center">
-                      <div className="flex text-sm text-muted-foreground">
-                        <label className="relative cursor-pointer bg-background rounded-md font-medium text-primary hover:text-primary/80">
-                          <span>Upload a file</span>
-                          <input 
-                            type="file" 
-                            className="sr-only" 
-                            accept="image/*"
-                            onChange={async (e) => {
-                              if (e.target.files && e.target.files[0]) {
-                                const file = e.target.files[0];
-                                
-                                // Check if the product has a valid ID (should always be true for edit dialog)
-                                if (!newProduct.id) {
-                                  alert('Product ID is missing. Cannot upload image.');
-                                  return;
-                                }
-                                
-                                // Create a FormData object to send the file
-                                const formData = new FormData();
-                                formData.append('image', file);
-                                formData.append('productId', newProduct.id);
-                                
-                                try {
-                                  const response = await fetch('/api/products/upload-image', {
-                                    method: 'POST',
-                                    body: formData
-                                  });
-                                  
-                                  // Check if response is ok before parsing JSON
-                                  if (response.ok) {
-                                    const result = await response.json();
-                                    
-                                    // Update the product with the image URL
-                                    setNewProduct({
-                                      ...newProduct, 
-                                      image: result.imageUrl,
-                                      imageUrl: result.imageUrl
-                                    });
-                                    
-                                    // Update the product in the main products list
-                                    setProducts(products.map(p => 
-                                      p.id === newProduct.id ? { ...p, image: result.imageUrl, imageUrl: result.imageUrl } : p
-                                    ));
-                                    
-                                    alert('Image uploaded successfully!');
-                                  } else {
-                                    // Try to parse error response, or use generic message
-                                    try {
-                                      const result = await response.json();
-                                      alert('Error uploading image: ' + result.message);
-                                    } catch (jsonError) {
-                                      console.error('Error parsing JSON response:', jsonError);
-                                      alert('Error uploading image: Server responded with an error');
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Error uploading image:', error);
-                                  alert('Error uploading image: ' + (error instanceof Error ? error.message : 'Unknown error occurred'));
-                                }
-                              }
-                            }}
-                          />
-                        </label>
-                        <p className="pl-1">or drag and drop</p>
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        PNG, JPG, GIF up to 10MB
-                      </p>
-                    </div>
-                  </div>
-                </div>
               </div>
-              <Button 
-                onClick={handleEditProduct} 
+              <Button
+                onClick={handleEditProduct}
                 disabled={isSaving}
                 className="w-full"
               >
@@ -1296,7 +1078,6 @@ export default function ProductsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Image</TableHead>
                 <TableHead>Product</TableHead>
                 <TableHead>Brand</TableHead>
                 <TableHead>SKU</TableHead>
@@ -1326,21 +1107,6 @@ export default function ProductsPage() {
             <TableBody>
               {filteredProducts.map((product, index) => (
                 <TableRow key={`${product.id}-${product.branchId || 'no-branch'}-${index}`}>
-                  <TableCell>
-                    {product.image ? (
-                      <img
-                        src={product.image}
-                        alt={product.name}
-                        className="w-10 h-10 object-cover rounded-lg hover:shadow-soft transition-shadow"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = '/assets/images/placeholder-product.png';
-                        }}
-                      />
-                    ) : (
-                      <div className="bg-muted border-2 border-dashed border-border rounded-lg w-10 h-10" />
-                    )}
-                  </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
                   <TableCell>
                     <Badge variant="default">{product.brand || 'EJM'}</Badge>
