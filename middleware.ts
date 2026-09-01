@@ -25,7 +25,8 @@ export const config = {
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
      * - sign-in and sign-up (public auth pages)
+     * - openapi.json and api-docs (public API documentation)
      */
-    '/((?!api|_next/static|_next/image|favicon.ico|sign-in|sign-up).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|sign-in|sign-up|openapi.json|api-docs).*)',
   ],
 };

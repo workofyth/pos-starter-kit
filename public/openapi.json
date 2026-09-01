@@ -1,0 +1,1258 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Talertech POS API",
+    "version": "1.0.0",
+    "description": "REST API backing the Talertech multi-branch POS SaaS web app — the same endpoints power the web dashboard and are intended for the Flutter mobile client.\n\n**Auth**: sign in via `POST /api/auth/sign-in/email`. The response includes a `set-auth-token` response header — send that value back as `Authorization: Bearer <token>` on every subsequent request (this is how the mobile client should authenticate; web clients may instead rely on the httpOnly session cookie better-auth also sets). Try it out in this UI: click **Authorize** and paste the token.\n\n**Response envelope**: nearly every JSON endpoint returns `{ success: true, data?: ..., message?: string, pagination?: {...} }` on success and `{ success: false, message: string, error?: string }` on failure. Endpoints that deviate (binary files, SSE streams) are noted individually.\n\n**Pagination** (only on list endpoints that declare it): `{ page, limit, totalCount, totalPages, hasNext, hasPrev }`.\n\n**Known limitations** (flagged here rather than silently fixed): a handful of write endpoints (`draft-orders`, `exchange-points` POST, `inventory` list/create, `purchase-orders`, `suppliers`) check for a valid session but do not enforce the trial/subscription-active gate the way most write endpoints do — see each endpoint's description. `POST /api/products/upload-image` writes to local disk and will not persist on Vercel's serverless filesystem. SSE endpoints can't be driven by a browser `EventSource` with an `Authorization` header — a mobile/native HTTP client is required.",
+    "contact": { "name": "Talertech POS" }
+  },
+  "servers": [
+    { "url": "https://pos-starter-kit.vercel.app", "description": "Production" },
+    { "url": "http://localhost:3000", "description": "Local development" }
+  ],
+  "tags": [
+    { "name": "Auth", "description": "better-auth catch-all (sign-up, sign-in, sign-out, session)" },
+    { "name": "Approvals", "description": "Cross-branch stock split approval workflow" },
+    { "name": "Branches", "description": "Store branches" },
+    { "name": "Brands", "description": "Product brands" },
+    { "name": "Categories", "description": "Product categories" },
+    { "name": "Cron", "description": "Server-to-server scheduled jobs (Vercel Cron only)" },
+    { "name": "Draft Orders", "description": "Saved-in-progress cart drafts at the POS" },
+    { "name": "Employees", "description": "Staff accounts and their branch/role assignment" },
+    { "name": "Exchange Points", "description": "Loyalty-point redemption catalog" },
+    { "name": "Inventory", "description": "Per-branch stock levels, adjustments, and inter-branch splits" },
+    { "name": "iPaymu", "description": "Payment gateway integration for subscription purchases" },
+    { "name": "Main Admin", "description": "Main-admin designation per branch" },
+    { "name": "Members", "description": "Loyalty program members / customers" },
+    { "name": "Notifications", "description": "In-app notifications, including real-time SSE streams" },
+    { "name": "Onboarding", "description": "First-run store setup" },
+    { "name": "POS", "description": "Checkout / transaction processing" },
+    { "name": "Products", "description": "Product catalog" },
+    { "name": "Purchase Orders", "description": "Supplier purchase orders and receiving" },
+    { "name": "Reporting", "description": "Dashboard and period reports" },
+    { "name": "Settings", "description": "Store-wide app settings" },
+    { "name": "Subscription", "description": "Current user's plan/subscription status" },
+    { "name": "Suppliers", "description": "Supplier directory" },
+    { "name": "Transactions", "description": "Completed sales (read-only; created via POS)" },
+    { "name": "User Branches", "description": "User-to-branch role assignments" }
+  ],
+  "security": [{ "bearerAuth": [] }],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token returned in the `set-auth-token` header on sign-in. Used by the Flutter mobile client on every request; web clients may instead rely on the httpOnly session cookie."
+      },
+      "cronSecret": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Value of the `CRON_SECRET` env var. Only enforced when NODE_ENV=production; intended for Vercel Cron only, not app clients."
+      }
+    },
+    "schemas": {
+      "SuccessMessage": {
+        "type": "object",
+        "properties": { "success": { "type": "boolean", "example": true }, "message": { "type": "string" } },
+        "required": ["success"]
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "message": { "type": "string" },
+          "error": { "type": "string" }
+        },
+        "required": ["success", "message"]
+      },
+      "Pagination": {
+        "type": "object",
+        "properties": {
+          "page": { "type": "integer" },
+          "limit": { "type": "integer" },
+          "totalCount": { "type": "integer" },
+          "totalPages": { "type": "integer" },
+          "hasNext": { "type": "boolean" },
+          "hasPrev": { "type": "boolean" }
+        }
+      },
+      "Branch": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "name": { "type": "string" },
+          "address": { "type": "string" },
+          "phone": { "type": "string", "nullable": true },
+          "email": { "type": "string", "nullable": true },
+          "type": { "type": "string", "enum": ["main", "sub"] },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Brand": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "code": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Category": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "code": { "type": "string" },
+          "parentId": { "type": "string", "nullable": true },
+          "point": { "type": "string", "description": "Decimal string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Member": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "name": { "type": "string" },
+          "phone": { "type": "string" },
+          "email": { "type": "string", "nullable": true },
+          "address": { "type": "string", "nullable": true },
+          "points": { "type": "string", "description": "Decimal string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Supplier": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "name": { "type": "string" },
+          "contactPerson": { "type": "string", "nullable": true },
+          "phone": { "type": "string" },
+          "email": { "type": "string", "nullable": true },
+          "address": { "type": "string", "nullable": true },
+          "paymentTerm": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Employee": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "email": { "type": "string" },
+          "image": { "type": "string", "nullable": true },
+          "branchId": { "type": "string" },
+          "role": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] },
+          "isActive": { "type": "boolean" },
+          "isMainAdmin": { "type": "boolean" },
+          "branch": { "$ref": "#/components/schemas/Branch" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Product": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "sku": { "type": "string" },
+          "barcode": { "type": "string" },
+          "image": { "type": "string", "nullable": true },
+          "imageUrl": { "type": "string", "nullable": true },
+          "unit": { "type": "string" },
+          "brand": { "type": "string", "nullable": true },
+          "profitMargin": { "type": "string" },
+          "categoryId": { "type": "string", "nullable": true },
+          "categoryName": { "type": "string", "nullable": true },
+          "sellingPrice": { "type": "string" },
+          "customerPrice": { "type": "string" },
+          "purchasePrice": { "type": "string" },
+          "stock": { "type": "number" },
+          "minStock": { "type": "number" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "InventoryItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "productId": { "type": "string" },
+          "branchId": { "type": "string" },
+          "quantity": { "type": "number" },
+          "minStock": { "type": "number" },
+          "maxStock": { "type": "number", "nullable": true },
+          "lastUpdated": { "type": "string", "format": "date-time" },
+          "productName": { "type": "string" },
+          "productSku": { "type": "string" },
+          "productBarcode": { "type": "string" },
+          "productBrand": { "type": "string", "nullable": true },
+          "productImage": { "type": "string", "nullable": true },
+          "productImageUrl": { "type": "string", "nullable": true },
+          "productCategoryId": { "type": "string", "nullable": true },
+          "productCategoryName": { "type": "string", "nullable": true },
+          "productCategoryCode": { "type": "string", "nullable": true },
+          "branchName": { "type": "string" },
+          "branchAddress": { "type": "string", "nullable": true },
+          "branchPhone": { "type": "string", "nullable": true },
+          "branchEmail": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "InventoryTransaction": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "transactionNumber": { "type": "string", "nullable": true },
+          "productId": { "type": "string" },
+          "branchId": { "type": "string" },
+          "referenceId": { "type": "string", "nullable": true },
+          "quantity": { "type": "number" },
+          "type": { "type": "string", "enum": ["adjustment", "in", "out", "pos", "split", "receive"] },
+          "notes": { "type": "string", "nullable": true },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "nullable": true },
+          "createdBy": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "PurchaseOrderListItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "orderNumber": { "type": "string" },
+          "supplierId": { "type": "string" },
+          "supplierName": { "type": "string" },
+          "branchId": { "type": "string" },
+          "branchName": { "type": "string" },
+          "status": { "type": "string" },
+          "total": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "expectedDeliveryDate": { "type": "string", "format": "date-time", "nullable": true },
+          "receivedDate": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "PurchaseOrderItem": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "productId": { "type": "string" },
+          "productName": { "type": "string" },
+          "productSku": { "type": "string" },
+          "quantity": { "type": "number" },
+          "receivedQuantity": { "type": "number" },
+          "unitPrice": { "type": "string" },
+          "totalPrice": { "type": "string" }
+        }
+      },
+      "PurchaseOrderDetail": {
+        "allOf": [
+          { "$ref": "#/components/schemas/PurchaseOrderListItem" },
+          {
+            "type": "object",
+            "properties": { "items": { "type": "array", "items": { "$ref": "#/components/schemas/PurchaseOrderItem" } } }
+          }
+        ]
+      },
+      "Transaction": {
+        "type": "object",
+        "description": "Full transactions row plus a few joined display fields.",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "branchId": { "type": "string" },
+          "cashierId": { "type": "string" },
+          "memberId": { "type": "string", "nullable": true },
+          "transactionNumber": { "type": "string" },
+          "subtotal": { "type": "string" },
+          "discountAmount": { "type": "string" },
+          "taxAmount": { "type": "string" },
+          "total": { "type": "string" },
+          "paidAmount": { "type": "string" },
+          "paymentMethod": { "type": "string" },
+          "status": { "type": "string" },
+          "notes": { "type": "string", "nullable": true },
+          "detailsCount": { "type": "integer" },
+          "cashierName": { "type": "string" },
+          "memberName": { "type": "string", "nullable": true },
+          "branchName": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": true
+      },
+      "TransactionDetail": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "productId": { "type": "string" },
+          "quantity": { "type": "number" },
+          "unitPrice": { "type": "string" },
+          "totalPrice": { "type": "string" },
+          "productName": { "type": "string" },
+          "productSku": { "type": "string" }
+        }
+      },
+      "Notification": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string", "nullable": true },
+          "branchId": { "type": "string" },
+          "title": { "type": "string" },
+          "message": { "type": "string" },
+          "type": { "type": "string" },
+          "data": { "type": "object", "nullable": true },
+          "isRead": { "type": "boolean" },
+          "branchName": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ExchangePoint": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "pointExchangeTotal": { "type": "number" },
+          "exchangeItem": { "type": "string" },
+          "productId": { "type": "string", "nullable": true },
+          "productName": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "DraftOrder": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "branchId": { "type": "string" },
+          "cashierId": { "type": "string" },
+          "memberId": { "type": "string", "nullable": true },
+          "cartData": { "type": "array", "items": { "type": "object" } },
+          "paymentMethod": { "type": "string" },
+          "discountRate": { "type": "string" },
+          "notes": { "type": "string", "nullable": true },
+          "total": { "type": "string" },
+          "cashierName": { "type": "string", "nullable": true },
+          "memberName": { "type": "string", "nullable": true },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ApprovalRequest": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "productId": { "type": "string" },
+          "sourceBranchId": { "type": "string" },
+          "targetBranchId": { "type": "string" },
+          "quantity": { "type": "number" },
+          "type": { "type": "string" },
+          "notes": { "type": "string", "nullable": true },
+          "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+          "approvedBy": { "type": "string", "nullable": true },
+          "createdBy": { "type": "string" },
+          "productName": { "type": "string" },
+          "productSku": { "type": "string" },
+          "sourceBranchName": { "type": "string" },
+          "targetBranchName": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "UserBranch": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "branchId": { "type": "string" },
+          "role": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] },
+          "isMainAdmin": { "type": "boolean" },
+          "isActive": { "type": "boolean" },
+          "branch": { "$ref": "#/components/schemas/Branch" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Setting": {
+        "type": "object",
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No valid session/bearer token.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "SubscriptionInactive": {
+        "description": "Trial or subscription has expired (reason: trial_expired | subscription_expired | payment_overdue).",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotOnboarded": {
+        "description": "Session valid but the account hasn't finished store onboarding yet.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "NotFound": {
+        "description": "Resource not found (or not in the caller's store).",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      },
+      "BadRequest": {
+        "description": "Missing/invalid fields.",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } }
+      }
+    }
+  },
+  "paths": {
+    "/api/auth/{path}": {
+      "parameters": [{ "name": "path", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Catch-all — see description below." }],
+      "get": {
+        "tags": ["Auth"],
+        "summary": "better-auth catch-all",
+        "security": [],
+        "description": "Delegated to better-auth (`toNextJsHandler`). Exposes the full better-auth REST surface under this prefix, notably:\n- `POST /api/auth/sign-up/email`\n- `POST /api/auth/sign-in/email` — response includes `set-auth-token` header with the bearer token\n- `POST /api/auth/sign-out`\n- `GET /api/auth/get-session`\n\nNot enumerated further here; treat as an opaque auth module. Also enables the `bearer()` plugin used for mobile auth.",
+        "responses": { "200": { "description": "Depends on the specific better-auth route." } }
+      },
+      "post": {
+        "tags": ["Auth"],
+        "summary": "better-auth catch-all",
+        "security": [],
+        "description": "See GET /api/auth/{path} description.",
+        "responses": { "200": { "description": "Depends on the specific better-auth route." } }
+      }
+    },
+    "/api/onboarding": {
+      "post": {
+        "tags": ["Onboarding"],
+        "summary": "Complete first-run store setup",
+        "description": "Creates the store settings row and an initial 'Main Branch', flips the account to onboarded, and starts the trial if the account had no subscription status yet.",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["storeName", "address", "whatsapp", "storeType"],
+            "properties": {
+              "storeName": { "type": "string" },
+              "address": { "type": "string" },
+              "whatsapp": { "type": "string" },
+              "storeType": { "type": "string" }
+            }
+          } } }
+        },
+        "responses": {
+          "200": { "description": "Onboarding complete.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/subscription/status": {
+      "get": {
+        "tags": ["Subscription"],
+        "summary": "Get current plan and subscription status",
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "success": { "type": "boolean" }, "status": { "type": "string", "example": "active" }, "plan": { "type": "string", "example": "permanent" } }
+          } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": ["Settings"],
+        "summary": "Get one or all settings",
+        "description": "Requires main-admin, EXCEPT `key=primary_color` which is public (no auth) since it's needed before login.",
+        "parameters": [{ "name": "key", "in": "query", "schema": { "type": "string" }, "description": "If omitted, returns all settings (still requires main-admin)." }],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": {
+            "type": "object",
+            "properties": { "success": { "type": "boolean" }, "data": { "oneOf": [{ "$ref": "#/components/schemas/Setting" }, { "type": "array", "items": { "$ref": "#/components/schemas/Setting" } }] } }
+          } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "description": "Not main-admin." }
+        }
+      },
+      "post": {
+        "tags": ["Settings"],
+        "summary": "Upsert a setting",
+        "description": "Requires main-admin.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "required": ["key", "value"],
+          "properties": { "key": { "type": "string" }, "value": { "type": "string" }, "description": { "type": "string" } }
+        } } } },
+        "responses": {
+          "200": { "description": "Saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "description": "Not main-admin." }
+        }
+      }
+    },
+    "/api/main-admin": {
+      "put": {
+        "tags": ["Main Admin"],
+        "summary": "Set or unset a user's main-admin status for a branch",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "required": ["userId", "branchId", "isMainAdmin"],
+          "properties": { "userId": { "type": "string" }, "branchId": { "type": "string" }, "isMainAdmin": { "type": "boolean" } }
+        } } } },
+        "responses": {
+          "200": { "description": "Updated.", "content": { "application/json": { "schema": {
+            "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/UserBranch" } }
+          } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "description": "Caller has no store." }
+        }
+      }
+    },
+    "/api/branches": {
+      "get": {
+        "tags": ["Branches"],
+        "summary": "List branches",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["utama", "cabang"] }, "description": "Mapped internally to main/sub." },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["name", "type", "createdAt"], "default": "createdAt" } },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"], "default": "desc" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": {
+            "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Branch" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } }
+          } } } },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/NotOnboarded" }
+        }
+      },
+      "post": {
+        "tags": ["Branches"],
+        "summary": "Create a branch",
+        "description": "Enforces the plan's `maxSubBranches` limit for `type=sub`.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object",
+          "required": ["name", "address"],
+          "properties": {
+            "name": { "type": "string" }, "address": { "type": "string" }, "phone": { "type": "string" }, "email": { "type": "string" },
+            "type": { "type": "string", "enum": ["main", "sub"], "default": "sub" }
+          }
+        } } } },
+        "responses": {
+          "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Branch" } } } } } },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "402": { "$ref": "#/components/responses/SubscriptionInactive" },
+          "403": { "description": "Plan sub-branch limit exceeded." },
+          "409": { "description": "Duplicate branch name." }
+        }
+      }
+    },
+    "/api/branches/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": {
+        "tags": ["Branches"], "summary": "Get a branch",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Branch" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "tags": ["Branches"], "summary": "Update a branch",
+        "requestBody": { "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "name": { "type": "string" }, "address": { "type": "string" }, "phone": { "type": "string" }, "email": { "type": "string" }, "type": { "type": "string", "enum": ["main", "sub"] } }
+        } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Branch" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Duplicate name." } }
+      },
+      "delete": {
+        "tags": ["Branches"], "summary": "Delete a branch",
+        "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/brands": {
+      "get": {
+        "tags": ["Brands"], "summary": "List all brands (no pagination)",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Brand" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Brands"], "summary": "Create a brand",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "code"], "properties": { "name": { "type": "string" }, "code": { "type": "string" }, "description": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Brand" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "409": { "description": "Duplicate code." } }
+      }
+    },
+    "/api/brands/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Brands"], "summary": "Get a brand", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Brand" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "put": {
+        "tags": ["Brands"], "summary": "Update a brand",
+        "description": "Unlike most PUT endpoints, omitted fields are NOT preserved — they overwrite with undefined/null. Send the full object.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Brand" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": { "tags": ["Brands"], "summary": "Delete a brand", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/categories": {
+      "get": {
+        "tags": ["Categories"], "summary": "List categories",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["name", "code", "createdAt"] } },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Category" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Categories"], "summary": "Create a category",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "code"],
+          "properties": { "name": { "type": "string" }, "code": { "type": "string" }, "description": { "type": "string" }, "parentId": { "type": "string" }, "point": { "type": "string", "default": "0.00" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Category" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "409": { "description": "Duplicate code." } }
+      }
+    },
+    "/api/categories/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Categories"], "summary": "Get a category", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Category" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "put": {
+        "tags": ["Categories"], "summary": "Update a category",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "code": { "type": "string" }, "parentId": { "type": "string" }, "point": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Category" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Duplicate code." } }
+      },
+      "delete": { "tags": ["Categories"], "summary": "Delete a category", "description": "Fails if the category has children.", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "400": { "description": "Has child categories." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/products": {
+      "get": {
+        "tags": ["Products"], "summary": "List products",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "category", "in": "query", "schema": { "type": "string" }, "description": "Category code." },
+          { "name": "branchId", "in": "query", "schema": { "type": "string" }, "description": "Affects stock/price resolution; omit to aggregate across branches." },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["name", "createdAt", "sellingPrice", "stock"] }, "in2": "query" },
+          { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Products"], "summary": "Create a product",
+        "description": "Also creates the price/inventory rows for the target branch (defaults to the store's first branch). SKU is auto-deduped (`_1`, `_2`, ...) on conflict.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "sku", "barcode"],
+          "properties": {
+            "name": { "type": "string" }, "sku": { "type": "string" }, "barcode": { "type": "string" }, "description": { "type": "string" },
+            "image": { "type": "string" }, "imageUrl": { "type": "string" }, "categoryId": { "type": "string" }, "brand": { "type": "string" },
+            "unit": { "type": "string", "default": "pcs" }, "profitMargin": { "type": "string", "default": "0.00" },
+            "purchasePrice": { "type": "string", "default": "0" }, "sellingPrice": { "type": "string", "default": "0" }, "customerPrice": { "type": "string", "default": "0" },
+            "stock": { "type": "number", "default": 0 }, "minStock": { "type": "number", "default": 5 }, "branchId": { "type": "string" }
+          }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Product" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "409": { "description": "Duplicate barcode." } }
+      }
+    },
+    "/api/products/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": {
+        "tags": ["Products"], "summary": "Get a product",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Product" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "tags": ["Products"], "summary": "Update a product",
+        "requestBody": { "content": { "application/json": { "schema": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" }, "description": { "type": "string" }, "sku": { "type": "string" }, "barcode": { "type": "string" },
+            "image": { "type": "string" }, "imageUrl": { "type": "string" }, "categoryId": { "type": "string" }, "brand": { "type": "string" },
+            "unit": { "type": "string" }, "profitMargin": { "type": "string" }, "purchasePrice": { "type": "string" }, "sellingPrice": { "type": "string" },
+            "customerPrice": { "type": "string" }, "stock": { "type": "number" }, "minStock": { "type": "number" }, "branchId": { "type": "string" }
+          }
+        } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Product" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Duplicate sku/barcode." } }
+      },
+      "delete": { "tags": ["Products"], "summary": "Delete a product", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/products/search": {
+      "get": {
+        "tags": ["Products"], "summary": "Search products",
+        "description": "At least one of the search/filter params is required.",
+        "parameters": [
+          { "name": "q", "in": "query", "schema": { "type": "string" } }, { "name": "search", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } }, { "name": "minPrice", "in": "query", "schema": { "type": "string" } },
+          { "name": "maxPrice", "in": "query", "schema": { "type": "string" } }, { "name": "inStock", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } },
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } }, "400": { "description": "No search params provided." } }
+      }
+    },
+    "/api/products/template": {
+      "get": {
+        "tags": ["Products"], "summary": "Download the bulk-upload Excel template",
+        "responses": { "200": { "description": "XLSX file.", "content": { "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": { "schema": { "type": "string", "format": "binary" } } } } }
+      }
+    },
+    "/api/products/bulk-upload": {
+      "post": {
+        "tags": ["Products"], "summary": "Bulk-create products from an Excel file",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
+          "type": "object", "required": ["excel", "branchId"],
+          "properties": { "excel": { "type": "string", "format": "binary" }, "branchId": { "type": "string" } }
+        } } } },
+        "responses": {
+          "200": { "description": "Imported.", "content": { "application/json": { "schema": {
+            "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "type": "object", "properties": { "count": { "type": "integer" }, "products": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "name": { "type": "string" }, "sku": { "type": "string" } } } } } } }
+          } } } },
+          "400": { "description": "Missing file/branchId, or row-level validation errors.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "errors": { "type": "array", "items": { "type": "string" } } } } } } },
+          "402": { "$ref": "#/components/responses/SubscriptionInactive" }
+        }
+      }
+    },
+    "/api/products/upload-image": {
+      "post": {
+        "tags": ["Products"], "summary": "Upload a product image",
+        "description": "⚠️ Writes to local disk (`public/assets/images/products/`). Does NOT persist on Vercel's ephemeral/read-only serverless filesystem in production — a known limitation, not something silently patched here.",
+        "requestBody": { "required": true, "content": { "multipart/form-data": { "schema": {
+          "type": "object", "required": ["image"], "properties": { "image": { "type": "string", "format": "binary" }, "productId": { "type": "string" } }
+        } } } },
+        "responses": {
+          "200": { "description": "Uploaded.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "type": "object", "properties": { "imageUrl": { "type": "string" }, "fileName": { "type": "string" } } } } } } } },
+          "400": { "description": "Missing image file." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }
+        }
+      }
+    },
+    "/api/inventory": {
+      "get": {
+        "tags": ["Inventory"], "summary": "List inventory (stock per product per branch)",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "sku", "in": "query", "schema": { "type": "string" } },
+          { "name": "category", "in": "query", "schema": { "type": "string" } }, { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "lowStock", "in": "query", "schema": { "type": "string", "enum": ["true"] } }, { "name": "outOfStock", "in": "query", "schema": { "type": "string", "enum": ["true"] } },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["productName", "quantity", "lastUpdated"] } }, { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/InventoryItem" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Inventory"], "summary": "Adjust/create an inventory record",
+        "description": "Also logs an inventoryTransactions row. Uses a plain session check (no subscription-active gate).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["productId", "branchId", "quantity"],
+          "properties": { "productId": { "type": "string" }, "branchId": { "type": "string" }, "quantity": { "type": "number" }, "notes": { "type": "string" }, "type": { "type": "string", "enum": ["adjustment", "in", "out"], "default": "adjustment" } }
+        } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryItem" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "description": "Branch/product not in store." } }
+      }
+    },
+    "/api/inventory/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Inventory row id." }],
+      "get": {
+        "tags": ["Inventory"], "summary": "Get an inventory item, with recent transaction history",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/InventoryItem" }, { "type": "object", "properties": { "recentTransactions": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "quantity": { "type": "number" }, "notes": { "type": "string" }, "createdAt": { "type": "string" }, "createdBy": { "type": "string" } } } } } }] } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "tags": ["Inventory"], "summary": "Update stock, or approve/reject an inbound split request",
+        "description": "Dual-purpose based on whether `action` is present in the body.",
+        "requestBody": { "content": { "application/json": { "schema": {
+          "oneOf": [
+            { "type": "object", "title": "Plain stock update", "properties": { "quantity": { "type": "number" }, "minStock": { "type": "number" }, "notes": { "type": "string" } } },
+            { "type": "object", "title": "Split approval", "required": ["action", "approvedBy"], "properties": { "action": { "type": "string", "enum": ["approve", "reject"] }, "approvedBy": { "type": "string" }, "notes": { "type": "string" } } }
+          ]
+        } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "oneOf": [{ "$ref": "#/components/schemas/InventoryItem" }, { "$ref": "#/components/schemas/InventoryTransaction" }] } } } } } }, "400": { "description": "Missing fields or insufficient stock." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch mismatch." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "post": {
+        "tags": ["Inventory"], "summary": "Create a split (transfer) request from this item's branch",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["sourceBranchId", "targetBranchId", "quantity", "userId"],
+          "properties": { "sourceBranchId": { "type": "string", "description": "Must match this item's branchId." }, "targetBranchId": { "type": "string" }, "quantity": { "type": "number" }, "notes": { "type": "string" }, "userId": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch permission." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": { "tags": ["Inventory"], "summary": "Delete an inventory row", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/inventory/{id}/split": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "post": {
+        "tags": ["Inventory"], "summary": "Create a split (transfer) request — near-duplicate of POST /api/inventory/{id}",
+        "description": "Here `{id}` is the inventory item id, same as the sibling POST /api/inventory/{id} endpoint. This variant additionally generates a `transactionNumber` (format `SPL-YYYYMMDD-XXXX`). Both endpoints exist in the live codebase.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["sourceBranchId", "targetBranchId", "quantity", "userId"],
+          "properties": { "sourceBranchId": { "type": "string" }, "targetBranchId": { "type": "string" }, "quantity": { "type": "number" }, "notes": { "type": "string" }, "userId": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch permission." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "put": {
+        "tags": ["Inventory"], "summary": "Approve/reject a pending split transaction",
+        "description": "Here `{id}` is actually the *transaction* id (from inventoryTransactions), not an inventory item id — different semantics than the POST on this same path.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["action", "approvedBy"], "properties": { "action": { "type": "string", "enum": ["approve", "reject"] }, "approvedBy": { "type": "string" }, "notes": { "type": "string" } }
+        } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } }, "400": { "description": "Missing fields or insufficient stock." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch mismatch." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/inventory/split": {
+      "post": {
+        "tags": ["Inventory"], "summary": "Create split requests for one or many products at once",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["sourceBranchId", "targetBranchId", "userId"],
+          "properties": {
+            "sourceBranchId": { "type": "string" }, "targetBranchId": { "type": "string" }, "userId": { "type": "string" }, "notes": { "type": "string" },
+            "productId": { "type": "string", "description": "Use with `quantity` for a single item." }, "quantity": { "type": "number" },
+            "items": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "number" } } }, "description": "Use instead of productId/quantity for multiple items." }
+          }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } } }, "400": { "description": "Missing fields / insufficient stock." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch permission." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/inventory/summary": {
+      "get": {
+        "tags": ["Inventory"], "summary": "Inventory summary widget data",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": {
+          "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": {
+            "summary": { "type": "object", "properties": { "totalProducts": { "type": "integer" }, "lowStockCount": { "type": "integer" }, "outOfStockCount": { "type": "integer" }, "overstockCount": { "type": "integer" }, "totalValue": { "type": "number", "description": "Always 0 — placeholder, not implemented." } } },
+            "topLowStock": { "type": "array", "items": { "type": "object" } }, "topOutOfStock": { "type": "array", "items": { "type": "object" } }
+          } } }
+        } } } } }
+      }
+    },
+    "/api/inventory/transactions": {
+      "get": {
+        "tags": ["Inventory"], "summary": "List inventory transaction history",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "productId", "in": "query", "schema": { "type": "string" } }, { "name": "type", "in": "query", "schema": { "type": "string", "enum": ["adjustment", "in", "out", "pos", "split", "receive"] } },
+          { "name": "startDate", "in": "query", "schema": { "type": "string", "format": "date" } }, { "name": "endDate", "in": "query", "schema": { "type": "string", "format": "date" } },
+          { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["productName", "branchName", "quantity", "type", "createdAt"] } }, { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/InventoryTransaction" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      }
+    },
+    "/api/approvals": {
+      "get": {
+        "tags": ["Approvals"], "summary": "List split-transfer approval requests",
+        "parameters": [
+          { "name": "userId", "in": "query", "required": true, "schema": { "type": "string" } }, { "name": "status", "in": "query", "schema": { "type": "string", "default": "pending" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/ApprovalRequest" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } }, "400": { "description": "Missing userId." }, "403": { "description": "Role not permitted." }, "404": { "description": "User not in store." } }
+      },
+      "post": {
+        "tags": ["Approvals"], "summary": "Create a split approval request",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["userId", "productId", "sourceBranchId", "targetBranchId", "quantity"],
+          "properties": { "userId": { "type": "string" }, "productId": { "type": "string" }, "sourceBranchId": { "type": "string" }, "targetBranchId": { "type": "string" }, "quantity": { "type": "number" }, "type": { "type": "string", "default": "split" }, "notes": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "User not permitted at source branch." }, "404": { "description": "Product/branch not in store." } }
+      },
+      "put": {
+        "tags": ["Approvals"], "summary": "Approve, reject, or resend a split request",
+        "description": "⚠️ Takes `id` as a query parameter, not a path parameter — unlike every other resource in this API.",
+        "parameters": [{ "name": "id", "in": "query", "required": true, "schema": { "type": "string" }, "description": "The inventoryTransactions row id." }],
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["userId", "action"],
+          "properties": { "userId": { "type": "string" }, "action": { "type": "string", "enum": ["approve", "reject", "resend"] }, "notes": { "type": "string" }, "quantity": { "type": "number", "description": "Only used on resend." }, "targetBranchId": { "type": "string", "description": "Only used on resend." } }
+        } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/InventoryTransaction" } } } } } }, "400": { "description": "Missing fields or insufficient stock." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "403": { "description": "Role/branch mismatch." }, "404": { "description": "User or request not found." } }
+      }
+    },
+    "/api/purchase-orders": {
+      "get": {
+        "tags": ["Purchase Orders"], "summary": "List purchase orders (no pagination)",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "status", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/PurchaseOrderListItem" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Purchase Orders"], "summary": "Create a purchase order",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["supplierId", "branchId", "items", "subtotal", "total"],
+          "properties": {
+            "supplierId": { "type": "string" }, "branchId": { "type": "string" },
+            "items": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "quantity": { "type": "number" }, "unitPrice": { "type": "string" } } } },
+            "notes": { "type": "string" }, "expectedDeliveryDate": { "type": "string", "format": "date" },
+            "subtotal": { "type": "string" }, "taxAmount": { "type": "string", "default": "0" }, "discountAmount": { "type": "string", "default": "0" }, "total": { "type": "string" }
+          }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/PurchaseOrderListItem" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "description": "Invalid supplier/branch." } }
+      }
+    },
+    "/api/purchase-orders/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Purchase Orders"], "summary": "Get a purchase order with line items", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/PurchaseOrderDetail" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/purchase-orders/{id}/receive": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "post": {
+        "tags": ["Purchase Orders"], "summary": "Mark a purchase order received and stock-in the items",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["receivedItems", "userId"],
+          "properties": { "receivedItems": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "receivedQuantity": { "type": "number" } } } }, "userId": { "type": "string" } }
+        } } } },
+        "responses": { "200": { "description": "Received.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "400": { "description": "PO already received." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/suppliers": {
+      "get": { "tags": ["Suppliers"], "summary": "List suppliers (no pagination)", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Supplier" } } } } } } } } },
+      "post": {
+        "tags": ["Suppliers"], "summary": "Create a supplier",
+        "description": "Uses a plain session check (no subscription-active gate). No GET/PUT/DELETE by id exists for suppliers.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "phone"], "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "contactPerson": { "type": "string" }, "email": { "type": "string" }, "address": { "type": "string" }, "paymentTerm": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Supplier" } } } } } }, "400": { "description": "Missing name/phone." } }
+      }
+    },
+    "/api/members": {
+      "get": {
+        "tags": ["Members"], "summary": "List members",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["name", "points", "createdAt"] } }, { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Member" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Members"], "summary": "Create a member",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "phone"], "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "email": { "type": "string" }, "address": { "type": "string" }, "points": { "type": "number", "default": 0 } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Member" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "409": { "description": "Duplicate email/phone." } }
+      }
+    },
+    "/api/members/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Members"], "summary": "Get a member", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Member" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "put": {
+        "tags": ["Members"], "summary": "Update a member",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "email": { "type": "string" }, "address": { "type": "string" }, "points": { "type": "number" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Member" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Duplicate email/phone." } }
+      },
+      "delete": { "tags": ["Members"], "summary": "Delete a member", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/exchange-points": {
+      "get": {
+        "tags": ["Exchange Points"], "summary": "List exchange-point catalog entries",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "parameters": [{ "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }, { "name": "search", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/ExchangePoint" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Exchange Points"], "summary": "Create an exchange-point entry",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["pointExchangeTotal", "exchangeItem"], "properties": { "pointExchangeTotal": { "type": "number" }, "exchangeItem": { "type": "string" }, "productId": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/ExchangePoint" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "403": { "description": "Product not in store." } }
+      }
+    },
+    "/api/exchange-points/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Exchange Points"], "summary": "Get an exchange-point entry", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/ExchangePoint" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "put": {
+        "tags": ["Exchange Points"], "summary": "Update an exchange-point entry",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "pointExchangeTotal": { "type": "number" }, "exchangeItem": { "type": "string" }, "productId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/ExchangePoint" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": { "tags": ["Exchange Points"], "summary": "Delete an exchange-point entry", "description": "No 404 check — returns success even if the id doesn't exist.", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" } } }
+    },
+    "/api/employees": {
+      "get": {
+        "tags": ["Employees"], "summary": "List employees",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } },
+          { "name": "search", "in": "query", "schema": { "type": "string" } }, { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "branchType", "in": "query", "schema": { "type": "string", "enum": ["main", "sub"] } }, { "name": "role", "in": "query", "schema": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] } },
+          { "name": "isActive", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } }, { "name": "sortBy", "in": "query", "schema": { "type": "string", "enum": ["name", "email", "role", "createdAt"] } }, { "name": "sortOrder", "in": "query", "schema": { "type": "string", "enum": ["asc", "desc"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Employee" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Employees"], "summary": "Create an employee account",
+        "description": "Creates a new user account via better-auth AND a branch/role assignment. Auto-generates a password (`${year}${month}${first3LettersOfNameUpper}`) and returns it in `message` — the mobile client should display this once to the caller.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "email", "branchId", "role"],
+          "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "branchId": { "type": "string" }, "role": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] }, "image": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string", "example": "Employee created. Default password: 202609ABC" }, "data": { "$ref": "#/components/schemas/Employee" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." }, "409": { "description": "User already has a branch assignment." } }
+      }
+    },
+    "/api/employees/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Employees"], "summary": "Get an employee", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Employee" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "put": {
+        "tags": ["Employees"], "summary": "Update an employee",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "email": { "type": "string" }, "image": { "type": "string" }, "branchId": { "type": "string" }, "role": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] }, "isActive": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Employee" } } } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" }, "409": { "description": "Duplicate email." } }
+      },
+      "delete": { "tags": ["Employees"], "summary": "Delete an employee (full account deletion)", "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } } }
+    },
+    "/api/user-branches": {
+      "get": {
+        "tags": ["User Branches"], "summary": "List user-branch role assignments",
+        "parameters": [
+          { "name": "userId", "in": "query", "schema": { "type": "string" } }, { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "role", "in": "query", "schema": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] } }, { "name": "isActive", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } },
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/UserBranch" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["User Branches"], "summary": "Assign an existing user to a branch/role",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["userId", "branchId", "role"], "properties": { "userId": { "type": "string" }, "branchId": { "type": "string" }, "role": { "type": "string", "enum": ["admin", "manager", "cashier", "staff"] }, "isActive": { "type": "boolean", "default": true } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/UserBranch" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." }, "409": { "description": "Assignment already exists." } }
+      }
+    },
+    "/api/user-branches/{id}": {
+      "get": {
+        "tags": ["User Branches"], "summary": "Get a user's branch assignment",
+        "description": "⚠️ Despite the path param being named `{id}` (folder is literally `[id]`), the code treats it as a **userId**, not the userBranches row's own id.",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Actually a userId." }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "allOf": [{ "$ref": "#/components/schemas/UserBranch" }, { "type": "object", "properties": { "branchName": { "type": "string" }, "branchType": { "type": "string" }, "branchAddress": { "type": "string" }, "branchPhone": { "type": "string" }, "branchEmail": { "type": "string" } } }] } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/draft-orders": {
+      "get": {
+        "tags": ["Draft Orders"], "summary": "List saved draft orders",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "cashierId", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/DraftOrder" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Draft Orders"], "summary": "Save a new draft order",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["branchId", "cashierId", "cart", "total"],
+          "properties": { "branchId": { "type": "string" }, "cashierId": { "type": "string" }, "cart": { "type": "array", "items": { "type": "object" } }, "memberId": { "type": "string" }, "notes": { "type": "string" }, "paymentMethod": { "type": "string", "default": "cash" }, "discountRate": { "type": "string", "default": "0" }, "total": { "type": "number" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/DraftOrder" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" } }
+      },
+      "put": {
+        "tags": ["Draft Orders"], "summary": "Update a draft order",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["id"], "properties": { "id": { "type": "string" }, "cart": { "type": "array", "items": { "type": "object" } }, "memberId": { "type": "string" }, "notes": { "type": "string" }, "paymentMethod": { "type": "string" }, "discountRate": { "type": "string" }, "total": { "type": "number" } }
+        } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/DraftOrder" } } } } } }, "400": { "description": "Missing id." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "tags": ["Draft Orders"], "summary": "Delete a draft order",
+        "description": "Uses a plain session check (no subscription-active gate).",
+        "parameters": [{ "name": "id", "in": "query", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "400": { "description": "Missing id." }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/pos/process-transaction": {
+      "post": {
+        "tags": ["POS"], "summary": "Process a checkout — the core sale-creation endpoint",
+        "description": "Creates the transaction + line items, decrements inventory, applies member loyalty points (earn or spend via exchange items), all in one DB transaction. Broadcasts a live notification on success. Business-rule failures (insufficient stock/points, branch/product not found) surface as 500 with the thrown message, not 400, since they throw inside the DB transaction.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["cashierId", "items", "paymentMethod", "subtotal", "discountAmount", "taxAmount", "total", "paidAmount"],
+          "properties": {
+            "cashierId": { "type": "string" }, "memberId": { "type": "string" },
+            "items": { "type": "array", "minItems": 1, "items": { "type": "object", "required": ["productId", "quantity", "unitPrice", "totalPrice"], "properties": { "productId": { "type": "string" }, "quantity": { "type": "number" }, "unitPrice": { "type": "number" }, "totalPrice": { "type": "number" }, "discountAmount": { "type": "number" }, "isExchange": { "type": "boolean", "description": "true = spend loyalty points instead of paying cash for this line." } } } },
+            "paymentMethod": { "type": "string", "example": "cash" }, "subtotal": { "type": "number" }, "discountAmount": { "type": "number" }, "taxAmount": { "type": "number" }, "total": { "type": "number" }, "paidAmount": { "type": "number" }, "notes": { "type": "string" }
+          }
+        } } } },
+        "responses": {
+          "200": { "description": "Sale completed.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "transactionId": { "type": "string" }, "transactionNumber": { "type": "string" }, "message": { "type": "string" } } } } } },
+          "400": { "description": "Missing cashierId/items or invalid numeric values." },
+          "402": { "$ref": "#/components/responses/SubscriptionInactive" },
+          "500": { "description": "Business-rule failure (cashier/branch/product not found, insufficient stock, insufficient member points) or server error." }
+        }
+      }
+    },
+    "/api/transactions": {
+      "get": {
+        "tags": ["Transactions"], "summary": "List completed transactions",
+        "parameters": [
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "cashierId", "in": "query", "schema": { "type": "string" } },
+          { "name": "memberId", "in": "query", "schema": { "type": "string" } }, { "name": "status", "in": "query", "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Transaction" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      }
+    },
+    "/api/transactions/{id}": {
+      "get": {
+        "tags": ["Transactions"], "summary": "Get a transaction with its line items",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "allOf": [{ "$ref": "#/components/schemas/Transaction" }, { "type": "object", "properties": { "details": { "type": "array", "items": { "$ref": "#/components/schemas/TransactionDetail" } } } }] } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/transactions/products": {
+      "get": {
+        "tags": ["Transactions"], "summary": "Flat list of recent line items (max 100, no pagination)",
+        "parameters": [
+          { "name": "userId", "in": "query", "schema": { "type": "string" }, "description": "Used only to check role — if the caller is admin, branchId filtering is ignored." },
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "transactionId": { "type": "string" }, "transactionNumber": { "type": "string" }, "date": { "type": "string", "format": "date-time" }, "productId": { "type": "string" }, "productName": { "type": "string" }, "productSku": { "type": "string" }, "quantity": { "type": "number" }, "unitPrice": { "type": "string" }, "totalPrice": { "type": "string" } } } } } } } } } }
+      }
+    },
+    "/api/reporting": {
+      "get": {
+        "tags": ["Reporting"], "summary": "Dashboard aggregate report (store-wide, no branch scoping)",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": {
+          "stats": { "type": "object", "properties": { "totalRevenue": { "type": "number" }, "netProfit": { "type": "number", "description": "Flat 20% margin estimate." }, "transactionsCount": { "type": "integer" }, "inventoryValue": { "type": "number" }, "customersCount": { "type": "integer" } } },
+          "salesData": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "sales": { "type": "number" }, "profit": { "type": "number" } } }, "description": "Last 6 months." },
+          "categoryData": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "number" } } } },
+          "topProducts": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "sold": { "type": "number" }, "revenue": { "type": "number" } } }, "description": "Top 5." },
+          "recentTransactions": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "total": { "type": "string" }, "createdAt": { "type": "string" }, "customerName": { "type": "string" } } }, "description": "Last 5." }
+        } } } } } } } }
+      }
+    },
+    "/api/reporting/omzet": {
+      "get": {
+        "tags": ["Reporting"], "summary": "Revenue-per-product report for a period",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "filter", "in": "query", "schema": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"], "default": "daily" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": {
+          "omzetData": { "type": "array", "items": { "type": "object", "properties": { "productName": { "type": "string" }, "brandName": { "type": "string" }, "categoryName": { "type": "string" }, "qty": { "type": "number" }, "customerPrice": { "type": "string" }, "purchasePrice": { "type": "string" }, "grandTotalSales": { "type": "number" } } } },
+          "totalOmzet": { "type": "number" }, "period": { "type": "object", "properties": { "start": { "type": "string" }, "end": { "type": "string" }, "filter": { "type": "string" } } }
+        } } } } } } } }
+      }
+    },
+    "/api/reporting/mutation": {
+      "get": {
+        "tags": ["Reporting"], "summary": "Inventory movement report for a period",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "filter", "in": "query", "schema": { "type": "string", "enum": ["daily", "weekly", "monthly", "yearly"], "default": "daily" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": {
+          "mutationData": { "type": "array", "items": { "type": "object", "properties": { "id": { "type": "string" }, "productName": { "type": "string" }, "quantity": { "type": "number" }, "type": { "type": "string", "description": "Display label: Sale/Adjustment/Purchase/'Split (Out)'/'Split (In)'." }, "referenceId": { "type": "string" }, "createdAt": { "type": "string" }, "stockBefore": { "type": "number" }, "stockAfter": { "type": "number" }, "partnerName": { "type": "string" }, "branchName": { "type": "string" } } } },
+          "period": { "type": "object", "properties": { "start": { "type": "string" }, "end": { "type": "string" }, "filter": { "type": "string" } } }
+        } } } } } } } }
+      }
+    },
+    "/api/reporting/inventory": {
+      "get": {
+        "tags": ["Reporting"], "summary": "Current inventory valuation report",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": {
+          "inventoryData": { "type": "array", "items": { "type": "object", "properties": { "productId": { "type": "string" }, "productName": { "type": "string" }, "sku": { "type": "string" }, "categoryName": { "type": "string" }, "quantity": { "type": "number" }, "minStock": { "type": "number" }, "branchName": { "type": "string" }, "purchasePrice": { "type": "string" } } } },
+          "stats": { "type": "object", "properties": { "totalItems": { "type": "integer" }, "totalQuantity": { "type": "number" }, "totalValue": { "type": "number" }, "lowStockCount": { "type": "integer" } } },
+          "categoryData": { "type": "array", "items": { "type": "object", "properties": { "name": { "type": "string" }, "value": { "type": "number" } } } },
+          "lowStockItems": { "type": "array", "items": { "type": "object" }, "description": "Top 10." }
+        } } } } } } } }
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "tags": ["Notifications"], "summary": "List notifications",
+        "description": "Cached in Redis for 30s per unique query combination.",
+        "parameters": [
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } }, { "name": "userId", "in": "query", "schema": { "type": "string" } },
+          { "name": "isRead", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } }, { "name": "page", "in": "query", "schema": { "type": "integer" } }, { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Notification" } }, "pagination": { "$ref": "#/components/schemas/Pagination" } } } } } } }
+      },
+      "post": {
+        "tags": ["Notifications"], "summary": "Create a notification (persisted + broadcast live via SSE)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["branchId", "title", "message", "type"],
+          "properties": { "branchId": { "type": "string" }, "title": { "type": "string" }, "message": { "type": "string" }, "type": { "type": "string" }, "userId": { "type": "string", "description": "Omit for branch-wide." }, "data": { "type": "object" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Notification" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." } }
+      },
+      "put": {
+        "tags": ["Notifications"], "summary": "Mark a notification read/unread",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" }, "isRead": { "type": "boolean" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Notification" } } } } } }, "400": { "description": "Missing id." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "tags": ["Notifications"], "summary": "Delete notification(s)",
+        "description": "Exactly one of the three query params is honored, checked in this priority: id > userId > branchId.",
+        "parameters": [{ "name": "id", "in": "query", "schema": { "type": "string" } }, { "name": "userId", "in": "query", "schema": { "type": "string" } }, { "name": "branchId", "in": "query", "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "400": { "description": "No id/userId/branchId provided." }, "402": { "$ref": "#/components/responses/SubscriptionInactive" } }
+      }
+    },
+    "/api/notifications/sse": {
+      "get": {
+        "tags": ["Notifications"], "summary": "Real-time notification stream (Redis pub/sub backed)",
+        "description": "⚠️ Long-lived `text/event-stream` connection, not a normal JSON request. Sends `{type:'connected'}`, then live notification payloads, then `{type:'ping'}` every 30s. A browser `EventSource` cannot attach an `Authorization` header — the mobile client must use a raw streaming HTTP client instead.",
+        "parameters": [{ "name": "branchId", "in": "query", "schema": { "type": "string" }, "description": "Omit for the global channel." }],
+        "responses": { "200": { "description": "SSE stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } }, "404": { "description": "Branch not in store." } }
+      }
+    },
+    "/api/notifications/stream": {
+      "get": {
+        "tags": ["Notifications"], "summary": "Informational only — not a stream",
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string", "example": "Notification streaming endpoint - Use POST to send notifications" } } } } } } }
+      },
+      "post": {
+        "tags": ["Notifications"], "summary": "Broadcast a notification via SSE WITHOUT persisting to the database",
+        "description": "Contrast with POST /api/notifications, which persists. Uses an in-memory connection registry.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["branchId", "title", "message", "type"], "properties": { "branchId": { "type": "string" }, "title": { "type": "string" }, "message": { "type": "string" }, "type": { "type": "string" }, "data": { "type": "object" } }
+        } } } },
+        "responses": { "200": { "description": "Broadcast.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "description": "Ephemeral notification-shaped object, has an id but is not a DB row." } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." } }
+      }
+    },
+    "/api/notifications/stream/client": {
+      "get": {
+        "tags": ["Notifications"], "summary": "Real-time notification stream (in-memory registry backed)",
+        "description": "⚠️ Alternative SSE implementation to /api/notifications/sse, backed by an in-memory connection registry instead of Redis. Sends `{type:'connected'}` then `{type:'heartbeat'}` every 60s. Same EventSource/Authorization header caveat applies.",
+        "parameters": [{ "name": "branchId", "in": "query", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "SSE stream.", "content": { "text/event-stream": { "schema": { "type": "string" } } } }, "400": { "description": "Missing branchId." } }
+      }
+    },
+    "/api/ipaymu/pay": {
+      "post": {
+        "tags": ["iPaymu"], "summary": "Create a subscription payment (VA/e-wallet/QRIS)",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["amount", "plan"],
+          "properties": { "amount": { "type": "string" }, "plan": { "type": "string", "enum": ["monthly", "yearly", "permanent"] }, "method": { "type": "string", "enum": ["qris", "va", "bank", "ewallet"], "default": "qris" }, "channel": { "type": "string" } }
+        } } } },
+        "responses": { "200": { "description": "OK — provider-specific payload (Url, SessionID, etc).", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object" } } } } } }, "400": { "description": "iPaymu rejected the request." }, "401": { "$ref": "#/components/responses/Unauthorized" }, "500": { "description": "iPaymu credentials not configured." } }
+      }
+    },
+    "/api/ipaymu/qris": {
+      "post": {
+        "tags": ["iPaymu"], "summary": "Create a QRIS subscription payment",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": { "type": "object", "required": ["amount", "plan"], "properties": { "amount": { "type": "string" }, "plan": { "type": "string", "enum": ["monthly", "yearly", "permanent"] } } } } } },
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "qrString": { "type": "string" }, "qrImage": { "type": "string" }, "sessionId": { "type": "string" }, "transactionId": { "type": "string" } } } } } }, "400": { "description": "iPaymu rejected the request." }, "401": { "$ref": "#/components/responses/Unauthorized" }, "500": { "description": "iPaymu credentials not configured." } }
+      }
+    },
+    "/api/ipaymu/notify": {
+      "post": {
+        "tags": ["iPaymu"], "summary": "iPaymu payment webhook (server-to-server only)",
+        "description": "Not called by app clients — iPaymu calls this directly. Documented for completeness. Verified via HMAC signature (`sha256(va + status + trx_id + apiKey)`), not a user session. On success status, updates the user's subscription (`reference_id` format `SUB|userId|plan|timestamp`).",
+        "security": [],
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "reference_id": { "type": "string" }, "trx_id": { "type": "string" }, "amount": { "type": "string" }, "signature": { "type": "string" } } } }, "multipart/form-data": { "schema": { "type": "object", "additionalProperties": true } } } },
+        "responses": { "200": { "description": "Acknowledged (always 200 on a recognized signature, even for an unrecognized reference_id).", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "403": { "description": "Invalid/missing signature." }, "500": { "description": "iPaymu credentials not configured." } }
+      }
+    },
+    "/api/cron/daily-omset": {
+      "get": {
+        "tags": ["Cron"], "summary": "Send yesterday's daily omset email report",
+        "security": [{ "cronSecret": [] }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "recipientCount": { "type": "integer" }, "dataDate": { "type": "string" } } } } } }, "401": { "description": "Bad/missing CRON_SECRET (production only)." } }
+      }
+    },
+    "/api/cron/subscription-sweep": {
+      "get": {
+        "tags": ["Cron"], "summary": "Sweep subscriptions: expire overdue, move to grace period, send renewal reminders",
+        "security": [{ "cronSecret": [] }],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "checked": { "type": "integer" }, "movedToPendingPayment": { "type": "integer" }, "expired": { "type": "integer" }, "remindersSent": { "type": "integer" } } } } } }, "401": { "description": "Bad/missing CRON_SECRET (production only)." } }
+      }
+    }
+  }
+}
