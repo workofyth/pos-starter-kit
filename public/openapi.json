@@ -423,18 +423,87 @@
     }
   },
   "paths": {
+    "/api/auth/register": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Register a new account",
+        "description": "Explicit wrapper around better-auth's sign-up/email endpoint. Creates the user (`plan=free`, trial not started until onboarding) and, on success, signs them in immediately — the response forwards the session cookie (web) and the `set-auth-token` bearer token (mobile) exactly like `/api/auth/login` does.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["name", "email", "password"],
+            "properties": {
+              "name": { "type": "string" },
+              "email": { "type": "string", "format": "email" },
+              "password": { "type": "string", "format": "password", "minLength": 8 },
+              "image": { "type": "string", "description": "Optional avatar URL." }
+            }
+          } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Registered and signed in. Bearer token is in the `set-auth-token` response header.",
+            "headers": { "set-auth-token": { "schema": { "type": "string" }, "description": "Use as `Authorization: Bearer <token>` on subsequent requests." } },
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "token": { "type": "string" }, "user": { "type": "object" } } } } } } }
+          },
+          "400": { "description": "Missing fields, or email already registered.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Sign in with email and password",
+        "description": "Explicit wrapper around better-auth's sign-in/email endpoint. On success, forwards the session cookie (web) and the `set-auth-token` bearer token (mobile) — send that value back as `Authorization: Bearer <token>` on every subsequent request. This is the endpoint the Flutter client should call.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "required": ["email", "password"],
+            "properties": {
+              "email": { "type": "string", "format": "email" },
+              "password": { "type": "string", "format": "password" },
+              "rememberMe": { "type": "boolean", "default": true }
+            }
+          } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in.",
+            "headers": { "set-auth-token": { "schema": { "type": "string" }, "description": "Use as `Authorization: Bearer <token>` on subsequent requests." } },
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "object", "properties": { "token": { "type": "string" }, "user": { "type": "object" } } } } } } }
+          },
+          "400": { "description": "Missing email/password.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } },
+          "401": { "description": "Invalid email or password.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["Auth"],
+        "summary": "Sign out the current session",
+        "description": "Explicit wrapper around better-auth's sign-out endpoint. Identifies the session from the cookie (web) or the `Authorization: Bearer <token>` header (mobile) — whichever the caller sends.",
+        "responses": {
+          "200": { "description": "Signed out.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } },
+          "400": { "description": "No active session for the given cookie/token.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ErrorResponse" } } } }
+        }
+      }
+    },
     "/api/auth/{path}": {
       "parameters": [{ "name": "path", "in": "path", "required": true, "schema": { "type": "string" }, "description": "Catch-all — see description below." }],
       "get": {
         "tags": ["Auth"],
-        "summary": "better-auth catch-all",
+        "summary": "better-auth catch-all (other operations)",
         "security": [],
-        "description": "Delegated to better-auth (`toNextJsHandler`). Exposes the full better-auth REST surface under this prefix, notably:\n- `POST /api/auth/sign-up/email`\n- `POST /api/auth/sign-in/email` — response includes `set-auth-token` header with the bearer token\n- `POST /api/auth/sign-out`\n- `GET /api/auth/get-session`\n\nNot enumerated further here; treat as an opaque auth module. Also enables the `bearer()` plugin used for mobile auth.",
+        "description": "Delegated to better-auth (`toNextJsHandler`). For registration/login/logout, prefer the explicit `/api/auth/register`, `/api/auth/login`, `/api/auth/logout` endpoints above — they wrap these same better-auth operations with a documented, stable request/response shape. This catch-all remains for everything else better-auth exposes, notably:\n- `GET /api/auth/get-session`\n- password reset / email verification flows (if enabled)\n\nNot enumerated further here; treat as an opaque auth module. Also enables the `bearer()` plugin used for mobile auth.",
         "responses": { "200": { "description": "Depends on the specific better-auth route." } }
       },
       "post": {
         "tags": ["Auth"],
-        "summary": "better-auth catch-all",
+        "summary": "better-auth catch-all (other operations)",
         "security": [],
         "description": "See GET /api/auth/{path} description.",
         "responses": { "200": { "description": "Depends on the specific better-auth route." } }
