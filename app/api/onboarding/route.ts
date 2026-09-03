@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/db";
-import { storeSettings, branches } from "@/db/schema/pos";
+import { storeSettings, branches, userBranches } from "@/db/schema/pos";
 import { user } from "@/db/schema/auth";
 import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
@@ -44,9 +44,23 @@ export async function POST(request: NextRequest) {
             name: "Main Branch",
             address: address,
             phone: whatsapp,
+            type: "main",
         });
 
-        // 3. Update User status
+        // 3. Assign the onboarding user as main admin of the new branch — without
+        // this, GET /api/user-branches?userId=... comes back empty right after
+        // onboarding, the sidebar falls back to the 'guest' role, and most of
+        // the menu disappears (hasAccessToMenuItem only allows Dashboard/AI
+        // Assistant/Notifications for guests).
+        await db.insert(userBranches).values({
+            id: nanoid(),
+            userId: session.user.id,
+            branchId: branchId,
+            role: "admin",
+            isMainAdmin: true,
+        });
+
+        // 4. Update User status
         await db.update(user).set({
             isOnboarded: true,
             storeId: storeId,
