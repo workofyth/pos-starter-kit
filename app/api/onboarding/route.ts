@@ -17,6 +17,15 @@ export async function POST(request: NextRequest) {
             return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
         }
 
+        // Block re-onboarding an already-onboarded account — without this, a
+        // repeat call spins up a brand new store/branch, repoints users.storeId
+        // at it, and leaves the account's existing userBranches assignment (and
+        // access to their old store) orphaned, since GET /api/user-branches
+        // scopes results to the store the user is *currently* pointed at.
+        if (session.user.isOnboarded) {
+            return new Response(JSON.stringify({ success: false, message: "Account is already onboarded" }), { status: 409 });
+        }
+
         const body = await request.json();
         const { storeName, address, whatsapp, storeType } = body;
 
