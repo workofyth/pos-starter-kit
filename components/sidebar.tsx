@@ -19,6 +19,7 @@ import {
   Tag,
   Bot,
   Gift,
+  Activity,
   type LucideIcon
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
@@ -40,6 +41,12 @@ export const allSidebarItems: SidebarItem[] = [
     title: "Dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
+  },
+  {
+    title: "Monitoring",
+    href: "/monitoring",
+    icon: Activity,
+    hideForSubBranch: true,
   },
   {
     title: "POS",

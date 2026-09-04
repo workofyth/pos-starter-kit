@@ -39,9 +39,9 @@ export const getMenuAccessRules = (role: UserRole, isMainAdmin: boolean = false)
         return {
           hasFullAccess: true,
           allowedMainItems: [
-            'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory', 
+            'Dashboard', 'POS', 'AI Assistant', 'Draft Orders', 'Products', 'Categories', 'Brands', 'Inventory',
             'Purchase Orders', 'Members', 'Reporting', 'Transactions', 'Branches', 'Staff', 'Settings',
-            'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications' 
+            'Lifecycle', 'Analytics', 'Projects', 'Team', 'Approvals', 'Notifications', 'Monitoring'
           ],
           allowedDocumentItems: ['Data Library', 'Reports', 'Word Assistant'],
           allowedSecondaryItems: ['Settings', 'Get Help', 'Search'],
