@@ -14,14 +14,16 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { 
-  Search, 
-  Plus, 
-  Edit, 
+import {
+  Search,
+  Plus,
+  Edit,
   Trash2,
   Package,
-  Download
+  Download,
+  ScanLine
 } from "lucide-react";
+import { BarcodeScannerDialog } from "@/components/barcode-scanner";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
 import { UserRole } from "@/lib/role-based-access"; // Import UserRole type
 
@@ -261,6 +263,7 @@ export default function ProductsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isAdjustStockDialogOpen, setIsAdjustStockDialogOpen] = useState(false);
   const [adjustingProduct, setAdjustingProduct] = useState<Product | null>(null);
   const [adjustmentData, setAdjustmentData] = useState({
@@ -668,13 +671,21 @@ export default function ProductsPage() {
                   <div>
                     <label className="text-sm font-medium">Barcode</label>
                     <div className="flex gap-2">
-                      <Input 
-                        placeholder="Enter barcode" 
+                      <Input
+                        placeholder="Enter barcode"
                         value={newProduct.barcode}
                         onChange={(e) => setNewProduct({...newProduct, barcode: e.target.value})}
                       />
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsScannerOpen(true)}
+                        title="Scan barcode"
+                      >
+                        <ScanLine className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
                         variant="outline"
                         onClick={() => {
                           const uniqueBarcode = generateUniqueBarcode();
@@ -826,13 +837,21 @@ export default function ProductsPage() {
                   <div>
                     <label className="text-sm font-medium">Barcode</label>
                     <div className="flex gap-2">
-                      <Input 
-                        placeholder="Enter barcode" 
+                      <Input
+                        placeholder="Enter barcode"
                         value={newProduct.barcode}
                         onChange={(e) => setNewProduct({...newProduct, barcode: e.target.value})}
                       />
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setIsScannerOpen(true)}
+                        title="Scan barcode"
+                      >
+                        <ScanLine className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
                         variant="outline"
                         onClick={() => {
                           const uniqueBarcode = generateUniqueBarcode();
@@ -1306,6 +1325,13 @@ export default function ProductsPage() {
           </Button>
         </DialogContent>
       </Dialog>
+
+      <BarcodeScannerDialog
+        open={isScannerOpen}
+        onOpenChange={setIsScannerOpen}
+        onDetected={(code) => setNewProduct({ ...newProduct, barcode: code })}
+        title="Scan Barcode Produk"
+      />
     </div>
   );
 }

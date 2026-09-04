@@ -24,9 +24,11 @@ import {
   User,
   ShoppingCart,
   Gift,
-  CheckCircle2
+  CheckCircle2,
+  ScanLine
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { BarcodeScannerDialog } from "@/components/barcode-scanner";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
 
 interface Product {
@@ -75,6 +77,7 @@ export default function POSPage() {
   const { data: session } = useSession(); // Get session data
   const [cart, setCart] = useState<CartItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [membersList, setMembersList] = useState<Member[]>([]);
@@ -426,12 +429,13 @@ export default function POSPage() {
   };
 
   // Search for products
-  const searchProducts = async () => {
-    if (!searchTerm.trim()) return;
-    
+  const searchProducts = async (code?: string) => {
+    const query = code ?? searchTerm;
+    if (!query.trim()) return;
+
     try {
       // Search by barcode first, including the branchId for proper filtering
-      const searchResponse = await fetch(`/api/products/search?q=${encodeURIComponent(searchTerm)}&branchId=${cashierBranchId || ''}`);
+      const searchResponse = await fetch(`/api/products/search?q=${encodeURIComponent(query)}&branchId=${cashierBranchId || ''}`);
       if (searchResponse.ok) {
         const searchResult = await searchResponse.json();
         if (searchResult.success && searchResult.data.length > 0) {
@@ -553,12 +557,23 @@ export default function POSPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && searchProducts()}
                 />
-                <Button onClick={searchProducts}>
+                <Button onClick={() => searchProducts()}>
                   <Search className="h-4 w-4" />
+                </Button>
+                <Button variant="outline" onClick={() => setScannerOpen(true)}>
+                  <ScanLine className="h-4 w-4" />
                 </Button>
               </div>
             </CardContent>
           </Card>
+
+          <BarcodeScannerDialog
+            open={scannerOpen}
+            onOpenChange={setScannerOpen}
+            onDetected={(code) => searchProducts(code)}
+            title="Scan Barcode Produk"
+            continuous
+          />
 
           {/* Product List */}
           <Card>
