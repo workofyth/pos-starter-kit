@@ -4,7 +4,17 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth-client";
 import { UserRole, getMenuAccessRules } from "@/lib/role-based-access";
+import { isPlatformSuperAdmin } from "@/lib/platform-admin";
 import { allSidebarItems, SidebarItem } from "@/components/sidebar";
+
+// Superadmin-only items are gated purely by account (see lib/platform-admin.ts),
+// independent of role/branch — always present for that account, never for anyone else.
+function applySuperAdminGate(items: SidebarItem[], email?: string | null) {
+  const nonSuperItems = items.filter(item => !item.superAdminOnly);
+  if (!isPlatformSuperAdmin(email)) return nonSuperItems;
+  const superAdminItems = allSidebarItems.filter(item => item.superAdminOnly);
+  return [...nonSuperItems, ...superAdminItems];
+}
 
 export function useNavigationItems() {
   const pathname = usePathname();
@@ -51,27 +61,27 @@ export function useNavigationItems() {
               if (!isMain && branchType !== 'main' && branchId) {
                 filtered = filtered.filter(item => !item.hideForSubBranch);
               }
-              
+
               // Set all states
               setUserRole(role);
               setUserBranchId(branchId);
               setUserBranchType(branchType);
               setIsMainAdmin(isMain);
-              setFilteredItems(filtered);
+              setFilteredItems(applySuperAdminGate(filtered, session.user.email));
             } else {
               // Set default states for when no user branch data is found
               setUserRole('guest');
               setUserBranchId(null);
               setUserBranchType(null);
               setIsMainAdmin(false);
-              
+
               // Apply filtering for guest user
               const accessRules = getMenuAccessRules('guest', false);
               const allowedTitles = accessRules.allowedMainItems;
-              const filtered = allSidebarItems.filter(item => 
+              const filtered = allSidebarItems.filter(item =>
                 allowedTitles.includes(item.title)
               );
-              setFilteredItems(filtered);
+              setFilteredItems(applySuperAdminGate(filtered, session.user.email));
             }
           } else {
             // Set default states for API error
@@ -79,14 +89,14 @@ export function useNavigationItems() {
             setUserBranchId(null);
             setUserBranchType(null);
             setIsMainAdmin(false);
-            
+
             // Apply filtering for guest user
             const accessRules = getMenuAccessRules('guest', false);
             const allowedTitles = accessRules.allowedMainItems;
-            const filtered = allSidebarItems.filter(item => 
+            const filtered = allSidebarItems.filter(item =>
               allowedTitles.includes(item.title)
             );
-            setFilteredItems(filtered);
+            setFilteredItems(applySuperAdminGate(filtered, session.user.email));
           }
         } catch (error) {
           console.error('Error fetching user branch info:', error);
@@ -95,14 +105,14 @@ export function useNavigationItems() {
           setUserBranchId(null);
           setUserBranchType(null);
           setIsMainAdmin(false);
-          
+
           // Apply filtering for guest user
           const accessRules = getMenuAccessRules('guest', false);
           const allowedTitles = accessRules.allowedMainItems;
-          const filtered = allSidebarItems.filter(item => 
+          const filtered = allSidebarItems.filter(item =>
             allowedTitles.includes(item.title)
           );
-          setFilteredItems(filtered);
+          setFilteredItems(applySuperAdminGate(filtered, session.user.email));
         } finally {
           setIsLoading(false);
         }

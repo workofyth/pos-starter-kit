@@ -20,6 +20,7 @@ import {
   Bot,
   Gift,
   Activity,
+  ShieldCheck,
   type LucideIcon
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
@@ -33,6 +34,7 @@ export type SidebarItem = {
   href: string;
   icon: LucideIcon;
   hideForSubBranch?: boolean; // Add property to hide for sub branch users
+  superAdminOnly?: boolean; // Only visible to the hardcoded platform-superadmin account (see lib/platform-admin.ts), regardless of role
 };
 
 // Define the sidebar items
@@ -130,6 +132,12 @@ export const allSidebarItems: SidebarItem[] = [
     title: "Settings",
     href: "/settings",
     icon: Settings,
+  },
+  {
+    title: "Superadmin",
+    href: "/superadmin",
+    icon: ShieldCheck,
+    superAdminOnly: true,
   },
 ];
 
