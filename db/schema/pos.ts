@@ -117,6 +117,19 @@ export const mechanics = pgTable("mechanics", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Services table (for BENGKEL stores: catalog of service items & their prices, sellable in POS)
+export const services = pgTable("services", {
+  id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
+  branchId: text("branch_id").references(() => branches.id, { onDelete: "set null" }),
+  name: text("name").notNull(), // e.g. "Ganti Oli Mesin", "Tune Up", "Servis Rem"
+  description: text("description"),
+  price: decimal("price", { precision: 12, scale: 2 }).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Product prices table (to track price changes over time)
 export const productPrices = pgTable("product_prices", {
   id: text("id").primaryKey().notNull(),

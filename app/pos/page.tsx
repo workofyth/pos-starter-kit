@@ -27,7 +27,8 @@ import {
   Gift,
   CheckCircle2,
   ScanLine,
-  Wrench
+  Wrench,
+  Settings2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarcodeScannerDialog } from "@/components/barcode-scanner";
@@ -56,6 +57,15 @@ interface MechanicService {
   serviceType: string;
   servicePrice: string;
   isActive: boolean;
+}
+
+interface CatalogService {
+  id: string;
+  name: string;
+  description: string | null;
+  price: string;
+  isActive: boolean;
+  backingProductId: string | null;
 }
 
 interface Member {
@@ -103,6 +113,7 @@ export default function POSPage() {
   const [cashierBranchId, setCashierBranchId] = useState<string | null>(null); // Store cashier's branch ID
   const [storeType, setStoreType] = useState<string | null>(null);
   const [mechanicsList, setMechanicsList] = useState<MechanicService[]>([]);
+  const [servicesList, setServicesList] = useState<CatalogService[]>([]);
   const [exchangeRewards, setExchangeRewards] = useState<ExchangeReward[]>([]);
   const [isExchangeDialogOpen, setIsExchangeDialogOpen] = useState(false);
   const isBengkel = storeType === "BENGKEL";
@@ -138,18 +149,27 @@ export default function POSPage() {
           const currentStoreType: string | null = userBranchResult.store?.storeType || null;
           setStoreType(currentStoreType);
 
-          // Bengkel stores also need the active mechanics for jasa mekanik
+          // Bengkel stores also need the active mechanics and service catalog for jasa
           if (currentStoreType === "BENGKEL") {
             try {
-              const mechanicsResponse = await fetch("/api/mechanics?activeOnly=true");
+              const [mechanicsResponse, servicesResponse] = await Promise.all([
+                fetch("/api/mechanics?activeOnly=true"),
+                fetch("/api/services?activeOnly=true"),
+              ]);
               if (mechanicsResponse.ok) {
                 const mechanicsResult = await mechanicsResponse.json();
                 if (mechanicsResult.success) {
                   setMechanicsList(mechanicsResult.data);
                 }
               }
+              if (servicesResponse.ok) {
+                const servicesResult = await servicesResponse.json();
+                if (servicesResult.success) {
+                  setServicesList(servicesResult.data);
+                }
+              }
             } catch (error) {
-              console.error("Error fetching mechanics:", error);
+              console.error("Error fetching bengkel data:", error);
             }
           }
 
@@ -279,6 +299,37 @@ export default function POSPage() {
         subtotal: price,
         productId: `svc-${mechanic.id}`,
         mechanicId: mechanic.id,
+        isService: true
+      };
+      setCart([...cart, newItem]);
+    }
+  };
+
+  // Add a catalog service (BENGKEL Service menu) — sold via its backing product, no stock
+  const addServiceToCart = (service: CatalogService) => {
+    const price = Number(service.price) || 0;
+    const existingItem = cart.find(item => item.id === `catalog-${service.id}`);
+
+    if (existingItem) {
+      setCart(cart.map(item =>
+        item.id === `catalog-${service.id}`
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+              subtotal: (item.quantity + 1) * price
+            }
+          : item
+      ));
+    } else {
+      const newItem: CartItem = {
+        id: `catalog-${service.id}`,
+        name: service.name,
+        price,
+        quantity: 1,
+        subtotal: price,
+        // Sold through the backing product (sku SRV-<id>, isService=true) so the
+        // server can record transaction_details without stock movement.
+        productId: service.backingProductId || `catalog-${service.id}`,
         isService: true
       };
       setCart([...cart, newItem]);
@@ -704,6 +755,48 @@ export default function POSPage() {
                           <p className="text-xs text-muted-foreground">{mechanic.serviceType}</p>
                           <p className="text-sm font-medium mt-1">
                             Rp {(Number(mechanic.servicePrice) || 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Service catalog (BENGKEL stores only) */}
+          {isBengkel && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings2 className="h-5 w-5" />
+                  Service
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {servicesList.length === 0 ? (
+                  <p className="text-muted-foreground text-sm py-4 text-center">
+                    Belum ada service. Tambahkan di menu Service.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-72 overflow-y-auto">
+                    {servicesList.map((service) => (
+                      <div
+                        key={`service-${service.id}`}
+                        className="cursor-pointer hover:shadow-soft transition-shadow border border-border rounded-lg p-3"
+                        onClick={() => addServiceToCart(service)}
+                      >
+                        <div className="flex flex-col items-center text-center">
+                          <div className="bg-muted border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
+                            <Settings2 className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <h3 className="font-semibold text-sm">{service.name}</h3>
+                          {service.description && (
+                            <p className="text-xs text-muted-foreground line-clamp-1">{service.description}</p>
+                          )}
+                          <p className="text-sm font-medium mt-1">
+                            Rp {(Number(service.price) || 0).toLocaleString()}
                           </p>
                         </div>
                       </div>

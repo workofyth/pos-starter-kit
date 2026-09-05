@@ -29,6 +29,13 @@ export async function GET(request: NextRequest) {
     // Build filter conditions
     const whereConditions = [eq(products.storeId, storeId)];
     if (search) whereConditions.push(ilike(products.name, `%${search}%`));
+
+    // Catalog services (jasa) are managed & sold via the Service/Mekanik menus —
+    // keep them out of the general product list unless explicitly requested.
+    const includeServices = searchParams.get('includeServices') === 'true';
+    if (!includeServices) {
+      whereConditions.push(eq(products.isService, false));
+    }
     
     // We use subqueries for stock and prices to avoid join multiplication
     const stockSubquery = db
@@ -119,6 +126,9 @@ export async function GET(request: NextRequest) {
     
     // Total count query
     const countConditions = [eq(products.storeId, storeId)];
+    if (!includeServices) {
+      countConditions.push(eq(products.isService, false));
+    }
     if (search) countConditions.push(ilike(products.name, `%${search}%`));
     
     let totalCountQuery = db.select({ count: count(products.id) }).from(products);

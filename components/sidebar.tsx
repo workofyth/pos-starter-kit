@@ -22,6 +22,7 @@ import {
   Activity,
   ShieldCheck,
   Wrench,
+  Settings2,
   type LucideIcon
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
@@ -82,6 +83,12 @@ export const allSidebarItems: SidebarItem[] = [
     title: "Mekanik",
     href: "/mekanik",
     icon: Wrench,
+    bengkelOnly: true,
+  },
+  {
+    title: "Service",
+    href: "/service",
+    icon: Settings2,
     bengkelOnly: true,
   },
   {
