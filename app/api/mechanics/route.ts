@@ -75,9 +75,9 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { name, phone, serviceType, servicePrice, description, branchId } = body;
 
-    if (!name || !serviceType || servicePrice === undefined || servicePrice === null) {
+    if (!name || servicePrice === undefined || servicePrice === null) {
       return new Response(
-        JSON.stringify({ success: false, message: 'name, serviceType, and servicePrice are required' }),
+        JSON.stringify({ success: false, message: 'name and servicePrice are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -113,7 +113,10 @@ export async function POST(request: NextRequest) {
         branchId: branchId || null,
         name,
         phone: phone || null,
-        serviceType,
+        // Which service a mechanic performs is the Service/Jasa Servis
+        // catalog's job now (see the `services` table) — this legacy field
+        // is optional and no longer surfaced in any client's form.
+        serviceType: serviceType || null,
         servicePrice: price.toFixed(2),
         description: description || null,
         isActive: true,
@@ -132,7 +135,7 @@ export async function POST(request: NextRequest) {
       await db.insert(products).values({
         id: `prod_${nanoid(16).replace(/[^a-zA-Z0-9]/g, '')}`,
         storeId,
-        name: `Jasa ${serviceType} - ${name}`,
+        name: serviceType ? `Jasa ${serviceType} - ${name}` : `Jasa Mekanik - ${name}`,
         sku: svcSku,
         barcode: `SVC${nanoid(12).replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`,
         unit: 'jasa',

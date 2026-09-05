@@ -113,7 +113,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (svc) {
         const svcUpdates: Record<string, unknown> = { updatedAt: new Date() };
         if (updates.name || updates.serviceType) {
-          svcUpdates.name = `Jasa ${updated.serviceType} - ${updated.name}`;
+          svcUpdates.name = updated.serviceType
+            ? `Jasa ${updated.serviceType} - ${updated.name}`
+            : `Jasa Mekanik - ${updated.name}`;
         }
         if (updates.servicePrice !== undefined && updates.servicePrice !== null) {
           svcUpdates.customerPrice = Number(updates.servicePrice).toFixed(2);

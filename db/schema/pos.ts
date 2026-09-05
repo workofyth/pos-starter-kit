@@ -109,7 +109,11 @@ export const mechanics = pgTable("mechanics", {
   branchId: text("branch_id").references(() => branches.id, { onDelete: "set null" }),
   name: text("name").notNull(),
   phone: text("phone"),
-  serviceType: text("service_type").notNull(), // e.g. "Servis Rutin", "Tune Up", "Ganti Oli"
+  // Nullable: which service a mechanic performs is now the separate
+  // Service/Jasa Servis catalog's job (see `services` table below) —
+  // this free-text field is legacy and optional, kept only so old rows
+  // that still carry a value aren't clobbered.
+  serviceType: text("service_type"), // e.g. "Servis Rutin", "Tune Up", "Ganti Oli"
   servicePrice: decimal("service_price", { precision: 12, scale: 2 }).notNull(),
   description: text("description"),
   isActive: boolean("is_active").default(true).notNull(),

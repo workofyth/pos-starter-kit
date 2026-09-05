@@ -54,7 +54,10 @@ interface Product {
 interface MechanicService {
   id: string;
   name: string;
-  serviceType: string;
+  // Legacy free-text field — no longer collected in the Mekanik form. Which
+  // service a mechanic performs is the separate Service/Jasa Servis
+  // catalog's job now.
+  serviceType: string | null;
   servicePrice: string;
   isActive: boolean;
 }
@@ -293,7 +296,7 @@ export default function POSPage() {
     } else {
       const newItem: CartItem = {
         id: `svc-${mechanic.id}`,
-        name: `${mechanic.serviceType} (${mechanic.name})`,
+        name: mechanic.serviceType ? `${mechanic.serviceType} (${mechanic.name})` : mechanic.name,
         price,
         quantity: 1,
         subtotal: price,
@@ -752,7 +755,9 @@ export default function POSPage() {
                             <Wrench className="h-6 w-6 text-muted-foreground" />
                           </div>
                           <h3 className="font-semibold text-sm">{mechanic.name}</h3>
-                          <p className="text-xs text-muted-foreground">{mechanic.serviceType}</p>
+                          {mechanic.serviceType && (
+                            <p className="text-xs text-muted-foreground">{mechanic.serviceType}</p>
+                          )}
                           <p className="text-sm font-medium mt-1">
                             Rp {(Number(mechanic.servicePrice) || 0).toLocaleString()}
                           </p>

@@ -132,7 +132,7 @@ export async function POST(req: NextRequest) {
             const [created] = await tx.insert(products).values({
               id: `prod_${uuidv4().replace(/-/g, '').slice(0, 16)}`,
               storeId,
-              name: `Jasa ${mechanic.serviceType} - ${mechanic.name}`,
+              name: mechanic.serviceType ? `Jasa ${mechanic.serviceType} - ${mechanic.name}` : `Jasa Mekanik - ${mechanic.name}`,
               sku: svcSku,
               barcode: `SVC${uuidv4().replace(/-/g, '').slice(0, 12).toUpperCase()}`,
               unit: 'jasa',

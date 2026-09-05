@@ -21,7 +21,10 @@ interface Mechanic {
   id: string;
   name: string;
   phone: string | null;
-  serviceType: string;
+  // Legacy free-text field — which service a mechanic performs is the
+  // separate Service/Jasa Servis catalog's job now, so this is no longer
+  // collected or shown in this form.
+  serviceType: string | null;
   servicePrice: string;
   description: string | null;
   isActive: boolean;
@@ -37,7 +40,6 @@ interface BranchOption {
 const emptyForm = {
   name: "",
   phone: "",
-  serviceType: "",
   servicePrice: "",
   description: "",
   branchId: "",
@@ -101,7 +103,6 @@ export default function MekanikPage() {
     setForm({
       name: m.name,
       phone: m.phone || "",
-      serviceType: m.serviceType,
       servicePrice: String(parseFloat(m.servicePrice) || 0),
       description: m.description || "",
       branchId: m.branchId || "",
@@ -110,8 +111,8 @@ export default function MekanikPage() {
   };
 
   const handleSave = async () => {
-    if (!form.name.trim() || !form.serviceType.trim()) {
-      alert("Nama mekanik dan jenis jasa wajib diisi");
+    if (!form.name.trim()) {
+      alert("Nama mekanik wajib diisi");
       return;
     }
     setSaving(true);
@@ -119,7 +120,6 @@ export default function MekanikPage() {
       const payload = {
         name: form.name,
         phone: form.phone || undefined,
-        serviceType: form.serviceType,
         servicePrice: Number(form.servicePrice) || 0,
         description: form.description || undefined,
         branchId: form.branchId || undefined,
@@ -163,7 +163,7 @@ export default function MekanikPage() {
   };
 
   const handleDelete = async (m: Mechanic) => {
-    if (!confirm(`Hapus mekanik "${m.name}" (${m.serviceType})?`)) return;
+    if (!confirm(`Hapus mekanik "${m.name}"?`)) return;
     try {
       const res = await fetch(`/api/mechanics/${m.id}`, { method: "DELETE" });
       const result = await res.json();
@@ -219,7 +219,6 @@ export default function MekanikPage() {
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="pb-2 pr-4 font-medium">Nama</th>
-                    <th className="pb-2 pr-4 font-medium">Jenis Jasa</th>
                     <th className="pb-2 pr-4 font-medium">Harga Jasa</th>
                     <th className="pb-2 pr-4 font-medium">Branch</th>
                     <th className="pb-2 pr-4 font-medium">Telepon</th>
@@ -231,7 +230,6 @@ export default function MekanikPage() {
                   {mechanics.map((m) => (
                     <tr key={m.id} className="border-b last:border-0">
                       <td className="py-3 pr-4 font-medium">{m.name}</td>
-                      <td className="py-3 pr-4">{m.serviceType}</td>
                       <td className="py-3 pr-4">
                         Rp {parseFloat(m.servicePrice).toLocaleString("id-ID")}
                       </td>
@@ -281,14 +279,6 @@ export default function MekanikPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="cth: Budi Santoso"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Jenis Jasa</Label>
-              <Input
-                value={form.serviceType}
-                onChange={(e) => setForm({ ...form, serviceType: e.target.value })}
-                placeholder="cth: Servis Rutin, Tune Up, Ganti Oli"
               />
             </div>
             <div className="space-y-1.5">

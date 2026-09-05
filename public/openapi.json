@@ -173,7 +173,7 @@
           "branchName": { "type": "string", "nullable": true, "description": "Only present on the list endpoint (joined)." },
           "name": { "type": "string" },
           "phone": { "type": "string", "nullable": true },
-          "serviceType": { "type": "string", "description": "e.g. \"Servis Rutin\", \"Tune Up\", \"Ganti Oli\"" },
+          "serviceType": { "type": "string", "nullable": true, "description": "Legacy free-text field (e.g. \"Servis Rutin\", \"Tune Up\", \"Ganti Oli\"), optional. Which service a mechanic performs is the separate Service catalog's job now (`/api/services`) - no client UI collects or shows this anymore." },
           "servicePrice": { "type": "string" },
           "description": { "type": "string", "nullable": true },
           "isActive": { "type": "boolean" },
@@ -694,7 +694,7 @@
         "tags": ["Mechanics"], "summary": "Create a mechanic",
         "description": "Auto-creates a backing `Product` (sku `SVC-<mechanicId>`, `isService: true`) so the mechanic's service is immediately sellable in POS.",
         "requestBody": { "required": true, "content": { "application/json": { "schema": {
-          "type": "object", "required": ["name", "serviceType", "servicePrice"], "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "serviceType": { "type": "string" }, "servicePrice": { "type": "number" }, "description": { "type": "string" }, "branchId": { "type": "string" } }
+          "type": "object", "required": ["name", "servicePrice"], "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "serviceType": { "type": "string", "description": "Legacy free-text field, optional. Which service a mechanic performs is the separate Service catalog's job now (`/api/services`) - no client UI collects this anymore." }, "servicePrice": { "type": "number" }, "description": { "type": "string" }, "branchId": { "type": "string" } }
         } } } },
         "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/Mechanic" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." } }
       }
