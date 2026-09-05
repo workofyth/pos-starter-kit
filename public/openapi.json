@@ -23,6 +23,7 @@
     { "name": "Inventory", "description": "Per-branch stock levels, adjustments, and inter-branch splits" },
     { "name": "iPaymu", "description": "Payment gateway integration for subscription purchases" },
     { "name": "Main Admin", "description": "Main-admin designation per branch" },
+    { "name": "Mechanics", "description": "Bengkel mechanic staff and their service rates (each auto-provisions a sellable POS service product)" },
     { "name": "Members", "description": "Loyalty program members / customers" },
     { "name": "Notifications", "description": "In-app notifications, including real-time SSE streams" },
     { "name": "Onboarding", "description": "First-run store setup" },
@@ -30,6 +31,7 @@
     { "name": "Products", "description": "Product catalog" },
     { "name": "Purchase Orders", "description": "Supplier purchase orders and receiving" },
     { "name": "Reporting", "description": "Dashboard and period reports" },
+    { "name": "Services", "description": "Catalog of sellable service/jasa items (e.g. Bengkel labor fees), each auto-provisioning a sellable POS service product" },
     { "name": "Settings", "description": "Store-wide app settings" },
     { "name": "Subscription", "description": "Current user's plan/subscription status" },
     { "name": "Suppliers", "description": "Supplier directory" },
@@ -157,6 +159,41 @@
           "isActive": { "type": "boolean" },
           "isMainAdmin": { "type": "boolean" },
           "branch": { "$ref": "#/components/schemas/Branch" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Mechanic": {
+        "type": "object",
+        "description": "A Bengkel mechanic. Creating one auto-provisions a companion `Product` (sku `SVC-<mechanicId>`, `isService: true`, no stock) so the mechanic's rate is sellable at the POS.",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "branchId": { "type": "string", "nullable": true },
+          "branchName": { "type": "string", "nullable": true, "description": "Only present on the list endpoint (joined)." },
+          "name": { "type": "string" },
+          "phone": { "type": "string", "nullable": true },
+          "serviceType": { "type": "string", "description": "e.g. \"Servis Rutin\", \"Tune Up\", \"Ganti Oli\"" },
+          "servicePrice": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "isActive": { "type": "boolean" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "Service": {
+        "type": "object",
+        "description": "A catalog entry for a sellable service/jasa item (not tied to a specific mechanic). Creating one auto-provisions a companion `Product` (sku `SRV-<serviceId>`, `isService: true`, no stock).",
+        "properties": {
+          "id": { "type": "string" },
+          "storeId": { "type": "string" },
+          "branchId": { "type": "string", "nullable": true },
+          "branchName": { "type": "string", "nullable": true, "description": "Only present on the list endpoint (joined)." },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "price": { "type": "string" },
+          "isActive": { "type": "boolean" },
+          "backingProductId": { "type": "string", "nullable": true, "description": "Only present on the list endpoint (joined)." },
           "createdAt": { "type": "string", "format": "date-time" },
           "updatedAt": { "type": "string", "format": "date-time" }
         }
@@ -641,6 +678,74 @@
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "description": "Caller has no store." }
         }
+      }
+    },
+    "/api/mechanics": {
+      "get": {
+        "tags": ["Mechanics"], "summary": "List mechanics (no pagination)",
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Matches mechanic name (partial, case-insensitive)." },
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "activeOnly", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Mechanic" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Mechanics"], "summary": "Create a mechanic",
+        "description": "Auto-creates a backing `Product` (sku `SVC-<mechanicId>`, `isService: true`) so the mechanic's service is immediately sellable in POS.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "serviceType", "servicePrice"], "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "serviceType": { "type": "string" }, "servicePrice": { "type": "number" }, "description": { "type": "string" }, "branchId": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/Mechanic" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." } }
+      }
+    },
+    "/api/mechanics/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Mechanics"], "summary": "Get a mechanic", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Mechanic" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "patch": {
+        "tags": ["Mechanics"], "summary": "Update a mechanic",
+        "description": "Renaming the mechanic, changing `serviceType`, or changing `servicePrice` also updates the backing service product's name/price so POS stays in sync.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "phone": { "type": "string" }, "serviceType": { "type": "string" }, "servicePrice": { "type": "number" }, "description": { "type": "string" }, "isActive": { "type": "boolean" }, "branchId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/Mechanic" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "tags": ["Mechanics"], "summary": "Delete a mechanic",
+        "description": "Deletes the mechanic row only — unlike `DELETE /api/services/{id}`, the backing service product is left untouched (not renamed or deactivated).",
+        "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      }
+    },
+    "/api/services": {
+      "get": {
+        "tags": ["Services"], "summary": "List services (no pagination)",
+        "parameters": [
+          { "name": "search", "in": "query", "schema": { "type": "string" }, "description": "Matches service name (partial, case-insensitive)." },
+          { "name": "branchId", "in": "query", "schema": { "type": "string" } },
+          { "name": "activeOnly", "in": "query", "schema": { "type": "string", "enum": ["true", "false"] } }
+        ],
+        "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "type": "array", "items": { "$ref": "#/components/schemas/Service" } } } } } } } }
+      },
+      "post": {
+        "tags": ["Services"], "summary": "Create a service",
+        "description": "Auto-creates a backing `Product` (sku `SRV-<serviceId>`, `isService: true`) so the service is immediately sellable in POS.",
+        "requestBody": { "required": true, "content": { "application/json": { "schema": {
+          "type": "object", "required": ["name", "price"], "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "price": { "type": "number" }, "branchId": { "type": "string" } }
+        } } } },
+        "responses": { "201": { "description": "Created.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/Service" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "description": "Branch not in store." } }
+      }
+    },
+    "/api/services/{id}": {
+      "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+      "get": { "tags": ["Services"], "summary": "Get a service", "responses": { "200": { "description": "OK", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "data": { "$ref": "#/components/schemas/Service" } } } } } }, "404": { "$ref": "#/components/responses/NotFound" } } },
+      "patch": {
+        "tags": ["Services"], "summary": "Update a service",
+        "description": "Renaming the service or changing `price` also updates the backing product's name/`customerPrice` so POS stays in sync.",
+        "requestBody": { "content": { "application/json": { "schema": { "type": "object", "properties": { "name": { "type": "string" }, "description": { "type": "string" }, "price": { "type": "number" }, "isActive": { "type": "boolean" }, "branchId": { "type": "string" } } } } } },
+        "responses": { "200": { "description": "Updated.", "content": { "application/json": { "schema": { "type": "object", "properties": { "success": { "type": "boolean" }, "message": { "type": "string" }, "data": { "$ref": "#/components/schemas/Service" } } } } } }, "400": { "$ref": "#/components/responses/BadRequest" }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
+      },
+      "delete": {
+        "tags": ["Services"], "summary": "Delete a service",
+        "description": "The service row is deleted, but the backing product is kept (old `transaction_details` reference it via FK) and renamed to `[Dihapus] <name>` so it reads as removed instead of appearing as a live catalog item.",
+        "responses": { "200": { "description": "Deleted.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SuccessMessage" } } } }, "402": { "$ref": "#/components/responses/SubscriptionInactive" }, "404": { "$ref": "#/components/responses/NotFound" } }
       }
     },
     "/api/branches": {
