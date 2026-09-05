@@ -27,6 +27,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import { Building2, Plus, ShieldAlert, UserPlus, Copy, KeyRound, Users } from "lucide-react";
+import { STORE_TYPES, STORE_TYPE_LABELS } from "@/lib/store-types";
 
 interface StoreListItem {
   id: string;
@@ -34,6 +35,7 @@ interface StoreListItem {
   address: string;
   whatsapp: string;
   storeType: string;
+  branchMode?: string;
   createdAt: string;
   ownerName: string | null;
   ownerEmail: string | null;
@@ -71,7 +73,11 @@ interface NewCredentials {
   password: string;
 }
 
-const storeTypes = ["VAPE", "WARUNG", "MINIMARKET"];
+const branchModes = [
+  { value: "single", label: "Single Branch (satu lokasi)" },
+  { value: "multi", label: "Multi Branch (multi cabang)" },
+];
+
 const roles = ["admin", "manager", "cashier", "staff"];
 
 const emptyStoreForm = {
@@ -79,6 +85,7 @@ const emptyStoreForm = {
   address: "",
   whatsapp: "",
   storeType: "VAPE",
+  branchMode: "multi",
   ownerName: "",
   ownerEmail: "",
   ownerPassword: "",
@@ -169,6 +176,7 @@ export default function SuperAdminPage() {
           address: storeForm.address,
           whatsapp: storeForm.whatsapp,
           storeType: storeForm.storeType,
+          branchMode: storeForm.branchMode,
           owner: {
             name: storeForm.ownerName,
             email: storeForm.ownerEmail,
@@ -310,7 +318,12 @@ export default function SuperAdminPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{s.storeType}</Badge>
+                        <div className="flex flex-col gap-1">
+                          <Badge variant="outline">{STORE_TYPE_LABELS[s.storeType as keyof typeof STORE_TYPE_LABELS] ?? s.storeType}</Badge>
+                          <Badge variant="secondary" className="w-fit text-xs">
+                            {s.branchMode === "single" ? "Single Branch" : "Multi Branch"}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">{s.ownerName || "-"}</div>
@@ -362,12 +375,29 @@ export default function SuperAdminPage() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {storeTypes.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {STORE_TYPES.map((t) => (
+                      <SelectItem key={t} value={t}>{STORE_TYPE_LABELS[t]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Mode Branch</Label>
+              <Select
+                value={storeForm.branchMode}
+                onValueChange={(v) => setStoreForm({ ...storeForm, branchMode: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {branchModes.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Single Branch: menu Branch, Branch Price, dan Margin Branch tidak diperlukan.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Alamat</Label>

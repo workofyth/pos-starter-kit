@@ -8,7 +8,8 @@ export const paymentMethodEnum = pgEnum("payment_method", ["cash", "card", "tran
 export const transactionStatusEnum = pgEnum("transaction_status", ["pending", "completed", "cancelled", "refunded"]);
 export const discountTypeEnum = pgEnum("discount_type", ["percentage", "fixed_amount"]);
 export const inventoryTransactionTypeEnum = pgEnum("inventory_transaction_type", ["in", "out", "adjustment", "receive", "delivery", "split", "pos"]);
-export const storeTypeEnum = pgEnum("store_type", ["VAPE", "WARUNG", "MINIMARKET"]);
+export const storeTypeEnum = pgEnum("store_type", ["VAPE", "WARUNG", "MINIMARKET", "BENGKEL"]);
+export const branchModeEnum = pgEnum("branch_mode", ["single", "multi"]);
 
 // Store Settings (The "Tenant" configuration)
 export const storeSettings = pgTable("store_settings", {
@@ -17,6 +18,7 @@ export const storeSettings = pgTable("store_settings", {
   address: text("address").notNull(),
   whatsapp: text("whatsapp").notNull(),
   storeType: storeTypeEnum("store_type").notNull(),
+  branchMode: branchModeEnum("branch_mode").default("multi").notNull(),
   ownerId: text("owner_id").notNull().references(() => user.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -88,6 +90,7 @@ export const products = pgTable("products", {
   categoryId: text("category_id").references(() => categories.id, { onDelete: "set null" }),
   brand: text("brand").default("EJM"),
   unit: text("unit").default("pcs").notNull(), // pcs, kg, ltr, etc.
+  isService: boolean("is_service").default(false).notNull(), // Service item (e.g. jasa mekanik) - no stock tracking
   profitMargin: decimal("profit_margin", { precision: 5, scale: 2 }).default("0.00"), // Profit margin percentage
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -97,6 +100,21 @@ export const products = pgTable("products", {
     skuIdx: index("products_sku_idx").on(table.sku),
     barcodeIdx: index("products_barcode_idx").on(table.barcode),
   }
+});
+
+// Mechanics table (for BENGKEL stores: mechanic staff + their service rates)
+export const mechanics = pgTable("mechanics", {
+  id: text("id").primaryKey().notNull(),
+  storeId: text("store_id").references(() => storeSettings.id),
+  branchId: text("branch_id").references(() => branches.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  phone: text("phone"),
+  serviceType: text("service_type").notNull(), // e.g. "Servis Rutin", "Tune Up", "Ganti Oli"
+  servicePrice: decimal("service_price", { precision: 12, scale: 2 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // Product prices table (to track price changes over time)
@@ -237,6 +255,7 @@ export const transactionDetails = pgTable("transaction_details", {
   productId: text("product_id")
     .notNull()
     .references(() => products.id, { onDelete: "cascade" }),
+  mechanicId: text("mechanic_id").references(() => mechanics.id, { onDelete: "set null" }), // Mechanic who performed the service (BENGKEL)
   quantity: integer("quantity").notNull(),
   unitPrice: decimal("unit_price", { precision: 12, scale: 2 }).notNull(),
   totalPrice: decimal("total_price", { precision: 12, scale: 2 }).notNull(),

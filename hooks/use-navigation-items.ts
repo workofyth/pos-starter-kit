@@ -23,6 +23,8 @@ export function useNavigationItems() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [storeType, setStoreType] = useState<string | null>(null);
+  const [branchMode, setBranchMode] = useState<string>('multi');
   const [filteredItems, setFilteredItems] = useState<SidebarItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -40,10 +42,12 @@ export function useNavigationItems() {
               const branchId = result.data[0].branchId || null;
               const branchType = result.data[0].branch?.type || null;
               const isMain = result.data[0].isMainAdmin || false;
-              
+              const storeType: string | null = result.store?.storeType ?? null;
+              const branchMode: string = result.store?.branchMode ?? 'multi';
+
               // Apply filtering based on the fetched information
               const accessRules = getMenuAccessRules(role, isMain);
-              
+
               // Filter items based on role access rules
               let filtered = allSidebarItems;
               if (accessRules.hasFullAccess) {
@@ -52,14 +56,24 @@ export function useNavigationItems() {
               } else {
                 // Filter items based on allowed main items (in this case, sidebar items)
                 const allowedTitles = accessRules.allowedMainItems;
-                filtered = allSidebarItems.filter(item => 
+                filtered = allSidebarItems.filter(item =>
                   allowedTitles.includes(item.title)
                 );
               }
-              
+
               // Further filter to hide items marked for sub branch users if user is on a sub branch
               if (!isMain && branchType !== 'main' && branchId) {
                 filtered = filtered.filter(item => !item.hideForSubBranch);
+              }
+
+              // Single-branch stores don't need branch management menus
+              if (branchMode === 'single') {
+                filtered = filtered.filter(item => !item.hideForSingleBranch);
+              }
+
+              // Bengkel-specific menus (e.g. Mekanik) only for BENGKEL stores
+              if (storeType !== 'BENGKEL') {
+                filtered = filtered.filter(item => !item.bengkelOnly);
               }
 
               // Set all states
@@ -67,6 +81,8 @@ export function useNavigationItems() {
               setUserBranchId(branchId);
               setUserBranchType(branchType);
               setIsMainAdmin(isMain);
+              setStoreType(storeType);
+              setBranchMode(branchMode);
               setFilteredItems(applySuperAdminGate(filtered, session.user.email));
             } else {
               // Set default states for when no user branch data is found
@@ -136,6 +152,8 @@ export function useNavigationItems() {
     userBranchId,
     userBranchType,
     isMainAdmin,
+    storeType,
+    branchMode,
     filteredItems,
     isLoading
   };

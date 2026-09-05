@@ -4,6 +4,7 @@ import { storeSettings, branches, userBranches } from '@/db/schema/pos';
 import { user } from '@/db/schema/auth';
 import { eq } from 'drizzle-orm';
 import { requirePlatformSuperAdmin, guardResponse } from '@/lib/admin-guard';
+import { isValidStoreType, isValidBranchMode } from '@/lib/store-types';
 
 // GET - one store's detail: its branches and the users assigned to them
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -20,6 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         address: storeSettings.address,
         whatsapp: storeSettings.whatsapp,
         storeType: storeSettings.storeType,
+        branchMode: storeSettings.branchMode,
         createdAt: storeSettings.createdAt,
         ownerId: storeSettings.ownerId,
         ownerName: user.name,
@@ -78,11 +80,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { id } = await params;
     const body = await request.json();
-    const { storeName, address, whatsapp, storeType } = body;
+    const { storeName, address, whatsapp, storeType, branchMode } = body;
 
-    if (storeType && !['VAPE', 'WARUNG', 'MINIMARKET'].includes(storeType)) {
+    if (storeType && !isValidStoreType(storeType)) {
       return new Response(
-        JSON.stringify({ success: false, message: 'storeType must be one of VAPE, WARUNG, MINIMARKET' }),
+        JSON.stringify({ success: false, message: 'storeType must be one of VAPE, WARUNG, MINIMARKET, BENGKEL' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (branchMode !== undefined && !isValidBranchMode(branchMode)) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'branchMode must be single or multi' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -92,6 +101,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (address) updates.address = address;
     if (whatsapp) updates.whatsapp = whatsapp;
     if (storeType) updates.storeType = storeType;
+    if (branchMode) updates.branchMode = branchMode;
 
     const [updated] = await db.update(storeSettings).set(updates).where(eq(storeSettings.id, id)).returning();
 

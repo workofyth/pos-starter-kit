@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { nanoid } from "nanoid";
+import { isValidStoreType, isValidBranchMode } from "@/lib/store-types";
 
 export async function POST(request: NextRequest) {
     try {
@@ -27,10 +28,18 @@ export async function POST(request: NextRequest) {
         }
 
         const body = await request.json();
-        const { storeName, address, whatsapp, storeType } = body;
+        const { storeName, address, whatsapp, storeType, branchMode } = body;
 
         if (!storeName || !address || !whatsapp || !storeType) {
             return new Response(JSON.stringify({ success: false, message: "Missing required fields" }), { status: 400 });
+        }
+
+        if (!isValidStoreType(storeType)) {
+            return new Response(JSON.stringify({ success: false, message: "Invalid store type" }), { status: 400 });
+        }
+
+        if (branchMode !== undefined && !isValidBranchMode(branchMode)) {
+            return new Response(JSON.stringify({ success: false, message: "Invalid branch mode" }), { status: 400 });
         }
 
         const storeId = nanoid();
@@ -43,6 +52,7 @@ export async function POST(request: NextRequest) {
             address: address,
             whatsapp: whatsapp,
             storeType: storeType,
+            branchMode: branchMode ?? "multi",
             ownerId: session.user.id,
         });
 

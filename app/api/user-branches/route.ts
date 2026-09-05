@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { inventory, products, branches, inventoryTransactions, userBranches, user } from '@/db/schema/pos';
+import { inventory, products, branches, inventoryTransactions, userBranches, user, storeSettings } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
@@ -90,7 +90,14 @@ export async function GET(request: NextRequest) {
     query = query.orderBy(desc(userBranches.createdAt)) as typeof query;
     
     const userBranchesList = await query;
-    
+
+    // Store-level context for UI gating (menu Mekanik, single-branch mode, ...)
+    const [store] = await db
+      .select({ storeType: storeSettings.storeType, branchMode: storeSettings.branchMode })
+      .from(storeSettings)
+      .where(eq(storeSettings.id, guard.storeId))
+      .limit(1);
+
     // Get total count for pagination
     let countQuery = db
       .select({ count: count() })
@@ -132,6 +139,10 @@ export async function GET(request: NextRequest) {
     const result = {
       success: true,
       data: userBranchesList,
+      store: {
+        storeType: store?.storeType ?? null,
+        branchMode: store?.branchMode ?? 'multi',
+      },
       pagination: {
         page,
         limit,

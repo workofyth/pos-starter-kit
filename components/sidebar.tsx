@@ -21,6 +21,7 @@ import {
   Gift,
   Activity,
   ShieldCheck,
+  Wrench,
   type LucideIcon
 } from "lucide-react";
 import { useSession } from "@/lib/auth-client";
@@ -34,6 +35,8 @@ export type SidebarItem = {
   href: string;
   icon: LucideIcon;
   hideForSubBranch?: boolean; // Add property to hide for sub branch users
+  hideForSingleBranch?: boolean; // Hidden when the store is in single-branch mode (e.g. Branches menu)
+  bengkelOnly?: boolean; // Only visible for stores with storeType BENGKEL
   superAdminOnly?: boolean; // Only visible to the hardcoded platform-superadmin account (see lib/platform-admin.ts), regardless of role
 };
 
@@ -76,6 +79,12 @@ export const allSidebarItems: SidebarItem[] = [
     icon: Tag,
   },
   {
+    title: "Mekanik",
+    href: "/mekanik",
+    icon: Wrench,
+    bengkelOnly: true,
+  },
+  {
     title: "Inventory",
     href: "/inventory",
     icon: Package,
@@ -116,6 +125,7 @@ export const allSidebarItems: SidebarItem[] = [
     href: "/branches",
     icon: Building,
     hideForSubBranch: true, // Hide for sub branch users
+    hideForSingleBranch: true, // Single-branch stores don't manage branches
   },
   {
     title: "Staff",

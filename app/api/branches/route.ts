@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { branches } from '@/db/schema/pos';
+import { branches, storeSettings } from '@/db/schema/pos';
 import { eq, and, ilike, desc, asc, count, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
@@ -113,6 +113,19 @@ export async function POST(request: NextRequest) {
 
     if (!name || !address) {
       return new Response(JSON.stringify({ success: false, message: 'Name and address are required' }), { status: 400 });
+    }
+
+    // 0. Single-branch stores cannot add any additional branch
+    const [store] = await db
+      .select({ branchMode: storeSettings.branchMode })
+      .from(storeSettings)
+      .where(eq(storeSettings.id, storeId))
+      .limit(1);
+    if (store?.branchMode === 'single') {
+      return new Response(
+        JSON.stringify({ success: false, message: 'This store is configured as single branch and cannot add more branches' }),
+        { status: 403, headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
     // 1. Check Plan Limits

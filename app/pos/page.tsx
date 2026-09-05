@@ -14,7 +14,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { 
+import {
   Search,
   Plus,
   Minus,
@@ -26,7 +26,8 @@ import {
   ShoppingCart,
   Gift,
   CheckCircle2,
-  ScanLine
+  ScanLine,
+  Wrench
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarcodeScannerDialog } from "@/components/barcode-scanner";
@@ -44,8 +45,17 @@ interface Product {
   customerPrice: number;
   stock: number;
   minStock: number;
+  isService?: boolean;
   branchId?: string; // Add branch ID for multi-branch support
   branchName?: string; // Add branch name for display
+}
+
+interface MechanicService {
+  id: string;
+  name: string;
+  serviceType: string;
+  servicePrice: string;
+  isActive: boolean;
 }
 
 interface Member {
@@ -63,6 +73,8 @@ interface CartItem {
   quantity: number;
   subtotal: number;
   productId: string;
+  mechanicId?: string;
+  isService?: boolean;
   discountAmount?: number;
   isExchange?: boolean;
 }
@@ -89,8 +101,11 @@ export default function POSPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [cashierId, setCashierId] = useState("1");
   const [cashierBranchId, setCashierBranchId] = useState<string | null>(null); // Store cashier's branch ID
+  const [storeType, setStoreType] = useState<string | null>(null);
+  const [mechanicsList, setMechanicsList] = useState<MechanicService[]>([]);
   const [exchangeRewards, setExchangeRewards] = useState<ExchangeReward[]>([]);
   const [isExchangeDialogOpen, setIsExchangeDialogOpen] = useState(false);
+  const isBengkel = storeType === "BENGKEL";
 
   // Load products and members
   const fetchData = async () => {
@@ -120,6 +135,24 @@ export default function POSPage() {
         const userBranchResponse = await fetch(`/api/user-branches?userId=${session.user.id}`);
         if (userBranchResponse.ok) {
           const userBranchResult = await userBranchResponse.json();
+          const currentStoreType: string | null = userBranchResult.store?.storeType || null;
+          setStoreType(currentStoreType);
+
+          // Bengkel stores also need the active mechanics for jasa mekanik
+          if (currentStoreType === "BENGKEL") {
+            try {
+              const mechanicsResponse = await fetch("/api/mechanics?activeOnly=true");
+              if (mechanicsResponse.ok) {
+                const mechanicsResult = await mechanicsResponse.json();
+                if (mechanicsResult.success) {
+                  setMechanicsList(mechanicsResult.data);
+                }
+              }
+            } catch (error) {
+              console.error("Error fetching mechanics:", error);
+            }
+          }
+
           if (userBranchResult.success && userBranchResult.data.length > 0) {
             const userBranchId = userBranchResult.data[0].branchId;
             setCashierBranchId(userBranchId);
@@ -185,15 +218,16 @@ export default function POSPage() {
   }, [session]);
 
   const addToCart = (product: Product) => {
-    if (product.stock <= 0) {
+    // Service products (jasa mekanik) are not stock-tracked
+    if (!product.isService && product.stock <= 0) {
       alert("Product out of stock!");
       return;
     }
-    
+
     const existingItem = cart.find(item => item.id === product.id);
-    
+
     if (existingItem) {
-      if (existingItem.quantity >= product.stock) {
+      if (!product.isService && existingItem.quantity >= product.stock) {
         alert("Not enough stock!");
         return;
       }
@@ -216,6 +250,36 @@ export default function POSPage() {
         quantity: 1,
         subtotal: Number(product.customerPrice || product.sellingPrice) || 0,
         productId: product.id
+      };
+      setCart([...cart, newItem]);
+    }
+  };
+
+  // Add a mechanic's jasa (BENGKEL) — no stock, priced from the mechanic's service rate
+  const addMechanicToCart = (mechanic: MechanicService) => {
+    const price = Number(mechanic.servicePrice) || 0;
+    const existingItem = cart.find(item => item.mechanicId === mechanic.id);
+
+    if (existingItem) {
+      setCart(cart.map(item =>
+        item.mechanicId === mechanic.id
+          ? {
+              ...item,
+              quantity: item.quantity + 1,
+              subtotal: (item.quantity + 1) * price
+            }
+          : item
+      ));
+    } else {
+      const newItem: CartItem = {
+        id: `svc-${mechanic.id}`,
+        name: `${mechanic.serviceType} (${mechanic.name})`,
+        price,
+        quantity: 1,
+        subtotal: price,
+        productId: `svc-${mechanic.id}`,
+        mechanicId: mechanic.id,
+        isService: true
       };
       setCart([...cart, newItem]);
     }
@@ -262,21 +326,27 @@ export default function POSPage() {
       return;
     }
 
-    const product = productsList.find(p => p.id === id);
-    if (!product) return;
-    
-    if (newQuantity > product.stock) {
-      alert("Not enough stock!");
-      return;
+    const cartItem = cart.find(item => item.id === id);
+    if (!cartItem) return;
+
+    // Jasa mekanik items have no stock constraint
+    if (!cartItem.isService) {
+      const product = productsList.find(p => p.id === id);
+      if (!product) return;
+
+      if (newQuantity > product.stock) {
+        alert("Not enough stock!");
+        return;
+      }
     }
 
-    const updatedCart = cart.map(item => 
-      item.id === id 
-        ? { 
-            ...item, 
-            quantity: newQuantity, 
-            subtotal: newQuantity * (Number(item.price) || 0) 
-          } 
+    const updatedCart = cart.map(item =>
+      item.id === id
+        ? {
+            ...item,
+            quantity: newQuantity,
+            subtotal: newQuantity * (Number(item.price) || 0)
+          }
         : item
     );
     setCart(updatedCart);
@@ -340,6 +410,7 @@ export default function POSPage() {
           memberId: selectedMember?.id || null,
           items: cart.map(item => ({
             productId: item.productId,
+            mechanicId: item.mechanicId || null,
             quantity: item.quantity,
             unitPrice: item.price,
             totalPrice: item.subtotal,
@@ -603,6 +674,46 @@ export default function POSPage() {
             continuous
           />
 
+          {/* Jasa Mekanik (BENGKEL stores only) */}
+          {isBengkel && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Wrench className="h-5 w-5" />
+                  Jasa Mekanik
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {mechanicsList.length === 0 ? (
+                  <p className="text-muted-foreground text-sm py-4 text-center">
+                    Belum ada mekanik aktif. Tambahkan di menu Mekanik.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-72 overflow-y-auto">
+                    {mechanicsList.map((mechanic) => (
+                      <div
+                        key={`mechanic-${mechanic.id}`}
+                        className="cursor-pointer hover:shadow-soft transition-shadow border border-border rounded-lg p-3"
+                        onClick={() => addMechanicToCart(mechanic)}
+                      >
+                        <div className="flex flex-col items-center text-center">
+                          <div className="bg-muted border-2 border-dashed rounded-md w-16 h-16 mb-2 flex items-center justify-center">
+                            <Wrench className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                          <h3 className="font-semibold text-sm">{mechanic.name}</h3>
+                          <p className="text-xs text-muted-foreground">{mechanic.serviceType}</p>
+                          <p className="text-sm font-medium mt-1">
+                            Rp {(Number(mechanic.servicePrice) || 0).toLocaleString()}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Product List */}
           <Card>
             <CardHeader>
@@ -659,6 +770,7 @@ export default function POSPage() {
                       <div className="min-w-0">
                         <h4 className="font-medium flex items-center gap-1 truncate">
                           {item.name}
+                          {item.isService && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-chart-3/10 text-chart-3">Jasa</Badge>}
                           {item.isExchange && <Badge variant="secondary" className="text-[10px] h-4 px-1 bg-chart-2/10 text-chart-2">Reward</Badge>}
                         </h4>
                         <p className="text-sm text-muted-foreground truncate">

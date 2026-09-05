@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { 
-  transactions, 
-  transactionDetails, 
+import {
+  transactions,
+  transactionDetails,
   products,
   members,
   inventory,
@@ -10,7 +10,8 @@ import {
   inventoryTransactions,
   categories,
   exchangePoints,
-  branches
+  branches,
+  mechanics
 } from '@/db/schema/pos';
 import { broadcastToBranch } from '@/lib/notification-sse';
 import { eq, and, inArray } from 'drizzle-orm';
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       memberId?: string;
       items: Array<{
         productId: string;
+        mechanicId?: string | null;
         quantity: number | string;
         unitPrice: string | number;
         totalPrice: string | number;
@@ -109,19 +111,59 @@ export async function POST(req: NextRequest) {
       let totalPointsSpent = 0;
 
       for (const item of items) {
-        // Scoped lookup
-        const [product] = await tx.select({
-            id: products.id, name: products.name, categoryId: products.categoryId, point: categories.point
-          })
-          .from(products)
-          .leftJoin(categories, eq(products.categoryId, categories.id))
-          .where(and(eq(products.id, item.productId), eq(products.storeId, storeId)));
-        
-        if (!product) throw new Error(`Product ${item.productId} not found in this store`);
+        let effectiveProductId = item.productId;
+        let productName: string;
+        let pointValue: string | null = null;
+        let isServiceItem = false;
+
+        if (item.mechanicId) {
+          // Jasa mekanik (BENGKEL): the sale is tied to a mechanic's service rate,
+          // not to a stock product. The service product (sku SVC-<mechanicId>)
+          // exists only so transaction_details can keep its NOT NULL product FK.
+          const [mechanic] = await tx.select().from(mechanics)
+            .where(and(eq(mechanics.id, item.mechanicId), eq(mechanics.storeId, storeId)));
+          if (!mechanic) throw new Error(`Mechanic ${item.mechanicId} not found in this store`);
+
+          const svcSku = `SVC-${mechanic.id}`;
+          let [svcProduct] = await tx.select()
+            .from(products)
+            .where(and(eq(products.sku, svcSku), eq(products.storeId, storeId)));
+          if (!svcProduct) {
+            const [created] = await tx.insert(products).values({
+              id: `prod_${uuidv4().replace(/-/g, '').slice(0, 16)}`,
+              storeId,
+              name: `Jasa ${mechanic.serviceType} - ${mechanic.name}`,
+              sku: svcSku,
+              barcode: `SVC${uuidv4().replace(/-/g, '').slice(0, 12).toUpperCase()}`,
+              unit: 'jasa',
+              isService: true,
+            }).returning();
+            svcProduct = created;
+          }
+
+          effectiveProductId = svcProduct.id;
+          productName = svcProduct.name;
+          isServiceItem = true;
+        } else {
+          // Scoped lookup
+          const [product] = await tx.select({
+              id: products.id, name: products.name, categoryId: products.categoryId, point: categories.point,
+              isService: products.isService
+            })
+            .from(products)
+            .leftJoin(categories, eq(products.categoryId, categories.id))
+            .where(and(eq(products.id, item.productId), eq(products.storeId, storeId)));
+
+          if (!product) throw new Error(`Product ${item.productId} not found in this store`);
+
+          productName = product.name;
+          pointValue = product.point;
+          isServiceItem = product.isService === true;
+        }
 
         const itemQty = typeof item.quantity === 'string' ? parseInt(item.quantity, 10) : item.quantity;
         if (!item.isExchange) {
-          totalPointsEarned += parseFloat(product.point?.toString() || "0") * itemQty;
+          totalPointsEarned += parseFloat(pointValue?.toString() || "0") * itemQty;
         } else {
           const [exchangeConfig] = await tx.select().from(exchangePoints)
             .where(and(eq(exchangePoints.productId, item.productId), eq(exchangePoints.storeId, storeId)))
@@ -133,7 +175,8 @@ export async function POST(req: NextRequest) {
           id: uuidv4(),
           storeId,
           transactionId,
-          productId: item.productId,
+          productId: effectiveProductId,
+          mechanicId: item.mechanicId || null,
           quantity: itemQty,
           unitPrice: item.unitPrice.toString(),
           totalPrice: item.totalPrice.toString(),
@@ -141,47 +184,49 @@ export async function POST(req: NextRequest) {
           isExchange: item.isExchange || false,
         }).returning();
 
-        processedItems.push({ ...detail, productName: product.name });
+        processedItems.push({ ...detail, productName });
 
-        // Inventory Management (Scoped)
-        const [currentInventory] = await tx.select().from(inventory)
-          .where(and(eq(inventory.productId, item.productId), eq(inventory.branchId, cashierBranchId), eq(inventory.storeId, storeId)));
-          
-        let inventoryRecord = currentInventory;
-        if (!inventoryRecord) {
-          const [newInv] = await tx.insert(inventory).values({
-            id: `inv_${uuidv4()}`,
+        // Inventory Management (Scoped) — services carry no stock
+        if (!isServiceItem) {
+          const [currentInventory] = await tx.select().from(inventory)
+            .where(and(eq(inventory.productId, effectiveProductId), eq(inventory.branchId, cashierBranchId), eq(inventory.storeId, storeId)));
+
+          let inventoryRecord = currentInventory;
+          if (!inventoryRecord) {
+            const [newInv] = await tx.insert(inventory).values({
+              id: `inv_${uuidv4()}`,
+              storeId,
+              productId: effectiveProductId,
+              branchId: cashierBranchId,
+              quantity: 0,
+              minStock: 5,
+              lastUpdated: new Date()
+            }).returning();
+            inventoryRecord = newInv;
+          }
+
+          const currentQuantity = Number(inventoryRecord.quantity);
+          const newQuantity = currentQuantity - itemQty;
+          if (newQuantity < 0) throw new Error(`Insufficient stock for ${productName}`);
+
+          await tx.update(inventory).set({ quantity: newQuantity, lastUpdated: new Date(), updatedAt: new Date() })
+            .where(eq(inventory.id, inventoryRecord.id));
+
+          await tx.insert(inventoryTransactions).values({
+            id: uuidv4(),
             storeId,
-            productId: item.productId,
+            productId: effectiveProductId,
             branchId: cashierBranchId,
-            quantity: 0,
-            minStock: 5,
-            lastUpdated: new Date()
-          }).returning();
-          inventoryRecord = newInv;
+            type: 'pos',
+            quantity: itemQty,
+            stockBefore: currentQuantity,
+            stockAfter: newQuantity,
+            referenceId: transactionNumber,
+            notes: notes ? `POS: ${notes}` : `POS Sale: ${transactionNumber}`,
+            createdBy: cashierId,
+            status: 'completed'
+          });
         }
-
-        const currentQuantity = Number(inventoryRecord.quantity);
-        const newQuantity = currentQuantity - itemQty;
-        if (newQuantity < 0) throw new Error(`Insufficient stock for ${product.name}`);
-
-        await tx.update(inventory).set({ quantity: newQuantity, lastUpdated: new Date(), updatedAt: new Date() })
-          .where(eq(inventory.id, inventoryRecord.id));
-
-        await tx.insert(inventoryTransactions).values({
-          id: uuidv4(),
-          storeId,
-          productId: item.productId,
-          branchId: cashierBranchId,
-          type: 'pos',
-          quantity: itemQty,
-          stockBefore: currentQuantity,
-          stockAfter: newQuantity,
-          referenceId: transactionNumber,
-          notes: notes ? `POS: ${notes}` : `POS Sale: ${transactionNumber}`,
-          createdBy: cashierId,
-          status: 'completed'
-        });
       }
 
       if (memberId) {

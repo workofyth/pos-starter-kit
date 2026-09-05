@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Store, MapPin, MessageCircle, ShoppingBag, Loader2, Rocket, ArrowRight } from "lucide-react";
+import { Store, MapPin, MessageCircle, ShoppingBag, Loader2, Rocket, ArrowRight, Wrench } from "lucide-react";
 
 export default function OnboardingPage() {
     const router = useRouter();
@@ -42,7 +42,8 @@ export default function OnboardingPage() {
     const storeTypes = [
         { id: "VAPE", label: "Vape Store", icon: Rocket },
         { id: "WARUNG", label: "Warung / Kelontong", icon: ShoppingBag },
-        { id: "MINIMARKET", label: "Minimarket", icon: Store }
+        { id: "MINIMARKET", label: "Minimarket", icon: Store },
+        { id: "BENGKEL", label: "Bengkel / Servis", icon: Wrench }
     ];
 
     return (
@@ -112,7 +113,7 @@ export default function OnboardingPage() {
 
                             <div className="space-y-3">
                                 <label className="text-sm font-bold">What type of business is this?</label>
-                                <div className="grid grid-cols-3 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     {storeTypes.map((t) => (
                                         <div
                                             key={t.id}

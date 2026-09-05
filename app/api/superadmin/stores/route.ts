@@ -7,6 +7,7 @@ import { eq, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { auth } from '@/lib/auth';
 import { requirePlatformSuperAdmin, guardResponse } from '@/lib/admin-guard';
+import { isValidStoreType, isValidBranchMode } from '@/lib/store-types';
 
 function generateTempPassword(name: string) {
   const now = new Date();
@@ -29,6 +30,7 @@ export async function GET() {
         address: storeSettings.address,
         whatsapp: storeSettings.whatsapp,
         storeType: storeSettings.storeType,
+        branchMode: storeSettings.branchMode,
         createdAt: storeSettings.createdAt,
         ownerId: storeSettings.ownerId,
         ownerName: user.name,
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
     if (!guard.ok) return guardResponse(guard);
 
     const body = await request.json();
-    const { storeName, address, whatsapp, storeType, owner } = body;
+    const { storeName, address, whatsapp, storeType, branchMode, owner } = body;
 
     if (!storeName || !address || !whatsapp || !storeType) {
       return new Response(
@@ -98,9 +100,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['VAPE', 'WARUNG', 'MINIMARKET'].includes(storeType)) {
+    if (!isValidStoreType(storeType)) {
       return new Response(
-        JSON.stringify({ success: false, message: 'storeType must be one of VAPE, WARUNG, MINIMARKET' }),
+        JSON.stringify({ success: false, message: `storeType must be one of VAPE, WARUNG, MINIMARKET, BENGKEL` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (branchMode !== undefined && !isValidBranchMode(branchMode)) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'branchMode must be single or multi' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -157,6 +166,7 @@ export async function POST(request: NextRequest) {
       address,
       whatsapp,
       storeType,
+      branchMode: branchMode ?? 'multi',
       ownerId,
     });
 

@@ -103,6 +103,7 @@ export default function ProductsPage() {
   const [userBranchId, setUserBranchId] = useState<string | null>(null);
   const [userBranchType, setUserBranchType] = useState<string | null>(null);
   const [isMainAdmin, setIsMainAdmin] = useState<boolean>(false);
+  const [branchMode, setBranchMode] = useState<string>('multi');
   const [categories, setCategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -127,6 +128,7 @@ export default function ProductsPage() {
               setUserBranchId(uBranch.branchId || null);
               setIsMainAdmin(uBranch.isMainAdmin === true);
               setUserBranchType(uBranch.branch?.type || null);
+              setBranchMode(result.store?.branchMode || 'multi');
             } else {
               setUserRole('staff');
               setUserBranchId(null);
@@ -739,50 +741,54 @@ export default function ProductsPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className={branchMode === 'single' ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"}>
                   <div>
                     <label className="text-sm font-medium">Purchase Price</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter purchase price" 
+                    <Input
+                      type="number"
+                      placeholder="Enter purchase price"
                       value={newProduct.purchasePrice || ""}
                       onChange={(e) => handlePurchasePriceChange(e.target.value)}
                     />
                   </div>
-                  <div>
-                    <label className="text-sm font-medium">Profit Margin (%)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter profit margin %" 
-                      step="0.01"
-                      value={newProduct.profitMargin || ""}
-                      onChange={(e) => handleProfitMarginChange(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter selling price" 
-                      value={newProduct.sellingPrice || ""}
-                      onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Customer Margin (%)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter customer margin %" 
-                      step="0.01"
-                      value={newProduct.customerMargin || ""}
-                      onChange={(e) => handleCustomerMarginChange(e.target.value)}
-                    />
-                  </div>
+                  {branchMode !== 'single' && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium">Profit Margin (%)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter profit margin %"
+                          step="0.01"
+                          value={newProduct.profitMargin || ""}
+                          onChange={(e) => handleProfitMarginChange(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter selling price"
+                          value={newProduct.sellingPrice || ""}
+                          onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Customer Margin (%)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter customer margin %"
+                          step="0.01"
+                          value={newProduct.customerMargin || ""}
+                          onChange={(e) => handleCustomerMarginChange(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="text-sm font-medium">Retail Price (to Customer)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter customer price" 
+                    <Input
+                      type="number"
+                      placeholder="Enter customer price"
                       value={newProduct.customerPrice || ""}
                       onChange={(e) => setNewProduct({...newProduct, customerPrice: parseFloat(e.target.value) || 0})}
                     />
@@ -905,50 +911,54 @@ export default function ProductsPage() {
                     </select>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <div className={branchMode === 'single' ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"}>
                   <div>
                     <label className="text-sm font-medium">Purchase Price</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter purchase price" 
+                    <Input
+                      type="number"
+                      placeholder="Enter purchase price"
                       value={newProduct.purchasePrice || ""}
                       onChange={(e) => handlePurchasePriceChange(e.target.value)}
                     />
                   </div>
-                  <div>
-                    <label className="text-sm font-medium">Profit Margin (%)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter profit margin %" 
-                      step="0.01"
-                      value={newProduct.profitMargin || ""}
-                      onChange={(e) => handleProfitMarginChange(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter selling price" 
-                      value={newProduct.sellingPrice || ""}
-                      onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
-                    />
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Customer Margin (%)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter customer margin %" 
-                      step="0.01"
-                      value={newProduct.customerMargin || ""}
-                      onChange={(e) => handleCustomerMarginChange(e.target.value)}
-                    />
-                  </div>
+                  {branchMode !== 'single' && (
+                    <>
+                      <div>
+                        <label className="text-sm font-medium">Profit Margin (%)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter profit margin %"
+                          step="0.01"
+                          value={newProduct.profitMargin || ""}
+                          onChange={(e) => handleProfitMarginChange(e.target.value)}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Branch Price (Main to Sub)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter selling price"
+                          value={newProduct.sellingPrice || ""}
+                          onChange={(e) => setNewProduct({...newProduct, sellingPrice: parseFloat(e.target.value) || 0})}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Customer Margin (%)</label>
+                        <Input
+                          type="number"
+                          placeholder="Enter customer margin %"
+                          step="0.01"
+                          value={newProduct.customerMargin || ""}
+                          onChange={(e) => handleCustomerMarginChange(e.target.value)}
+                        />
+                      </div>
+                    </>
+                  )}
                   <div>
                     <label className="text-sm font-medium">Retail Price (to Customer)</label>
-                    <Input 
-                      type="number" 
-                      placeholder="Enter customer price" 
+                    <Input
+                      type="number"
+                      placeholder="Enter customer price"
                       value={newProduct.customerPrice || ""}
                       onChange={(e) => setNewProduct({...newProduct, customerPrice: parseFloat(e.target.value) || 0})}
                     />
