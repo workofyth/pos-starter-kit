@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { mechanics, branches, products } from '@/db/schema/pos';
+import { mechanics, branches, products, productPrices } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - single mechanic detail
@@ -104,10 +105,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // Keep the backing service product's name/price in sync for POS display
     if (updates.name || updates.serviceType || updates.servicePrice) {
+      // `` `SVC-${mechanics.id}` `` (interpolating the column object rather
+      // than the route's `id` string) evaluated to the literal
+      // "SVC-[object Object]" — a join that could never match, so the
+      // backing product's name/price sync below silently never ran.
       const [svc] = await db
         .select({ id: products.id, name: products.name, serviceType: mechanics.serviceType })
         .from(mechanics)
-        .innerJoin(products, eq(products.sku, `SVC-${mechanics.id}`))
+        .innerJoin(products, eq(products.sku, `SVC-${id}`))
         .where(and(eq(mechanics.id, id), eq(products.storeId, guard.storeId)))
         .limit(1);
       if (svc) {
@@ -117,10 +122,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             ? `Jasa ${updated.serviceType} - ${updated.name}`
             : `Jasa Mekanik - ${updated.name}`;
         }
-        if (updates.servicePrice !== undefined && updates.servicePrice !== null) {
-          svcUpdates.customerPrice = Number(updates.servicePrice).toFixed(2);
-        }
         await db.update(products).set(svcUpdates).where(eq(products.id, svc.id));
+
+        // `products` has no price columns of its own — price lives on
+        // `productPrices` — so a price change has to go there, not into
+        // `svcUpdates` (which used to set a non-existent
+        // `products.customerPrice` that drizzle silently dropped).
+        if (updates.servicePrice !== undefined && updates.servicePrice !== null) {
+          const newPrice = Number(updates.servicePrice).toFixed(2);
+          const [existingPrice] = await db
+            .select({ id: productPrices.id })
+            .from(productPrices)
+            .where(and(eq(productPrices.productId, svc.id), eq(productPrices.storeId, guard.storeId)))
+            .limit(1);
+          if (existingPrice) {
+            await db
+              .update(productPrices)
+              .set({ sellingPrice: newPrice, customerPrice: newPrice, effectiveDate: new Date() })
+              .where(eq(productPrices.id, existingPrice.id));
+          } else {
+            await db.insert(productPrices).values({
+              id: `pp_${nanoid(10)}`,
+              storeId: guard.storeId,
+              productId: svc.id,
+              branchId: (updates.branchId as string | null | undefined) ?? null,
+              purchasePrice: '0.00',
+              sellingPrice: newPrice,
+              customerPrice: newPrice,
+            });
+          }
+        }
       }
     }
 

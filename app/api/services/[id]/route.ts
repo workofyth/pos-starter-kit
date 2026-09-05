@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { services, branches, products } from '@/db/schema/pos';
+import { services, branches, products, productPrices } from '@/db/schema/pos';
 import { eq, and } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
 // GET - single service detail
@@ -100,22 +101,48 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .where(eq(services.id, id))
       .returning();
 
-    // Keep the backing service product's name/price in sync for POS display
-    const svcUpdates: Record<string, unknown> = { updatedAt: new Date() };
-    let hasSvcUpdates = false;
+    // Keep the backing service product's name in sync for POS display.
+    // (Price does NOT belong here: `products` has no price columns of its
+    // own — see the `productPrices` upsert below, which replaces a prior
+    // `svcUpdates.customerPrice = ...` that targeted a non-existent
+    // `products.customerPrice` and was silently dropped by drizzle.)
     if (name) {
-      svcUpdates.name = `Service: ${name}`;
-      hasSvcUpdates = true;
-    }
-    if (price !== undefined && price !== null) {
-      svcUpdates.customerPrice = Number(price).toFixed(2);
-      hasSvcUpdates = true;
-    }
-    if (hasSvcUpdates) {
       await db
         .update(products)
-        .set(svcUpdates)
+        .set({ name: `Service: ${name}`, updatedAt: new Date() })
         .where(and(eq(products.sku, `SRV-${id}`), eq(products.storeId, storeId)));
+    }
+
+    if (price !== undefined && price !== null) {
+      const [svcProduct] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.sku, `SRV-${id}`), eq(products.storeId, storeId)))
+        .limit(1);
+      if (svcProduct) {
+        const newPrice = Number(price).toFixed(2);
+        const [existingPrice] = await db
+          .select({ id: productPrices.id })
+          .from(productPrices)
+          .where(and(eq(productPrices.productId, svcProduct.id), eq(productPrices.storeId, storeId)))
+          .limit(1);
+        if (existingPrice) {
+          await db
+            .update(productPrices)
+            .set({ sellingPrice: newPrice, customerPrice: newPrice, effectiveDate: new Date() })
+            .where(eq(productPrices.id, existingPrice.id));
+        } else {
+          await db.insert(productPrices).values({
+            id: `pp_${nanoid(10)}`,
+            storeId,
+            productId: svcProduct.id,
+            branchId: (branchId as string | null | undefined) ?? null,
+            purchasePrice: '0.00',
+            sellingPrice: newPrice,
+            customerPrice: newPrice,
+          });
+        }
+      }
     }
 
     return new Response(

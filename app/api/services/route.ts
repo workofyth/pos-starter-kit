@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { services, branches, products } from '@/db/schema/pos';
-import { eq, and, or, ilike, isNull, desc, SQL } from 'drizzle-orm';
+import { services, branches, products, productPrices } from '@/db/schema/pos';
+import { eq, and, or, ilike, isNull, desc, sql, SQL } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
@@ -49,7 +49,14 @@ export async function GET(request: NextRequest) {
       })
       .from(services)
       .leftJoin(branches, eq(services.branchId, branches.id))
-      .leftJoin(products, eq(products.sku, `SRV-${services.id}`))
+      // Was `` eq(products.sku, `SRV-${services.id}`) `` — a JS template
+      // literal, evaluated ONCE against the services.id *column object*
+      // (stringifying to "[object Object]"), not per row. That made this
+      // join compare every row's sku to the literal string
+      // "SRV-[object Object]", so it could never match anything and
+      // `backingProductId` was always null. `sql` makes the concatenation
+      // part of the query itself, correlated per row.
+      .leftJoin(products, sql`${products.sku} = 'SRV-' || ${services.id}`)
       .where(and(...whereConditions))
       .orderBy(desc(services.createdAt));
 
@@ -128,7 +135,7 @@ export async function POST(request: NextRequest) {
       .where(and(eq(products.sku, svcSku), eq(products.storeId, storeId)))
       .limit(1);
     if (!existingSvc) {
-      await db.insert(products).values({
+      const [svcProduct] = await db.insert(products).values({
         id: `prod_${nanoid(16).replace(/[^a-zA-Z0-9]/g, '')}`,
         storeId,
         name: `Service: ${name}`,
@@ -136,6 +143,20 @@ export async function POST(request: NextRequest) {
         barcode: `SRV${nanoid(12).replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`,
         unit: 'jasa',
         isService: true,
+      }).returning();
+
+      // `products` carries no price columns itself (see `productPrices`),
+      // so without this row the backing product's price is always the
+      // COALESCEd fallback "0.00" wherever it's resolved (e.g.
+      // `/api/products/search`) — the service would be sellable at Rp 0.
+      await db.insert(productPrices).values({
+        id: `pp_${nanoid(10)}`,
+        storeId,
+        productId: svcProduct.id,
+        branchId: branchId || null,
+        purchasePrice: '0.00',
+        sellingPrice: priceNum.toFixed(2),
+        customerPrice: priceNum.toFixed(2),
       });
     }
 

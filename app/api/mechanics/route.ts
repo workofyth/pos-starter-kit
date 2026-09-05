@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
-import { mechanics, branches, products } from '@/db/schema/pos';
+import { mechanics, branches, products, productPrices } from '@/db/schema/pos';
 import { eq, and, or, ilike, isNull, desc, SQL } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
       .where(and(eq(products.sku, svcSku), eq(products.storeId, storeId)))
       .limit(1);
     if (!existingSvc) {
-      await db.insert(products).values({
+      const [svcProduct] = await db.insert(products).values({
         id: `prod_${nanoid(16).replace(/[^a-zA-Z0-9]/g, '')}`,
         storeId,
         name: serviceType ? `Jasa ${serviceType} - ${name}` : `Jasa Mekanik - ${name}`,
@@ -140,6 +140,20 @@ export async function POST(request: NextRequest) {
         barcode: `SVC${nanoid(12).replace(/[^a-zA-Z0-9]/g, '').toUpperCase()}`,
         unit: 'jasa',
         isService: true,
+      }).returning();
+
+      // `products` carries no price columns itself (see `productPrices`),
+      // so without this row the backing product's price is always the
+      // COALESCEd fallback "0.00" wherever it's resolved (e.g.
+      // `/api/products/search`) — the mechanic would be sellable at Rp 0.
+      await db.insert(productPrices).values({
+        id: `pp_${nanoid(10)}`,
+        storeId,
+        productId: svcProduct.id,
+        branchId: branchId || null,
+        purchasePrice: '0.00',
+        sellingPrice: price.toFixed(2),
+        customerPrice: price.toFixed(2),
       });
     }
 

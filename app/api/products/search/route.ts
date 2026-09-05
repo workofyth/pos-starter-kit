@@ -94,13 +94,21 @@ export async function GET(request: NextRequest) {
 
     // Catalog services (jasa) are managed & sold via the Service/Mekanik menus —
     // only include them in free-text/browse search when explicitly requested.
-    // An exact barcode/SKU lookup is exempt: that's how a client (mobile POS
-    // included) resolves a specific mechanic/service's auto-provisioned
-    // SVC-/SRV- product, so excluding it there made every jasa item
-    // unfindable ("Product jasa tidak ditemukan di cabang ini").
+    // An exact barcode/SKU match is always exempt from this exclusion, no
+    // matter which param carried it: that's how a client resolves a specific
+    // mechanic/service's auto-provisioned SVC-/SRV- product, and not every
+    // client uses `barcode=` to do it — e.g. the mobile app's
+    // ProductRepository.fetchByExactSku sends the SKU via `q=`/`search=`
+    // instead. Restricting the exemption to `barcode` alone still made
+    // every jasa item unfindable through that path
+    // ("Product jasa tidak ditemukan di cabang ini"), so the exemption is
+    // matched against whichever term was actually sent (barcode ?? q).
     const includeServices = cleanParam(searchParams.get('includeServices')) === 'true';
-    if (!includeServices && !barcode) {
-      whereConditions.push(eq(products.isService, false));
+    if (!includeServices) {
+      const exactTerm = barcode || search;
+      whereConditions.push(exactTerm
+        ? or(eq(products.isService, false), eq(products.sku, exactTerm), eq(products.barcode, exactTerm))
+        : eq(products.isService, false));
     }
 
     if (barcode) {
