@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { mechanics, branches, products } from '@/db/schema/pos';
-import { eq, and, ilike, desc } from 'drizzle-orm';
+import { eq, and, or, ilike, isNull, desc, SQL } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
@@ -17,13 +17,17 @@ export async function GET(request: NextRequest) {
     const branchId = searchParams.get('branchId') || '';
     const activeOnly = searchParams.get('activeOnly') === 'true';
 
-    const whereConditions = [eq(mechanics.storeId, storeId)];
+    const whereConditions: (SQL<unknown> | undefined)[] = [eq(mechanics.storeId, storeId)];
 
     if (search) {
       whereConditions.push(ilike(mechanics.name, `%${search}%`));
     }
     if (branchId) {
-      whereConditions.push(eq(mechanics.branchId, branchId));
+      // A mechanic created without a branch (branchId: null) is store-wide —
+      // available at every branch — so it must still show up when the caller
+      // scopes the list to one branch. A strict equality here was hiding
+      // every store-wide mechanic from branch-scoped clients (mobile POS).
+      whereConditions.push(or(eq(mechanics.branchId, branchId), isNull(mechanics.branchId)));
     }
     if (activeOnly) {
       whereConditions.push(eq(mechanics.isActive, true));

@@ -93,9 +93,13 @@ export async function GET(request: NextRequest) {
     const whereConditions: (SQL<unknown> | undefined)[] = [eq(products.storeId, storeId)];
 
     // Catalog services (jasa) are managed & sold via the Service/Mekanik menus —
-    // only include them in product search when explicitly requested.
+    // only include them in free-text/browse search when explicitly requested.
+    // An exact barcode/SKU lookup is exempt: that's how a client (mobile POS
+    // included) resolves a specific mechanic/service's auto-provisioned
+    // SVC-/SRV- product, so excluding it there made every jasa item
+    // unfindable ("Product jasa tidak ditemukan di cabang ini").
     const includeServices = cleanParam(searchParams.get('includeServices')) === 'true';
-    if (!includeServices) {
+    if (!includeServices && !barcode) {
       whereConditions.push(eq(products.isService, false));
     }
 

@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { db } from '@/db';
 import { services, branches, products } from '@/db/schema/pos';
-import { eq, and, ilike, desc } from 'drizzle-orm';
+import { eq, and, or, ilike, isNull, desc, SQL } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { requireOnboarded, requireActiveAccess, subscriptionGuardResponse } from '@/lib/subscription-guard';
 
@@ -17,13 +17,18 @@ export async function GET(request: NextRequest) {
     const branchId = searchParams.get('branchId') || '';
     const activeOnly = searchParams.get('activeOnly') === 'true';
 
-    const whereConditions = [eq(services.storeId, storeId)];
+    const whereConditions: (SQL<unknown> | undefined)[] = [eq(services.storeId, storeId)];
 
     if (search) {
       whereConditions.push(ilike(services.name, `%${search}%`));
     }
     if (branchId) {
-      whereConditions.push(eq(services.branchId, branchId));
+      // A service created without a branch (branchId: null) is store-wide —
+      // sellable at every branch — so it must still show up when the caller
+      // scopes the list to one branch. A strict equality here was hiding
+      // every store-wide service from branch-scoped clients (mobile POS),
+      // surfacing as "Product jasa tidak ditemukan di cabang ini".
+      whereConditions.push(or(eq(services.branchId, branchId), isNull(services.branchId)));
     }
     if (activeOnly) {
       whereConditions.push(eq(services.isActive, true));
