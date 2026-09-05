@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito, Poppins, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "sonner";
 import "./globals.css";
 import { RealTimeNotificationBanner } from "@/components/real-time-notification-banner";
 import { RedisInitializer } from "@/components/redis-initializer";
@@ -50,6 +51,7 @@ export default function RootLayout({
           <RedisInitializer />
           <RealTimeNotificationBanner />
           <TrialChecker />
+          <Toaster richColors position="top-right" />
           {children}
         </ThemeProvider>
       </body>

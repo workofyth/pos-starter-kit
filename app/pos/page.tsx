@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { BarcodeScannerDialog } from "@/components/barcode-scanner";
+import { useBarcodeKeyboardWedge } from "@/hooks/use-barcode-keyboard-wedge";
 import { useSession } from "@/lib/auth-client"; // Import useSession hook
 
 interface Product {
@@ -429,9 +431,9 @@ export default function POSPage() {
   };
 
   // Search for products
-  const searchProducts = async (code?: string) => {
-    const query = code ?? searchTerm;
-    if (!query.trim()) return;
+  const searchProducts = useCallback(async (code?: string) => {
+    const query = (code ?? searchTerm).trim();
+    if (!query) return;
 
     try {
       // Search by barcode first, including the branchId for proper filtering
@@ -441,23 +443,49 @@ export default function POSPage() {
         if (searchResult.success && searchResult.data.length > 0) {
           addToCart(searchResult.data[0]);
           setSearchTerm("");
+          // Toast confirmation when triggered by scanner (code param present)
+          if (code) {
+            toast.success(`Produk ditambahkan: ${searchResult.data[0].name}`, {
+              duration: 1500,
+            });
+          }
         } else {
-          alert("Product not found");
+          toast.error(`Produk tidak ditemukan: ${query}`);
         }
       } else {
-        alert("Error searching products");
+        toast.error("Gagal mencari produk");
       }
     } catch (error) {
       console.error("Error searching products:", error);
-      alert("Error searching products");
+      toast.error("Error saat mencari produk");
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, cashierBranchId, cart]);
+
+  // ── Global keyboard-wedge scanner (hardware USB / Bluetooth) ────────────────
+  // Disabled when the camera scanner dialog is open (to avoid double-processing)
+  useBarcodeKeyboardWedge({
+    onScan: (code) => searchProducts(code),
+    enabled: !scannerOpen,
+  });
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold font-display">Point of Sale</h1>
-        <p className="text-muted-foreground">Process sales transactions</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold font-display">Point of Sale</h1>
+          <p className="text-muted-foreground">Process sales transactions</p>
+        </div>
+        {/* Hardware scanner active indicator */}
+        {!scannerOpen && (
+          <div className="flex items-center gap-1.5 text-xs font-medium text-green-600 bg-green-500/10 border border-green-500/20 rounded-full px-3 py-1.5 shrink-0">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+            </span>
+            Scanner Aktif
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1">
@@ -555,7 +583,7 @@ export default function POSPage() {
                   placeholder="Search products by name, SKU, or barcode..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && searchProducts()}
+                  onKeyDown={(e) => e.key === 'Enter' && searchProducts()}
                 />
                 <Button onClick={() => searchProducts()}>
                   <Search className="h-4 w-4" />
